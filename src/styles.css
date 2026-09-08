@@ -1,0 +1,1418 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #f4efe6;
+  --color-fg: #1a2423;
+  --color-muted: #5e6a68;
+  --color-surface: #faf7f1;
+  --color-elevated: #ffffff;
+  --color-line: #e2ddd4;
+  --color-accent: #0f4c4a;
+  --color-accent-2: #1c7a72;
+  --color-foam: #d5ebe8;
+  --color-warn: #8a6a3a;
+  --color-danger: #9a3f32;
+  --font-display: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+}
+
+/* Six-step chart gradient (mitigation A–F): teal -> sea green -> olive/
+   yellow-green -> orange -> dark orange -> red, matching the reference
+   mitigation-class legend rather than the app's two-tone status palette. */
+:root {
+  --chart-a: #0f7c73;
+  --chart-b: #2f8f5b;
+  --chart-c: #9a9a3c;
+  --chart-d: #e08a2e;
+  --chart-e: #c8631f;
+  --chart-f: #b23a2e;
+
+  /* EUDR-Comply donut: light green / pink-salmon, matching the reference
+     compliance report rather than the app's accent/danger status colors. */
+  --color-comply: #8bc178;
+  --color-noncomply: #e28a95;
+
+  /* Forest-function overlap (HL/HP/HPT/HPK): the conventional Indonesian
+     kawasan-hutan map palette (KLHK/BIG) — dark green / orange / yellow /
+     pink. Not pixel-verified against an official swatch file. */
+  --forest-hl: #2e7d32;
+  --forest-hp: #f57c00;
+  --forest-hpt: #fbc02d;
+  --forest-hpk: #ec6fa1;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Themed scrollbars (default OS scrollbars clash with the cream/teal
+   palette) — applies globally, including the sidebar, the Ringkasan panel,
+   and the data table, not just the window scrollbar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-line);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-accent-2);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:single-button,
+*::-webkit-scrollbar-button:vertical:start:decrement,
+*::-webkit-scrollbar-button:vertical:end:increment,
+*::-webkit-scrollbar-button:horizontal:start:decrement,
+*::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none;
+  height: 0;
+  width: 0;
+}
+/* .stage sits on a dark strip, not the cream background — a light thumb
+   reads better there than the cream-page default above. */
+.stage {
+  scrollbar-color: rgba(244, 239, 230, 0.35) transparent;
+}
+.stage ::-webkit-scrollbar-thumb {
+  background-color: rgba(244, 239, 230, 0.35);
+}
+.stage ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-foam);
+}
+
+.boot {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+}
+
+/* ---------- login ---------- */
+.login-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background-color: var(--color-bg);
+  background-image: url("/login-bg.jpg");
+  background-size: cover;
+  background-position: center right;
+  position: relative;
+  overflow: hidden;
+}
+.login-shell .lang {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1;
+}
+.login-card {
+  width: min(420px, 100%);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  padding: 36px 32px 32px;
+  box-shadow: 0 24px 60px rgb(26 36 35 / 0.08);
+  position: relative;
+  z-index: 1;
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.mark {
+  width: 28px;
+  height: 28px;
+  display: block;
+  flex-shrink: 0;
+}
+.login-brand .mark {
+  width: 32px;
+  height: 32px;
+}
+.login-card h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 1.4rem + 1.4vw, 2.4rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  margin: 22px 0 8px;
+  line-height: 1.1;
+}
+.login-card label {
+  display: block;
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.login-card input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font: 400 16px/1.4 var(--font-sans);
+  padding: 11px 12px;
+  outline: none;
+}
+.login-card input:focus {
+  border-color: var(--color-accent);
+}
+.login-err {
+  min-height: 20px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--color-danger);
+}
+.login-card button[type="submit"] {
+  margin-top: 10px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font: 600 15px var(--font-sans);
+}
+.login-card button[type="submit"]:hover:not(:disabled) {
+  background: var(--color-accent-2);
+}
+.login-card button[type="submit"]:disabled {
+  opacity: 0.6;
+}
+
+.lang {
+  display: inline-flex;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--color-elevated);
+}
+.lang button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: 600 11px/1 var(--font-sans);
+  letter-spacing: 0.08em;
+  padding: 8px 12px;
+  min-height: 36px;
+}
+.lang button.on {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* ---------- app frame ---------- */
+.frame {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.word {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.org {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-top: 3px;
+}
+.ticks {
+  display: flex;
+  gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.ticks li {
+  position: relative;
+  padding-left: 14px;
+}
+.ticks li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  border: 1px solid var(--color-line);
+  background: transparent;
+}
+.ticks li.done {
+  color: var(--color-accent);
+}
+.ticks li.done::before {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ghost {
+  border: 1px solid var(--color-line);
+  background: transparent;
+  color: var(--color-fg);
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 36px;
+  font: 500 13px var(--font-sans);
+}
+.ghost:hover {
+  background: var(--color-elevated);
+}
+
+.body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  min-height: 0;
+}
+.sheet {
+  border-right: 1px solid var(--color-line);
+  padding: 22px 22px 28px;
+  overflow: auto;
+  background: var(--color-surface);
+}
+.kicker {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin: 0 0 10px;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--color-line);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.stats > div {
+  background: var(--color-elevated);
+  padding: 12px 10px;
+  text-align: center;
+}
+.stats b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+}
+.stats span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.empty-copy h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 1.3rem + 1.2vw, 2.15rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  margin: 8px 0 10px;
+  line-height: 1.15;
+}
+.empty-copy p {
+  color: var(--color-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+  margin: 0 0 16px;
+}
+.nav-tree {
+  margin: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nav-tree-portfolio {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  margin-bottom: 2px;
+  color: var(--color-fg);
+  font: 600 13px var(--font-display);
+}
+.nav-tree-portfolio:hover {
+  background: var(--color-elevated);
+}
+.nav-tree-portfolio.on {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.nav-tree-kicker {
+  margin: 4px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+/* Group / Refinery/KCP pickers — replaced a click-to-drill-down list so
+   the sidebar's height stays fixed regardless of how many groups or
+   refineries exist, leaving room below for other sidebar features. */
+.nav-tree-select {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: 500 12.5px var(--font-sans);
+  outline: none;
+}
+.nav-tree-select:focus {
+  border-color: var(--color-accent);
+}
+.nav-tree-summary {
+  margin: 0;
+}
+/* Shared with chain-map.tsx's Find/Layers panel collapse toggles — keep
+   both the base shape and the .open rotation even though nav-tree.tsx
+   itself no longer uses this class. */
+.nav-tree-chevron {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+.nav-tree-chevron.open {
+  transform: rotate(45deg);
+}
+.cn {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+}
+.cm {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.intake {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.drop {
+  text-align: left;
+  border: 1px dashed var(--color-line);
+  background: var(--color-elevated);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--color-fg);
+}
+.drop:hover,
+.drop.over {
+  border-color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-foam) 35%, var(--color-elevated));
+}
+.drop.off {
+  opacity: 0.5;
+}
+.drop-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.drop-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.drop-step {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+.drop-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--color-foam);
+  color: var(--color-accent);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.drop p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+.linkish {
+  border: 0;
+  background: none;
+  color: var(--color-accent-2);
+  font: 500 12.5px var(--font-sans);
+  text-align: left;
+  padding: 4px 2px;
+  min-height: 32px;
+}
+.linkish.danger {
+  color: var(--color-danger);
+}
+.linkish:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+.notice {
+  font-size: 12.5px;
+  color: var(--color-accent);
+  margin: 10px 0 0;
+}
+.stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(220px, 1fr) auto;
+  background: var(--color-accent);
+}
+.stage.single-pane {
+  grid-template-rows: minmax(220px, 1fr);
+}
+.stage-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.stage-map {
+  flex: 1;
+  min-height: 220px;
+  position: relative;
+}
+/* Sticky so the Ringkasan/Data toggle stays reachable while the (often
+   tall) Ringkasan panel scrolls underneath it inside .stage-main. */
+.stage-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--color-accent);
+  padding-bottom: 10px;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 18px 0;
+  font: 500 13px var(--font-sans);
+}
+.breadcrumb button {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--color-accent-2);
+  font: inherit;
+  cursor: pointer;
+}
+.breadcrumb button:hover {
+  text-decoration: underline;
+}
+.breadcrumb-sep {
+  color: rgba(244, 239, 230, 0.4);
+}
+.breadcrumb-current {
+  color: var(--color-bg);
+  font-weight: 600;
+}
+.map-wrap {
+  position: relative;
+  min-height: 240px;
+  height: 100%;
+}
+.map-root {
+  min-height: 240px;
+  height: 100%;
+}
+.map-empty {
+  min-height: 240px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 32px;
+  color: #c9c2b5;
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+
+/* Wraps the Find and Layers cards in one non-overlapping column so a tall
+   Layers panel (legend + toggles + basemap picker) never grows into the
+   Find panel above it — each card used to be positioned independently
+   (top vs bottom), which collided and clipped content once Layers grew
+   past the available map height. Find keeps its natural height; Layers
+   takes whatever space is left and scrolls internally (see
+   .map-layers-body) instead of the pair colliding or the whole column
+   scrolling out of view together. Pointer-events are disabled on the
+   empty space around the cards so the map stays pannable/clickable there. */
+.map-panels {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 240px;
+  pointer-events: none;
+}
+.map-panels > * {
+  pointer-events: auto;
+}
+.map-find {
+  flex: none;
+}
+
+/* Combined legend + color-by + layer-visibility control. Grows to fill
+   whatever space .map-panels has left after .map-find, then scrolls its
+   own body (not the whole card) once content exceeds that space. */
+.map-layers {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 240px;
+  background: color-mix(in oklab, var(--color-fg) 82%, transparent);
+  color: var(--color-bg);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+.map-layers-header {
+  width: 100%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 9px 12px;
+  font: 600 12px var(--font-display);
+}
+.map-layers-header .nav-tree-chevron {
+  margin-top: 0;
+  border-color: var(--color-bg);
+}
+.map-layers-body {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.map-layers-kicker {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+/* A single "well" the pills sit inside, rather than loose buttons floating
+   side by side — reads as one grouped control at a glance. Still wraps to
+   a second row if the panel is too narrow for every option. */
+.map-color-by {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(244, 239, 230, 0.08);
+  border: 1px solid rgba(244, 239, 230, 0.16);
+  border-radius: 999px;
+}
+.map-color-by button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font: 500 10.5px var(--font-sans);
+  transition: background 0.15s ease;
+}
+.map-color-by button:hover:not(.on) {
+  background: rgba(244, 239, 230, 0.14);
+}
+.map-color-by button.on {
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+.map-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.map-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.map-legend-list li span {
+  flex: 1;
+  min-width: 0;
+}
+.map-layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.map-layer-toggle input {
+  accent-color: var(--color-accent-2);
+}
+
+/* Search-plot + go-to-coordinate control, same card treatment as
+   .map-layers, stacked above it in .map-panels. */
+.map-find {
+  max-width: 240px;
+  background: color-mix(in oklab, var(--color-fg) 82%, transparent);
+  color: var(--color-bg);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+.map-find-search input,
+.map-find-coord input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(244, 239, 230, 0.3);
+  background: rgba(244, 239, 230, 0.08);
+  color: var(--color-bg);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 11px;
+  outline: none;
+}
+.map-find-search input::placeholder,
+.map-find-coord input::placeholder {
+  color: rgba(244, 239, 230, 0.55);
+}
+.map-find-results {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
+  gap: 2px;
+}
+.map-find-results button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: rgba(244, 239, 230, 0.06);
+  color: inherit;
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.map-find-results button:hover {
+  background: rgba(244, 239, 230, 0.16);
+}
+.map-find-results button span {
+  font-size: 10px;
+  opacity: 0.75;
+}
+.map-find-empty {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  opacity: 0.7;
+}
+.map-find-coord {
+  display: flex;
+  gap: 6px;
+}
+.map-find-coord button {
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  padding: 6px 12px;
+  font: 600 11px var(--font-sans);
+}
+.map-find-error {
+  margin: 4px 0 0;
+  color: #e28a95;
+  font-size: 10.5px;
+}
+
+/* MapLibre's own popup DOM isn't themed by @theme tokens automatically. */
+.maplibregl-popup-content {
+  background: var(--color-elevated);
+  color: var(--color-fg);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+.maplibregl-popup-close-button {
+  color: var(--color-muted);
+  font-size: 16px;
+}
+.maplibregl-popup-tip {
+  border-top-color: var(--color-elevated) !important;
+  border-bottom-color: var(--color-elevated) !important;
+  border-left-color: var(--color-elevated) !important;
+  border-right-color: var(--color-elevated) !important;
+}
+.plot-popup h4 {
+  margin: 0 0 6px;
+  font: 600 13px var(--font-display);
+  padding-right: 14px;
+}
+.plot-popup-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  padding: 2px 0;
+  border-top: 1px solid var(--color-line);
+}
+.plot-popup-row span {
+  color: var(--color-muted);
+}
+.plot-popup-row b.ok {
+  color: var(--color-comply);
+}
+.plot-popup-row b.bad {
+  color: var(--color-noncomply);
+}
+.plot-popup-mitigation {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-line);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-fg);
+}
+.plot-popup-mitigation span {
+  display: block;
+  color: var(--color-muted);
+  margin-bottom: 2px;
+}
+.dock {
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-line);
+  max-height: 42vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Always-visible strip that collapses the rest of .dock away — when closed,
+   .dock's own content shrinks to just this handle, so .stage's grid row
+   (grid-template-rows: minmax(220px,1fr) auto) hands that reclaimed height
+   straight back to the map above it. Two independent buttons (collapse
+   toggle, "back to mills") rather than one big clickable bar, since a
+   button can't contain another button. */
+.dock-handle {
+  flex: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-elevated);
+}
+.dock-handle-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-fg);
+  padding: 7px 12px;
+  font: 600 12px var(--font-display);
+}
+.dock-handle-toggle:hover {
+  background: var(--color-bg);
+}
+.dock-handle-toggle .nav-tree-chevron {
+  margin-top: 0;
+  flex: none;
+}
+.dock-handle-toggle span.truncate {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+.dock-back {
+  flex: none;
+  border: 0;
+  border-left: 1px solid var(--color-line);
+  background: transparent;
+  color: var(--color-accent-2);
+  padding: 7px 14px;
+  font: 600 11.5px var(--font-sans);
+  white-space: nowrap;
+}
+.dock-back:hover {
+  background: var(--color-bg);
+}
+.dock-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 6px;
+  flex-wrap: wrap;
+}
+.dock-head h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.dock-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: 500 11px var(--font-sans);
+  padding: 5px 10px;
+  min-height: 26px;
+}
+.seg button.on {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+.table-tools {
+  padding: 0 18px 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.search {
+  width: min(420px, 100%);
+  border: 1px solid var(--color-line);
+  background: var(--color-elevated);
+  color: var(--color-fg);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font: 400 13px/1.3 var(--font-sans);
+  outline: none;
+}
+.search:focus {
+  border-color: var(--color-accent);
+}
+.table-wrap {
+  overflow: auto;
+  padding: 0 18px 18px;
+}
+.table-empty {
+  color: var(--color-muted);
+  font-size: 14px;
+  padding: 12px 0 8px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+th {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-line);
+  position: sticky;
+  top: 0;
+  background: var(--color-bg);
+}
+td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--color-line);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+td.truncate {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+td.row-download {
+  white-space: nowrap;
+  display: flex;
+  gap: 4px;
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-accent-2);
+  padding: 0;
+}
+.icon-btn:hover {
+  background: var(--color-foam);
+}
+tbody tr {
+  cursor: pointer;
+}
+tbody tr:hover {
+  background: color-mix(in oklab, var(--color-foam) 40%, var(--color-bg));
+}
+tr.dim {
+  opacity: 0.55;
+}
+tr.on td {
+  background: var(--color-foam);
+  font-weight: 600;
+}
+tr.on td:first-child {
+  border-left: 3px solid var(--color-accent-2);
+  padding-left: 5px;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-line);
+  color: var(--color-muted);
+}
+.chip.ok {
+  background: var(--color-foam);
+  color: var(--color-accent);
+}
+.chip.warn {
+  background: #efe4d2;
+  color: var(--color-warn);
+}
+.chip.bad {
+  background: #f3d7d2;
+  color: var(--color-danger);
+}
+
+.portfolio {
+  background: var(--color-bg);
+  min-height: 100%;
+  padding: 32px 32px 24px;
+}
+.portfolio-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--color-line);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+.portfolio-kpis > div {
+  background: var(--color-elevated);
+  padding: 18px 14px;
+  text-align: center;
+}
+.portfolio-kpis b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
+}
+.portfolio-kpis span {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.portfolio-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.portfolio-card {
+  text-align: left;
+  border: 1px solid var(--color-line);
+  background: var(--color-elevated);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+.portfolio-card:hover {
+  border-color: var(--color-accent);
+}
+.portfolio-card-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+/* Sits in the same dark strip as .breadcrumb, above the map/summary panel
+   — styled light-on-dark to match, not the light-panel button treatment
+   used elsewhere (.seg). */
+.view-tabs {
+  display: inline-flex;
+  border: 1px solid rgba(244, 239, 230, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 10px 18px 0;
+}
+.view-tabs button {
+  border: 0;
+  background: transparent;
+  color: rgba(244, 239, 230, 0.7);
+  font: 500 12.5px var(--font-sans);
+  padding: 7px 16px;
+  min-height: 32px;
+}
+.view-tabs button.on {
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.eudr-summary {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  min-height: 100%;
+  padding: 16px 18px 20px;
+  overflow: auto;
+}
+.eudr-empty {
+  padding: 40px 18px;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+.chart-card {
+  border: 1px solid var(--color-line);
+  background: var(--color-elevated);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+.chart-card h3 {
+  font: 600 13px var(--font-display);
+  margin: 0 0 8px;
+  color: var(--color-fg);
+}
+.chart-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.chart-legend b {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+/* One line per mitigation class, not the wrapped chip-row .chart-legend
+   uses elsewhere — these descriptions are full sentences, too long to sit
+   side by side. */
+.mitigation-legend {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-muted);
+}
+.mitigation-legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.mitigation-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+  margin-top: 2px;
+}
+.mitigation-legend b {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.stacked-bar {
+  display: flex;
+  height: 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--color-line);
+}
+.stacked-bar-seg {
+  height: 100%;
+}
+
+/* Mill-scoped EUDR insight, shown in the left sidebar below NavTree once a
+   mill is selected — reuses EudrSummaryView (normally the whole-chain
+   "Ringkasan" tab) scoped to just that mill's UML ID. Lives in the sidebar
+   instead of floating over the map so the map itself stays unobstructed.
+   A collapsible card (like a chart-card) rather than a plain inline
+   section, so its charts don't force the whole sidebar to keep growing —
+   collapse it, or let its own body scroll once it hits max-height. */
+.sidebar-mill-summary {
+  margin-top: 18px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  overflow: hidden;
+}
+.sidebar-mill-summary-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-fg);
+  padding: 10px 12px;
+  font: 600 11px var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sidebar-mill-summary-header:hover {
+  background: var(--color-bg);
+}
+.sidebar-mill-summary-header .nav-tree-chevron {
+  margin-top: 0;
+  flex: none;
+}
+.sidebar-mill-summary-body {
+  border-top: 1px solid var(--color-line);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+/* EudrSummaryView is normally a full-width page section — rescale its
+   chart grid down to one column and tighter spacing so it reads well at
+   sidebar width instead of squeezing a 2-column layout down to a few dozen
+   pixels per chart. */
+.sidebar-mill-summary .eudr-summary {
+  padding: 12px;
+  background: transparent;
+  min-height: 0;
+}
+.sidebar-mill-summary .portfolio-kpis {
+  grid-template-columns: repeat(2, 1fr);
+  margin-bottom: 12px;
+}
+.sidebar-mill-summary .portfolio-kpis b {
+  font-size: 18px;
+}
+.sidebar-mill-summary .chart-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 0;
+}
+.sidebar-mill-summary .chart-card {
+  padding: 10px;
+}
+
+@media (max-width: 900px) {
+  .body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .sheet {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line);
+    max-height: none;
+  }
+  .stage {
+    min-height: 70vh;
+  }
+  .dock {
+    max-height: 50vh;
+  }
+  .ticks {
+    display: none;
+  }
+  .portfolio-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

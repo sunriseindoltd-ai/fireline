@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Item \"Data Storage\\\\PERMATA_KIM_TACEABILITY.geojson\" | Select-Object Name, @{N='SizeMB';E={[math]::Round\\($_.Length/1MB,2\\)}})",
+      "PowerShell(node scripts/prepare-areas.mjs \"Data Storage\\\\PERMATA_KIM_TACEABILITY.geojson\" --refinery \"Permata KIM\")",
+      "PowerShell(npx eslint src/components/chain-map.tsx src/components/workspace.tsx src/lib/copy.ts 2>&1)",
+      "PowerShell(node .smoke-areas.mjs)",
+      "PowerShell(node .smoke-areas-debug.mjs)",
+      "PowerShell(node .smoke-areas.mjs 2>&1)",
+      "PowerShell(node .smoke-village-area.mjs)",
+      "PowerShell(npx eslint src/components/workspace.tsx 2>&1)",
+      "PowerShell(node .smoke-area-scope.mjs)",
+      "PowerShell(npx eslint src/components/nav-tree.tsx src/components/workspace.tsx src/lib/copy.ts 2>&1)",
+      "PowerShell(node .smoke-navtree2.mjs)",
+      "PowerShell(node .smoke-navtree2.mjs 2>&1)",
+      "PowerShell(node .smoke-basemap.mjs)",
+      "PowerShell(node .smoke-baseline.mjs)",
+      "PowerShell(node .smoke-baseline.mjs 2>&1)",
+      "PowerShell(Stop-Process -Id 4832 -Force -Confirm:$false)",
+      "PowerShell(node .smoke-basemap.mjs 2>&1)"
+    ]
+  }
+}

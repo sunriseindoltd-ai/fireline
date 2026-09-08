@@ -1,0 +1,18 @@
+# Not needed on the server; Vercel runs its own npm install.
+node_modules
+
+# Local PGLite dev database files (~1GB) — never read in production
+# (deploy.database is false; no DATABASE_URL means no PGLite fallback either).
+.pglite
+
+# Raw source GIS drops (~700MB) consumed only by the offline
+# scripts/prepare-*.mjs — the running app reads private-data/ instead.
+Data Storage
+
+# Previous local build output — Vercel rebuilds this itself.
+.vercel/output
+
+# Local scratch/output folders, not referenced by the app.
+attachments
+artifacts
+screenshots
