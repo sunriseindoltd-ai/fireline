@@ -166,6 +166,22 @@ export function describeNonComplyIssue(descIssue: unknown): string {
     .join("; ");
 }
 
+/**
+ * "Village, SubDistrict, District" for a plot — lets someone with only
+ * dashboard access (no ArcGIS/raw GIS file) tell where a plot actually is,
+ * e.g. to identify and exclude a non-compliant one from the supply chain.
+ * `Administration` already carries this exact combined string on every
+ * prepared plot; the fallback only matters if a future drop omits it.
+ */
+export function locationText(props: Record<string, unknown> | null | undefined): string {
+  const admin = String(props?.Administration ?? "").trim();
+  if (admin) return admin;
+  return [props?.Village, props?.SubDistric, props?.District]
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 /** "B. Compliant — Medium-Risk Area…" -> "B" (mirrors eudr-aggregates.server.ts). */
 function normMitigation(props: Record<string, unknown> | null | undefined): string {
   const letter = String(props?.Risk_Mitigation_Class ?? "")

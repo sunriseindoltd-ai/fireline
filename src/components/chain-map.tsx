@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Fc } from "@/lib/ledger";
-import { describeNonComplyIssue, MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
+import { describeNonComplyIssue, locationText, MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 type BasemapId = "esri" | "google" | "osm";
@@ -144,6 +144,8 @@ export type ChainMapLabels = {
   noMatches: string;
   plotId: string;
   company: string;
+  location: string;
+  coordinates: string;
   goToCoordinate: string;
   coordinatePlaceholder: string;
   go: string;
@@ -405,6 +407,10 @@ function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): 
     MITIGATION_DESCRIPTIONS[mitLetter] ?? String(props.Risk_Mitigation_Class ?? "—");
   const type = String(props.TYPE ?? "—");
   const nonComplyReason = complyRaw === "NO" ? describeNonComplyIssue(props.Desc_Issue) : "";
+  const location = locationText(props);
+  const lat = Number(props.LAT ?? NaN);
+  const lon = Number(props.LON ?? NaN);
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
 
   const row = (label: string, value: string, cls = "") =>
     `<div class="plot-popup-row"><span>${escapeHtml(label)}</span><b class="${cls}">${escapeHtml(value)}</b></div>`;
@@ -414,6 +420,12 @@ function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): 
     ${row(labels.plotId, plotId || "—")}
     ${row(labels.company, company || "—")}
     ${row(labels.uml, uml || "—")}
+    ${location ? row(labels.location, location) : ""}
+    ${
+      hasCoords
+        ? `<div class="plot-popup-row"><span>${escapeHtml(labels.coordinates)}</span><a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener noreferrer">${lat.toFixed(5)}, ${lon.toFixed(5)}</a></div>`
+        : ""
+    }
     ${row(labels.hectare, `${haShort(ha)} ha`)}
     ${row(labels.compliance, comply, complyClass)}
     ${row(labels.risk, risk)}

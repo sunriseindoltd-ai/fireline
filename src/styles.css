@@ -907,6 +907,15 @@
 .plot-popup-row b.bad {
   color: var(--color-noncomply);
 }
+.plot-popup-row a {
+  color: var(--color-accent-2);
+  font-weight: 600;
+  text-align: right;
+  text-decoration: none;
+}
+.plot-popup-row a:hover {
+  text-decoration: underline;
+}
 /* Shared by the Mitigation explanation and the (non-comply-only) Desc_Issue
    explanation — same "labeled note block" treatment for both. */
 .plot-popup-note {

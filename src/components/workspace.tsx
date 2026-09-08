@@ -15,6 +15,7 @@ import {
   decorateAreas,
   decoratePlots,
   filterAreas,
+  locationText,
   millHaystack,
   millPointsFromMaster,
   MITIGATION_DESCRIPTIONS,
@@ -488,6 +489,8 @@ export function Workspace({ role }: { role: GateRole }) {
                         noMatches: t.noMatches,
                         plotId: t.plotId,
                         company: t.company,
+                        location: t.location,
+                        coordinates: t.coordinates,
                         goToCoordinate: t.goToCoordinate,
                         coordinatePlaceholder: t.coordinatePlaceholder,
                         go: t.go,
@@ -552,6 +555,7 @@ export function Workspace({ role }: { role: GateRole }) {
                             <tr>
                               <th>{t.plotId}</th>
                               <th>{t.company}</th>
+                              <th>{t.location}</th>
                               <th>{t.popupHectare}</th>
                               <th>{t.eudrComplyKpi}</th>
                               <th>{t.riskLabel}</th>
@@ -578,6 +582,9 @@ export function Workspace({ role }: { role: GateRole }) {
                                     title={String(f.properties?.COMPANY ?? "")}
                                   >
                                     {String(f.properties?.COMPANY ?? "").trim() || "—"}
+                                  </td>
+                                  <td className="truncate" title={locationText(f.properties)}>
+                                    {locationText(f.properties) || "—"}
                                   </td>
                                   <td className="tabular-nums">
                                     {hectarage
