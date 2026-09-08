@@ -157,12 +157,25 @@ export function renderInstallPageHtml(template, { host, url } = {}) {
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
-export function renderWebManifest(hostHeader) {
-  const name = appNameFromHost(hostHeader);
+/**
+ * Named manifest for the PWA install prompt. `appNameFromHost` only decodes
+ * a real name for a published `*.grok.me` host — anywhere else (a custom
+ * domain, or a Vercel deploy made outside the platform, like this one) it
+ * fell back to the generic "Grok App", so the install prompt showed that
+ * instead of the app's own name. `site` (this app's own src/lib/og/site.json,
+ * already the source of truth for the OG/share-card title) takes priority
+ * when given, same resolution order as the rest of this file's title logic.
+ */
+export function renderWebManifest(hostHeader, site = {}) {
+  const name = resolveOgTitle(site, DEFAULT_APP_NAME, hostHeader);
+  // Home-screen labels truncate long names — use the part before the em
+  // dash (the actual app name, e.g. "Kanopi" of "Kanopi — EarthLine") for
+  // the short label, and the full title where more room is available.
+  const shortName = name.split(" — ")[0]?.trim() || name;
   return JSON.stringify(
     {
       name,
-      short_name: name,
+      short_name: shortName,
       id: "/",
       start_url: "/",
       scope: "/",
