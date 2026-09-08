@@ -133,6 +133,39 @@ export const MITIGATION_DESCRIPTIONS: Record<string, string> = {
   F: "Non-Compliant — High-Risk Area; Not Approved for Submission",
 };
 
+/**
+ * `Desc_Issue` on a non-compliant plot is a comma-separated list of short
+ * codes (e.g. "HP, HPK") naming which protected/production forest category
+ * (or other issue) it overlaps — the same KLHK/BIG kawasan-hutan codes
+ * already used elsewhere in this app (eudr-summary.tsx's forest-overlap
+ * chart, HL/HP/HPK/HPT). Expanded here into a readable label so a plot
+ * popup can say *why* a plot failed, not just a bare code.
+ */
+const ISSUE_DESCRIPTIONS: Record<string, string> = {
+  Deforestation: "Deforestation detected after the 2020 cutoff",
+  HL: "HL — Hutan Lindung (Protected Forest)",
+  HP: "HP — Hutan Produksi (Production Forest)",
+  HPK: "HPK — Hutan Produksi Konversi (Convertible Production Forest)",
+  HPT: "HPT — Hutan Produksi Terbatas (Limited Production Forest)",
+  KSA_KPA: "KSA/KPA — Kawasan Suaka Alam / Pelestarian Alam (Nature Reserve / Conservation Area)",
+  TWA: "TWA — Taman Wisata Alam (Nature Recreation Park)",
+  TN: "TN — Taman Nasional (National Park)",
+  "Indigenous Forest": "Overlaps recognized Indigenous Forest",
+  "Community Forest": "Overlaps recognized Community Forest",
+};
+
+/** "HP, HPK" -> "HP — Hutan Produksi (Production Forest); HPK — Hutan Produksi Konversi (...)" */
+export function describeNonComplyIssue(descIssue: unknown): string {
+  const raw = String(descIssue ?? "").trim();
+  if (!raw) return "";
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => ISSUE_DESCRIPTIONS[part] ?? part)
+    .join("; ");
+}
+
 /** "B. Compliant — Medium-Risk Area…" -> "B" (mirrors eudr-aggregates.server.ts). */
 function normMitigation(props: Record<string, unknown> | null | undefined): string {
   const letter = String(props?.Risk_Mitigation_Class ?? "")

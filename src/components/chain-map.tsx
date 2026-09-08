@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Fc } from "@/lib/ledger";
-import { MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
+import { describeNonComplyIssue, MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 type BasemapId = "esri" | "google" | "osm";
@@ -132,6 +132,7 @@ export type ChainMapLabels = {
   basemap: string;
   comply: string;
   nonComply: string;
+  nonComplyReason: string;
   riskLow: string;
   riskMedium: string;
   riskHigh: string;
@@ -403,6 +404,7 @@ function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): 
   const mitigation =
     MITIGATION_DESCRIPTIONS[mitLetter] ?? String(props.Risk_Mitigation_Class ?? "—");
   const type = String(props.TYPE ?? "—");
+  const nonComplyReason = complyRaw === "NO" ? describeNonComplyIssue(props.Desc_Issue) : "";
 
   const row = (label: string, value: string, cls = "") =>
     `<div class="plot-popup-row"><span>${escapeHtml(label)}</span><b class="${cls}">${escapeHtml(value)}</b></div>`;
@@ -416,7 +418,8 @@ function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): 
     ${row(labels.compliance, comply, complyClass)}
     ${row(labels.risk, risk)}
     ${row(labels.type, type)}
-    <p class="plot-popup-mitigation"><span>${escapeHtml(`${labels.mitigation}${mitLetter ? ` (${mitLetter})` : ""}`)}</span>${escapeHtml(mitigation)}</p>
+    <p class="plot-popup-note"><span>${escapeHtml(`${labels.mitigation}${mitLetter ? ` (${mitLetter})` : ""}`)}</span>${escapeHtml(mitigation)}</p>
+    ${nonComplyReason ? `<p class="plot-popup-note bad"><span>${escapeHtml(labels.nonComplyReason)}</span>${escapeHtml(nonComplyReason)}</p>` : ""}
   </div>`;
 }
 

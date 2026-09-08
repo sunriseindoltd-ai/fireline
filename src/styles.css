@@ -907,7 +907,9 @@
 .plot-popup-row b.bad {
   color: var(--color-noncomply);
 }
-.plot-popup-mitigation {
+/* Shared by the Mitigation explanation and the (non-comply-only) Desc_Issue
+   explanation — same "labeled note block" treatment for both. */
+.plot-popup-note {
   margin: 6px 0 0;
   padding-top: 6px;
   border-top: 1px solid var(--color-line);
@@ -915,10 +917,13 @@
   line-height: 1.4;
   color: var(--color-fg);
 }
-.plot-popup-mitigation span {
+.plot-popup-note span {
   display: block;
   color: var(--color-muted);
   margin-bottom: 2px;
+}
+.plot-popup-note.bad {
+  color: var(--color-danger);
 }
 .dock {
   background: var(--color-bg);

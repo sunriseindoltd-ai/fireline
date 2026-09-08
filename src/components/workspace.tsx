@@ -476,6 +476,7 @@ export function Workspace({ role }: { role: GateRole }) {
                         basemap: t.basemap,
                         comply: t.comply,
                         nonComply: t.nonComply,
+                        nonComplyReason: t.nonComplyReason,
                         riskLow: t.riskLow,
                         riskMedium: t.riskMedium,
                         riskHigh: t.riskHigh,
