@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Fc } from "@/lib/ledger";
 import { describeNonComplyIssue, locationText, MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
+import {
+  EMPTY_PLOT_FILTERS,
+  plotFilterExpression,
+  toggleFilterValue,
+  isPlotFilterActive,
+  activePlotFilterCount,
+  type PlotFilters,
+} from "@/lib/plot-filters";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 type BasemapId = "esri" | "google" | "osm";
@@ -111,6 +119,7 @@ type MapHandle = {
   getLayer: (id: string) => unknown;
   setPaintProperty: (layer: string, prop: string, value: unknown) => void;
   setLayoutProperty: (layer: string, prop: string, value: unknown) => void;
+  setFilter: (layer: string, filter: unknown) => void;
 };
 
 export type ChainMapLabels = {
@@ -151,6 +160,10 @@ export type ChainMapLabels = {
   go: string;
   coordinateInvalid: string;
   noPlotAtCoordinate: string;
+  close: string;
+  clearFilters: string;
+  filtersActive: string;
+  clear: string;
 };
 
 type Props = {
@@ -168,6 +181,11 @@ type Props = {
    * have duplicate Plot IDs, which an ID-based lookup could resolve to the
    * wrong feature. */
   focusPlot: { index: number; nonce: number } | null;
+  /** Lifted up to workspace.tsx because the plot table's column-header
+   * filters (workspace.tsx) and this map's legend-as-filter buttons need to
+   * narrow the exact same set of plots. */
+  plotFilters: PlotFilters;
+  onPlotFiltersChange: (next: PlotFilters) => void;
   labels: ChainMapLabels;
 };
 
@@ -327,7 +345,7 @@ function fillColorExpression(colorBy: ColorBy): any {
   }
 }
 
-type LegendEntry = { label: string; color: string; count: number };
+type LegendEntry = { label: string; color: string; count: number; value: string };
 
 function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabels): LegendEntry[] {
   const features = plots?.features ?? [];
@@ -336,15 +354,20 @@ function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabel
 
   if (colorBy === "comply") {
     return [
-      { label: labels.comply, color: COMPLY_COLORS.yes, count: countBy("_comply", "yes") },
-      { label: labels.nonComply, color: COMPLY_COLORS.no, count: countBy("_comply", "no") },
+      { label: labels.comply, color: COMPLY_COLORS.yes, count: countBy("_comply", "yes"), value: "yes" },
+      { label: labels.nonComply, color: COMPLY_COLORS.no, count: countBy("_comply", "no"), value: "no" },
     ];
   }
   if (colorBy === "risk") {
     return [
-      { label: labels.riskLow, color: RISK_COLORS.low, count: countBy("_risk", "low") },
-      { label: labels.riskMedium, color: RISK_COLORS.medium, count: countBy("_risk", "medium") },
-      { label: labels.riskHigh, color: RISK_COLORS.high, count: countBy("_risk", "high") },
+      { label: labels.riskLow, color: RISK_COLORS.low, count: countBy("_risk", "low"), value: "low" },
+      {
+        label: labels.riskMedium,
+        color: RISK_COLORS.medium,
+        count: countBy("_risk", "medium"),
+        value: "medium",
+      },
+      { label: labels.riskHigh, color: RISK_COLORS.high, count: countBy("_risk", "high"), value: "high" },
     ];
   }
   if (colorBy === "mitigation") {
@@ -352,6 +375,7 @@ function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabel
       label: letter,
       color: MIT_COLORS[letter]!,
       count: countBy("_mitigation", letter),
+      value: letter,
     }));
   }
   if (colorBy === "type") {
@@ -359,6 +383,7 @@ function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabel
       label,
       color,
       count: countBy("TYPE", label),
+      value: label,
     }));
   }
   return [
@@ -366,16 +391,32 @@ function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabel
       label: labels.legendVillage,
       color: TRACE_COLORS.village,
       count: countBy("_trace", "village"),
+      value: "village",
     },
-    { label: labels.legendBuffer, color: TRACE_COLORS.buffer, count: countBy("_trace", "buffer") },
+    {
+      label: labels.legendBuffer,
+      color: TRACE_COLORS.buffer,
+      count: countBy("_trace", "buffer"),
+      value: "buffer",
+    },
   ];
 }
 
-function escapeHtml(s: string) {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
-  );
+/** Every legal value for one color-by dimension — the "select everything"
+ * baseline a legend toggle collapses back to `null` (no filter) against. */
+function filterUniverse(colorBy: ColorBy): string[] {
+  switch (colorBy) {
+    case "comply":
+      return ["yes", "no"];
+    case "risk":
+      return ["low", "medium", "high"];
+    case "mitigation":
+      return ["A", "B", "C", "D", "E", "F"];
+    case "type":
+      return Object.keys(TYPE_COLORS);
+    default:
+      return ["village", "buffer"];
+  }
 }
 
 function haShort(n: number) {
@@ -384,7 +425,20 @@ function haShort(n: number) {
     : Math.round(n).toLocaleString("id-ID");
 }
 
-function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): string {
+type PlotDetail = {
+  title: string;
+  rows: { label: string; value: string; cls?: "ok" | "bad" }[];
+  coordinates: { lat: number; lon: number } | null;
+  mitigation: { label: string; text: string };
+  nonComplyReason: string;
+};
+
+/**
+ * Structured plot attributes for the right-side detail deck — a plain data
+ * object (not an HTML string, unlike the MapLibre popup this replaced) so
+ * React renders and escapes it directly.
+ */
+function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels): PlotDetail {
   const mill = String(props._mill || props.Mill_name || "");
   const uml = String(props.UML_ID ?? "");
   // `PlotID` (scripts/prepare-plots.mjs) — genuinely unique per plot. The
@@ -396,14 +450,14 @@ function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): 
   const ha = Number(props.HECTARAGE ?? 0);
   const complyRaw = props.EUDR_Comply;
   const comply = complyRaw === "YES" ? labels.comply : complyRaw === "NO" ? labels.nonComply : "—";
-  const complyClass = complyRaw === "YES" ? "ok" : complyRaw === "NO" ? "bad" : "";
+  const complyClass = complyRaw === "YES" ? "ok" : complyRaw === "NO" ? "bad" : undefined;
   const risk = String(props.Overall_Risk ?? "—");
   const mitLetter = String(props._mitigation ?? "").toUpperCase();
   // The canonical A–F wording (src/lib/ledger-geo.ts) rather than this
   // plot's own free-text Risk_Mitigation_Class, which isn't always worded
   // identically across rows/mills even for the same letter — falls back to
   // the raw text only if the letter itself couldn't be parsed.
-  const mitigation =
+  const mitigationText =
     MITIGATION_DESCRIPTIONS[mitLetter] ?? String(props.Risk_Mitigation_Class ?? "—");
   const type = String(props.TYPE ?? "—");
   const nonComplyReason = complyRaw === "NO" ? describeNonComplyIssue(props.Desc_Issue) : "";
@@ -412,27 +466,27 @@ function plotPopupHtml(props: Record<string, unknown>, labels: ChainMapLabels): 
   const lon = Number(props.LON ?? NaN);
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
 
-  const row = (label: string, value: string, cls = "") =>
-    `<div class="plot-popup-row"><span>${escapeHtml(label)}</span><b class="${cls}">${escapeHtml(value)}</b></div>`;
+  const rows: PlotDetail["rows"] = [
+    { label: labels.plotId, value: plotId || "—" },
+    { label: labels.company, value: company || "—" },
+    { label: labels.uml, value: uml || "—" },
+  ];
+  if (location) rows.push({ label: labels.location, value: location });
+  rows.push({ label: labels.hectare, value: `${haShort(ha)} ha` });
+  rows.push({ label: labels.compliance, value: comply, cls: complyClass });
+  rows.push({ label: labels.risk, value: risk });
+  rows.push({ label: labels.type, value: type });
 
-  return `<div class="plot-popup">
-    <h4>${escapeHtml(mill || uml || "Plot")}</h4>
-    ${row(labels.plotId, plotId || "—")}
-    ${row(labels.company, company || "—")}
-    ${row(labels.uml, uml || "—")}
-    ${location ? row(labels.location, location) : ""}
-    ${
-      hasCoords
-        ? `<div class="plot-popup-row"><span>${escapeHtml(labels.coordinates)}</span><a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener noreferrer">${lat.toFixed(5)}, ${lon.toFixed(5)}</a></div>`
-        : ""
-    }
-    ${row(labels.hectare, `${haShort(ha)} ha`)}
-    ${row(labels.compliance, comply, complyClass)}
-    ${row(labels.risk, risk)}
-    ${row(labels.type, type)}
-    <p class="plot-popup-note"><span>${escapeHtml(`${labels.mitigation}${mitLetter ? ` (${mitLetter})` : ""}`)}</span>${escapeHtml(mitigation)}</p>
-    ${nonComplyReason ? `<p class="plot-popup-note bad"><span>${escapeHtml(labels.nonComplyReason)}</span>${escapeHtml(nonComplyReason)}</p>` : ""}
-  </div>`;
+  return {
+    title: mill || uml || "Plot",
+    rows,
+    coordinates: hasCoords ? { lat, lon } : null,
+    mitigation: {
+      label: `${labels.mitigation}${mitLetter ? ` (${mitLetter})` : ""}`,
+      text: mitigationText,
+    },
+    nonComplyReason,
+  };
 }
 
 // `maplibre-gl`'s type declarations don't expose a `default` export (only
@@ -447,40 +501,21 @@ type MaplibreGlNamespace = {
   Marker: typeof import("maplibre-gl").Marker;
 };
 
-/** Shared by the map-click handler, search-result clicks, and the
- * coordinate lookup — one place that builds and shows a plot popup. */
-function showPlotPopup(
-  maplibregl: Pick<MaplibreGlNamespace, "Popup">,
-  map: import("maplibre-gl").Map,
-  popupRef: { current: import("maplibre-gl").Popup | null },
-  lngLat: import("maplibre-gl").LngLatLike,
-  feature: { properties?: Record<string, unknown> | null },
-  labels: ChainMapLabels,
-) {
-  popupRef.current?.remove();
-  popupRef.current = new maplibregl.Popup({ closeButton: true, maxWidth: "260px" })
-    .setLngLat(lngLat)
-    .setHTML(plotPopupHtml(feature.properties ?? {}, labels))
-    .addTo(map);
-}
-
-/** Flies the map to a plot feature's bounds and opens its popup — shared by
- * the search-result click and the plot-table row click (workspace.tsx). */
+/** Flies the map to a plot feature's bounds and selects it (opens/updates
+ * the detail deck) — shared by the search-result click and the plot-table
+ * row click (workspace.tsx). Selecting a plot no longer opens a MapLibre
+ * popup: those routinely got clipped by the map container's edge, which is
+ * exactly the feedback that prompted replacing it with the deck panel. */
 function focusOnPlotFeature(
   map: import("maplibre-gl").Map,
-  maplibregl: Pick<MaplibreGlNamespace, "Popup">,
-  popupRef: { current: import("maplibre-gl").Popup | null },
   feature: Fc["features"][number],
-  labels: ChainMapLabels,
+  select: (id: string, props: Record<string, unknown>) => void,
 ) {
   const bounds = featureBounds(feature);
   if (!bounds) return;
   fitBoundsClamped(map, bounds, { padding: 60, minZoom: 14, maxZoom: 18, duration: 600 });
-  const center: [number, number] = [
-    (bounds[0][0] + bounds[1][0]) / 2,
-    (bounds[0][1] + bounds[1][1]) / 2,
-  ];
-  showPlotPopup(maplibregl, map, popupRef, center, feature, labels);
+  const id = String(feature.properties?.PlotID ?? "");
+  if (id) select(id, feature.properties ?? {});
 }
 
 /** Bounding box of a single feature's geometry, for zooming to it. */
@@ -575,12 +610,13 @@ export function ChainMap({
   selectedMillId,
   onSelectMill,
   focusPlot,
+  plotFilters,
+  onPlotFiltersChange,
   labels,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapHandle | null>(null);
   const maplibreRef = useRef<MaplibreGlNamespace | null>(null);
-  const popupRef = useRef<import("maplibre-gl").Popup | null>(null);
   const markerRef = useRef<import("maplibre-gl").Marker | null>(null);
   const selectedRef = useRef(selectedMillId);
   selectedRef.current = selectedMillId;
@@ -588,6 +624,8 @@ export function ChainMap({
   onSelectRef.current = onSelectMill;
   const labelsRef = useRef(labels);
   labelsRef.current = labels;
+  const plotFiltersRef = useRef(plotFilters);
+  plotFiltersRef.current = plotFilters;
 
   const [colorBy, setColorBy] = useState<ColorBy>("comply");
   const colorByRef = useRef(colorBy);
@@ -606,6 +644,26 @@ export function ChainMap({
   // itself — otherwise switching languages while the error is showing would
   // leave it frozen in whichever language was active when it was set.
   const [coordInvalid, setCoordInvalid] = useState(false);
+  // The plot currently shown in the right-side detail deck + highlighted
+  // blue on the map. Toggled off by re-clicking the same plot or the deck's
+  // own close button; clicking a *different* plot swaps the content instead
+  // of closing it — see the click handler and selectPlot() below.
+  const [selectedPlot, setSelectedPlot] = useState<{
+    id: string;
+    props: Record<string, unknown>;
+  } | null>(null);
+  const selectPlot = (id: string, props: Record<string, unknown>) => {
+    setSelectedPlot((prev) => (prev?.id === id ? null : { id, props }));
+  };
+  const selectPlotRef = useRef(selectPlot);
+  selectPlotRef.current = selectPlot;
+
+  // A mill switch (or any other change to which plots are loaded) hands
+  // ChainMap a brand-new `plots` object — the previously selected plot may
+  // not even exist in it anymore, so the deck/highlight shouldn't linger.
+  useEffect(() => {
+    setSelectedPlot(null);
+  }, [plots]);
 
   // More than one Refinery/KCP in view (e.g. a whole Group) -> color mill
   // points by refinery instead of traceability so they stay distinguishable.
@@ -710,10 +768,13 @@ export function ChainMap({
         }
         if (plots && plots.features.length) {
           map.addSource("plots", { type: "geojson", data: plots as GeoJSON.GeoJSON });
+          // MapLibre filter expression; typed loosely like the paint expressions above.
+          const plotFilter = plotFilterExpression(plotFiltersRef.current) as any;
           map.addLayer({
             id: "plots-fill",
             type: "fill",
             source: "plots",
+            filter: plotFilter,
             layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
             paint: {
               "fill-color": fillColorExpression(colorByRef.current),
@@ -724,6 +785,7 @@ export function ChainMap({
             id: "plots-line",
             type: "line",
             source: "plots",
+            filter: plotFilter,
             layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
             paint: {
               "line-color": fillColorExpression(colorByRef.current),
@@ -731,12 +793,35 @@ export function ChainMap({
               "line-width": 1.1,
             },
           });
+          // Blue highlight for whichever plot is currently open in the
+          // detail deck — kept as separate layers (rather than folded into
+          // plots-fill/plots-line's own paint) so the highlight color never
+          // has to compete with the colorBy palette. Filter starts matching
+          // nothing; the selectedPlot-keyed effect below keeps it in sync.
+          map.addLayer({
+            id: "plots-selected-fill",
+            type: "fill",
+            source: "plots",
+            filter: ["==", ["get", "PlotID"], "__none__"],
+            layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
+            paint: { "fill-color": "#2f6fed", "fill-opacity": 0.25 },
+          });
+          map.addLayer({
+            id: "plots-selected-line",
+            type: "line",
+            source: "plots",
+            filter: ["==", ["get", "PlotID"], "__none__"],
+            layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
+            paint: { "line-color": "#2f6fed", "line-width": 3 },
+          });
           ext(plots);
 
           map.on("click", "plots-fill", (e) => {
             const feature = e.features?.[0];
-            if (!feature || !map) return;
-            showPlotPopup(maplibregl, map, popupRef, e.lngLat, feature, labelsRef.current);
+            if (!feature) return;
+            const id = String(feature.properties?.PlotID ?? "");
+            if (!id) return;
+            selectPlotRef.current(id, feature.properties ?? {});
           });
           map.on("mouseenter", "plots-fill", () => {
             map!.getCanvas().style.cursor = "pointer";
@@ -853,8 +938,6 @@ export function ChainMap({
 
     return () => {
       cancelled = true;
-      popupRef.current?.remove();
-      popupRef.current = null;
       markerRef.current?.remove();
       markerRef.current = null;
       map?.remove();
@@ -927,6 +1010,32 @@ export function ChainMap({
     }
   }, [colorBy]);
 
+  // Legend-as-filter (map) and column-header filters (workspace.tsx's plot
+  // table) share this one `plotFilters` state — repaint the plot layers'
+  // filter whenever either surface changes it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getLayer("plots-fill")) return;
+    const expr = plotFilterExpression(plotFilters) as any;
+    map.setFilter("plots-fill", expr);
+    if (map.getLayer("plots-line")) map.setFilter("plots-line", expr);
+  }, [plotFilters]);
+
+  // Keeps the blue highlight layers matched to whichever plot is open in
+  // the detail deck (or matching nothing once it's closed).
+  useEffect(() => {
+    const map = mapRef.current;
+    // Not gated on map.loaded() like the other reactive effects below —
+    // selecting a plot always fires a fitBoundsClamped() camera move in the
+    // same tick (focusOnPlotFeature), and loaded() reports false while that
+    // animation is fetching tiles. getLayer() existing already proves the
+    // style/layer is ready, which is all setFilter needs.
+    if (!map || !map.getLayer("plots-selected-fill")) return;
+    const filter = ["==", ["get", "PlotID"], selectedPlot?.id ?? "__none__"];
+    map.setFilter("plots-selected-fill", filter);
+    if (map.getLayer("plots-selected-line")) map.setFilter("plots-selected-line", filter);
+  }, [selectedPlot]);
+
   // Basemap switch — live-swap the raster source's tiles instead of
   // map.setStyle(), which would wipe every custom layer added since load.
   useEffect(() => {
@@ -946,6 +1055,8 @@ export function ChainMap({
     if (map.getLayer("plots-fill")) {
       map.setLayoutProperty("plots-fill", "visibility", visible.plots ? "visible" : "none");
       map.setLayoutProperty("plots-line", "visibility", visible.plots ? "visible" : "none");
+      map.setLayoutProperty("plots-selected-fill", "visibility", visible.plots ? "visible" : "none");
+      map.setLayoutProperty("plots-selected-line", "visibility", visible.plots ? "visible" : "none");
     }
     if (map.getLayer("areas-fill")) {
       map.setLayoutProperty("areas-fill", "visibility", visible.areas ? "visible" : "none");
@@ -961,9 +1072,8 @@ export function ChainMap({
 
   function selectSearchResult(feature: Fc["features"][number]) {
     const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
-    const maplibregl = maplibreRef.current;
-    if (!map || !maplibregl) return;
-    focusOnPlotFeature(map, maplibregl, popupRef, feature, labels);
+    if (!map) return;
+    focusOnPlotFeature(map, feature, (id, props) => setSelectedPlot({ id, props }));
     setPlotQuery("");
   }
 
@@ -971,12 +1081,11 @@ export function ChainMap({
   useEffect(() => {
     if (!focusPlot || !plots) return;
     const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
-    const maplibregl = maplibreRef.current;
-    if (!map || !maplibregl) return;
+    if (!map) return;
     const feature = plots.features[focusPlot.index];
     if (!feature) return;
-    focusOnPlotFeature(map, maplibregl, popupRef, feature, labels);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `plots`/`labels` intentionally excluded: re-running this on every plot-set change would re-fly the map without a new click.
+    focusOnPlotFeature(map, feature, (id, props) => setSelectedPlot({ id, props }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `plots` intentionally excluded: re-running this on every plot-set change would re-fly the map without a new click.
   }, [focusPlot]);
 
   function goToCoordinate() {
@@ -997,10 +1106,10 @@ export function ChainMap({
 
     const hit = plots?.features.find((f) => pointInGeometry(point, f.geometry));
     if (hit) {
-      showPlotPopup(maplibregl, map, popupRef, point, hit, labels);
+      const id = String(hit.properties?.PlotID ?? "");
+      if (id) setSelectedPlot({ id, props: hit.properties ?? {} });
       return;
     }
-    popupRef.current?.remove();
     const marker = new maplibregl.Marker({ color: "#9a3f32" })
       .setLngLat(point)
       .setPopup(new maplibregl.Popup({ closeButton: true }).setText(labels.noPlotAtCoordinate))
@@ -1116,14 +1225,41 @@ export function ChainMap({
                 ))}
               </div>
               <ul className="map-legend-list">
-                {entries.map((e) => (
-                  <li key={e.label}>
-                    <i className="swatch" style={{ background: e.color }} />
-                    <span>{e.label}</span>
-                    <b className="tabular-nums">{e.count.toLocaleString("id-ID")}</b>
-                  </li>
-                ))}
+                {entries.map((e) => {
+                  const set = plotFilters[colorBy];
+                  const isOn = !set || set.has(e.value);
+                  return (
+                    <li key={e.value}>
+                      <button
+                        type="button"
+                        className={`map-legend-item ${isOn ? "" : "off"}`}
+                        aria-pressed={isOn}
+                        onClick={() =>
+                          onPlotFiltersChange(
+                            toggleFilterValue(plotFilters, colorBy, e.value, filterUniverse(colorBy)),
+                          )
+                        }
+                      >
+                        <i className="swatch" style={{ background: e.color }} />
+                        <span>{e.label}</span>
+                        <b className="tabular-nums">{e.count.toLocaleString("id-ID")}</b>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
+              {isPlotFilterActive(plotFilters) ? (
+                <div className="map-filter-summary">
+                  <span>{labels.filtersActive.replace("{n}", String(activePlotFilterCount(plotFilters)))}</span>
+                  <button
+                    type="button"
+                    className="map-filter-clear"
+                    onClick={() => onPlotFiltersChange(EMPTY_PLOT_FILTERS)}
+                  >
+                    {labels.clearFilters}
+                  </button>
+                </div>
+              ) : null}
               <label className="map-layer-toggle">
                 <input
                   type="checkbox"
@@ -1193,6 +1329,62 @@ export function ChainMap({
             </div>
           ) : null}
         </div>
+      </div>
+      {selectedPlot ? <PlotDetailDeck detail={buildPlotDetail(selectedPlot.props, labels)} labels={labels} onClose={() => setSelectedPlot(null)} /> : null}
+    </div>
+  );
+}
+
+/** Right-side card replacing the old plot popup — see focusOnPlotFeature's
+ * comment for why. Closes via its own × button or by re-clicking the same
+ * plot (handled in selectPlot, above); clicking a different plot swaps this
+ * card's content in place rather than closing and reopening it. */
+function PlotDetailDeck({
+  detail,
+  labels,
+  onClose,
+}: {
+  detail: PlotDetail;
+  labels: ChainMapLabels;
+  onClose: () => void;
+}) {
+  return (
+    <div className="plot-detail">
+      <div className="plot-detail-header">
+        <span className="truncate">{detail.title}</span>
+        <button type="button" className="plot-detail-close" aria-label={labels.close} onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="plot-detail-body">
+        {detail.rows.map((r) => (
+          <div className="plot-detail-row" key={r.label}>
+            <span>{r.label}</span>
+            <b className={r.cls ?? ""}>{r.value}</b>
+          </div>
+        ))}
+        {detail.coordinates ? (
+          <div className="plot-detail-row">
+            <span>{labels.coordinates}</span>
+            <a
+              href={`https://www.google.com/maps?q=${detail.coordinates.lat},${detail.coordinates.lon}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {detail.coordinates.lat.toFixed(5)}, {detail.coordinates.lon.toFixed(5)}
+            </a>
+          </div>
+        ) : null}
+        <p className="plot-detail-note">
+          <span>{detail.mitigation.label}</span>
+          {detail.mitigation.text}
+        </p>
+        {detail.nonComplyReason ? (
+          <p className="plot-detail-note bad">
+            <span>{labels.nonComplyReason}</span>
+            {detail.nonComplyReason}
+          </p>
+        ) : null}
       </div>
     </div>
   );

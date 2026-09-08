@@ -21,8 +21,16 @@ import {
   MITIGATION_DESCRIPTIONS,
   type TraceFilter,
 } from "@/lib/ledger-geo";
+import {
+  activePlotFilterCount,
+  distinctFilterOptions,
+  EMPTY_PLOT_FILTERS,
+  plotPassesFilters,
+  type PlotFilters,
+} from "@/lib/plot-filters";
 import { useLedger } from "@/lib/ledger-context";
 import { ChainMap } from "@/components/chain-map";
+import { ColumnFilterMenu } from "@/components/column-filter";
 import { NavTree } from "@/components/nav-tree";
 import { PortfolioView } from "@/components/portfolio-view";
 import { EudrSummaryView } from "@/components/eudr-summary";
@@ -117,11 +125,22 @@ export function Workspace({ role }: { role: GateRole }) {
   const [focusPlot, setFocusPlot] = useState<{ index: number; nonce: number } | null>(null);
   const [plotQuery, setPlotQuery] = useState("");
   const [millSummaryOpen, setMillSummaryOpen] = useState(true);
+  // Shared with ChainMap's legend-as-filter buttons — either surface can
+  // narrow which plots show on the map and in this table.
+  const [plotFilters, setPlotFilters] = useState<PlotFilters>(EMPTY_PLOT_FILTERS);
+  const [plotPage, setPlotPage] = useState(0);
   useEffect(() => {
     setFocusPlot(null);
     setPlotQuery("");
     setMillSummaryOpen(true);
+    setPlotFilters(EMPTY_PLOT_FILTERS);
   }, [selectedMillId]);
+  // A new search term or filter selection can change which page still has
+  // rows on it — always land back on page 1 rather than showing a stale,
+  // possibly-empty page.
+  useEffect(() => {
+    setPlotPage(0);
+  }, [plotQuery, plotFilters]);
 
   const chains = useMemo(() => groupChains(store.mills), [store.mills]);
   // selectedChain === null is the Portfolio landing — an intentional state,
@@ -179,7 +198,7 @@ export function Workspace({ role }: { role: GateRole }) {
   // and tears down/recreates the whole MapLibre map constantly.
   const viewPlots = useMemo(() => decoratePlots(serverPlots, mills), [serverPlots, mills]);
 
-  const MAX_PLOT_ROWS = 500;
+  const PLOT_PAGE_SIZE = 200;
   // Carries each feature's index into `viewPlots.features` (the same array
   // reference ChainMap receives as `plots`) as the row identity, rather
   // than its `PlotID` — a plain index is simpler to key/target by and
@@ -187,13 +206,25 @@ export function Workspace({ role }: { role: GateRole }) {
   const matchingPlotRows = useMemo(() => {
     const q = plotQuery.trim().toLowerCase();
     const indexed = (viewPlots?.features ?? []).map((f, index) => ({ f, index }));
-    if (!q) return indexed;
     return indexed.filter(({ f }) => {
+      if (!plotPassesFilters(f.properties, plotFilters)) return false;
+      if (!q) return true;
       const id = String(f.properties?.PlotID ?? "").toLowerCase();
       const company = String(f.properties?.COMPANY ?? "").toLowerCase();
       return id.includes(q) || company.includes(q);
     });
-  }, [viewPlots, plotQuery]);
+  }, [viewPlots, plotQuery, plotFilters]);
+
+  const plotPageCount = Math.max(1, Math.ceil(matchingPlotRows.length / PLOT_PAGE_SIZE));
+  const plotPageClamped = Math.min(plotPage, plotPageCount - 1);
+  const pagedPlotRows = useMemo(
+    () =>
+      matchingPlotRows.slice(
+        plotPageClamped * PLOT_PAGE_SIZE,
+        (plotPageClamped + 1) * PLOT_PAGE_SIZE,
+      ),
+    [matchingPlotRows, plotPageClamped],
+  );
 
   // Once a specific mill is selected, both the mill points and the areas
   // layer should scope down to that one mill only (matching how plots
@@ -458,6 +489,8 @@ export function Workspace({ role }: { role: GateRole }) {
                       selectedMillId={selectedMillId}
                       onSelectMill={setSelectedMillId}
                       focusPlot={focusPlot}
+                      plotFilters={plotFilters}
+                      onPlotFiltersChange={setPlotFilters}
                       labels={{
                         empty: t.mapEmpty,
                         legendVillage: t.legendVillage,
@@ -496,6 +529,10 @@ export function Workspace({ role }: { role: GateRole }) {
                         go: t.go,
                         coordinateInvalid: t.coordinateInvalid,
                         noPlotAtCoordinate: t.noPlotAtCoordinate,
+                        close: t.close,
+                        clearFilters: t.clearFilters,
+                        filtersActive: t.filtersActive,
+                        clear: t.clear,
                       }}
                     />
                   </div>
@@ -544,6 +581,20 @@ export function Workspace({ role }: { role: GateRole }) {
                         placeholder={t.searchPlotPlaceholder}
                         aria-label={t.searchPlotPlaceholder}
                       />
+                      {activePlotFilterCount(plotFilters) > 0 ? (
+                        <div className="table-filter-summary">
+                          <span>
+                            {t.filtersActive.replace("{n}", String(activePlotFilterCount(plotFilters)))}
+                          </span>
+                          <button
+                            type="button"
+                            className="map-filter-clear"
+                            onClick={() => setPlotFilters(EMPTY_PLOT_FILTERS)}
+                          >
+                            {t.clearFilters}
+                          </button>
+                        </div>
+                      ) : null}
                       {serverPlotsLoading ? <p className="notice">{t.loadingPlots}</p> : null}
                     </div>
                     <div className="table-wrap">
@@ -555,16 +606,98 @@ export function Workspace({ role }: { role: GateRole }) {
                             <tr>
                               <th>{t.plotId}</th>
                               <th>{t.company}</th>
-                              <th>{t.location}</th>
+                              <th>
+                                <span className="th-cell">
+                                  {t.location}
+                                  <ColumnFilterMenu
+                                    label={t.location}
+                                    options={distinctFilterOptions(viewPlots, "location").map((o) => ({
+                                      value: o.value,
+                                      label: o.value,
+                                      count: o.count,
+                                    }))}
+                                    selected={plotFilters.location}
+                                    onChange={(next) => setPlotFilters((f) => ({ ...f, location: next }))}
+                                    clearLabel={t.clear}
+                                  />
+                                </span>
+                              </th>
                               <th>{t.popupHectare}</th>
-                              <th>{t.eudrComplyKpi}</th>
-                              <th>{t.riskLabel}</th>
-                              <th>{t.mitigationLabel}</th>
-                              <th>{t.typeLabel}</th>
+                              <th>
+                                <span className="th-cell">
+                                  {t.eudrComplyKpi}
+                                  <ColumnFilterMenu
+                                    label={t.eudrComplyKpi}
+                                    options={distinctFilterOptions(viewPlots, "comply").map((o) => ({
+                                      value: o.value,
+                                      label: o.value === "yes" ? t.comply : o.value === "no" ? t.nonComply : o.value,
+                                      count: o.count,
+                                    }))}
+                                    selected={plotFilters.comply}
+                                    onChange={(next) => setPlotFilters((f) => ({ ...f, comply: next }))}
+                                    clearLabel={t.clear}
+                                  />
+                                </span>
+                              </th>
+                              <th>
+                                <span className="th-cell">
+                                  {t.riskLabel}
+                                  <ColumnFilterMenu
+                                    label={t.riskLabel}
+                                    options={distinctFilterOptions(viewPlots, "risk").map((o) => ({
+                                      value: o.value,
+                                      label:
+                                        o.value === "low"
+                                          ? t.riskLow
+                                          : o.value === "medium"
+                                            ? t.riskMedium
+                                            : o.value === "high"
+                                              ? t.riskHigh
+                                              : o.value,
+                                      count: o.count,
+                                    }))}
+                                    selected={plotFilters.risk}
+                                    onChange={(next) => setPlotFilters((f) => ({ ...f, risk: next }))}
+                                    clearLabel={t.clear}
+                                  />
+                                </span>
+                              </th>
+                              <th>
+                                <span className="th-cell">
+                                  {t.mitigationLabel}
+                                  <ColumnFilterMenu
+                                    label={t.mitigationLabel}
+                                    options={distinctFilterOptions(viewPlots, "mitigation").map((o) => ({
+                                      value: o.value,
+                                      label: o.value,
+                                      count: o.count,
+                                    }))}
+                                    selected={plotFilters.mitigation}
+                                    onChange={(next) => setPlotFilters((f) => ({ ...f, mitigation: next }))}
+                                    clearLabel={t.clear}
+                                  />
+                                </span>
+                              </th>
+                              <th>
+                                <span className="th-cell">
+                                  {t.typeLabel}
+                                  <ColumnFilterMenu
+                                    label={t.typeLabel}
+                                    options={distinctFilterOptions(viewPlots, "type").map((o) => ({
+                                      value: o.value,
+                                      label: o.value,
+                                      count: o.count,
+                                    }))}
+                                    selected={plotFilters.type}
+                                    onChange={(next) => setPlotFilters((f) => ({ ...f, type: next }))}
+                                    clearLabel={t.clear}
+                                  />
+                                </span>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {matchingPlotRows.slice(0, MAX_PLOT_ROWS).map(({ f, index }) => {
+                            {pagedPlotRows.map(({ f, index }) => {
                               const plotId = String(f.properties?.PlotID ?? "");
                               const comply = f.properties?._comply;
                               const risk = f.properties?._risk;
@@ -635,14 +768,43 @@ export function Workspace({ role }: { role: GateRole }) {
                           </tbody>
                         </table>
                       )}
-                      {matchingPlotRows.length > MAX_PLOT_ROWS ? (
-                        <p className="table-empty">
-                          {t.plotsTruncated
-                            .replace("{shown}", MAX_PLOT_ROWS.toLocaleString("id-ID"))
-                            .replace("{total}", matchingPlotRows.length.toLocaleString("id-ID"))}
-                        </p>
-                      ) : null}
                     </div>
+                    {matchingPlotRows.length > 0 ? (
+                      <div className="table-pager">
+                        <span className="table-pager-range">
+                          {t.rowsRange
+                            .replace("{from}", String(plotPageClamped * PLOT_PAGE_SIZE + 1))
+                            .replace(
+                              "{to}",
+                              String(Math.min(matchingPlotRows.length, (plotPageClamped + 1) * PLOT_PAGE_SIZE)),
+                            )
+                            .replace("{total}", matchingPlotRows.length.toLocaleString("id-ID"))}
+                        </span>
+                        {plotPageCount > 1 ? (
+                          <div className="table-pager-nav">
+                            <button
+                              type="button"
+                              disabled={plotPageClamped === 0}
+                              onClick={() => setPlotPage((p) => Math.max(0, p - 1))}
+                            >
+                              ‹ {t.prevPage}
+                            </button>
+                            <span>
+                              {t.pageOf
+                                .replace("{page}", String(plotPageClamped + 1))
+                                .replace("{total}", String(plotPageCount))}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={plotPageClamped >= plotPageCount - 1}
+                              onClick={() => setPlotPage((p) => Math.min(plotPageCount - 1, p + 1))}
+                            >
+                              {t.nextPage} ›
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <>

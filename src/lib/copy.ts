@@ -97,7 +97,14 @@ export const copy = {
     backToMills: "Back to mills",
     plotsLabel: "plots",
     noPlots: "No plots recorded for this mill.",
-    plotsTruncated: "Showing the first {shown} of {total} plots — search to narrow the list.",
+    rowsRange: "Showing {from}–{to} of {total} plots",
+    prevPage: "Previous",
+    nextPage: "Next",
+    pageOf: "Page {page} of {total}",
+    close: "Close",
+    clear: "Clear",
+    clearFilters: "Clear filters",
+    filtersActive: "Filters active: {n}",
   },
   id: {
     app: "Kanopi",
@@ -194,8 +201,14 @@ export const copy = {
     backToMills: "Kembali ke daftar mill",
     plotsLabel: "plot",
     noPlots: "Tidak ada plot tercatat untuk mill ini.",
-    plotsTruncated:
-      "Menampilkan {shown} dari {total} plot pertama — cari untuk mempersempit daftar.",
+    rowsRange: "Menampilkan {from}–{to} dari {total} plot",
+    prevPage: "Sebelumnya",
+    nextPage: "Berikutnya",
+    pageOf: "Halaman {page} dari {total}",
+    close: "Tutup",
+    clear: "Hapus",
+    clearFilters: "Hapus filter",
+    filtersActive: "Filter aktif: {n}",
   },
 } as const;
 

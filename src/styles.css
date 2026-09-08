@@ -765,16 +765,57 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 5px;
+  gap: 2px;
 }
-.map-legend-list li {
+/* Each entry doubles as a filter toggle (click to isolate/hide that
+   category on the map and in the plot table) — a full-width button rather
+   than plain text, dimmed via .off when excluded. */
+.map-legend-item {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 7px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 3px 4px;
+  font: inherit;
+  text-align: left;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
 }
-.map-legend-list li span {
+.map-legend-item:hover {
+  background: rgba(244, 239, 230, 0.1);
+}
+.map-legend-item span {
   flex: 1;
   min-width: 0;
+}
+.map-legend-item.off {
+  opacity: 0.38;
+}
+.map-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  opacity: 0.85;
+}
+.map-filter-clear {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 600 10.5px var(--font-sans);
+  padding: 2px 0;
+  text-decoration: underline;
+  opacity: 0.85;
+}
+.map-filter-clear:hover {
+  opacity: 1;
 }
 .map-layer-toggle {
   display: flex;
@@ -884,55 +925,107 @@
   border-left-color: var(--color-elevated) !important;
   border-right-color: var(--color-elevated) !important;
 }
-.plot-popup h4 {
-  margin: 0 0 6px;
-  font: 600 13px var(--font-display);
-  padding-right: 14px;
+/* Right-side plot detail deck — replaces the old MapLibre plot popup, which
+   routinely got clipped by the map container's edge. Same dark translucent
+   card treatment as .map-layers/.map-find, mirrored on the opposite side of
+   the map. */
+.plot-detail {
+  position: absolute;
+  right: 12px;
+  /* Clears MapLibre's own top-right zoom control (39x68px, flush with the
+     map's corner, z-index:2) — without this gap the deck's header sat
+     right underneath it, silently swallowing clicks meant for the close
+     button. */
+  top: 78px;
+  max-width: 280px;
+  max-height: calc(100% - 90px);
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--color-fg) 82%, transparent);
+  color: var(--color-bg);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
 }
-.plot-popup-row {
+.plot-detail-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 8px 9px 12px;
+  font: 600 12px var(--font-display);
+  border-bottom: 1px solid rgba(244, 239, 230, 0.16);
+}
+.plot-detail-close {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  line-height: 1;
+}
+.plot-detail-close:hover {
+  background: rgba(244, 239, 230, 0.14);
+}
+.plot-detail-body {
+  padding: 4px 12px 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.plot-detail-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
   font-size: 11.5px;
-  padding: 2px 0;
-  border-top: 1px solid var(--color-line);
+  padding: 5px 0;
+  border-top: 1px solid rgba(244, 239, 230, 0.16);
 }
-.plot-popup-row span {
-  color: var(--color-muted);
+.plot-detail-row:first-child {
+  border-top: 0;
 }
-.plot-popup-row b.ok {
+.plot-detail-row span {
+  color: rgba(244, 239, 230, 0.65);
+}
+.plot-detail-row b {
+  font-weight: 600;
+  text-align: right;
+}
+.plot-detail-row b.ok {
   color: var(--color-comply);
 }
-.plot-popup-row b.bad {
+.plot-detail-row b.bad {
   color: var(--color-noncomply);
 }
-.plot-popup-row a {
-  color: var(--color-accent-2);
+.plot-detail-row a {
+  color: #bcd9ff;
   font-weight: 600;
   text-align: right;
   text-decoration: none;
 }
-.plot-popup-row a:hover {
+.plot-detail-row a:hover {
   text-decoration: underline;
 }
 /* Shared by the Mitigation explanation and the (non-comply-only) Desc_Issue
    explanation — same "labeled note block" treatment for both. */
-.plot-popup-note {
+.plot-detail-note {
   margin: 6px 0 0;
   padding-top: 6px;
-  border-top: 1px solid var(--color-line);
+  border-top: 1px solid rgba(244, 239, 230, 0.16);
   font-size: 11px;
   line-height: 1.4;
-  color: var(--color-fg);
 }
-.plot-popup-note span {
+.plot-detail-note span {
   display: block;
-  color: var(--color-muted);
+  color: rgba(244, 239, 230, 0.65);
   margin-bottom: 2px;
 }
-.plot-popup-note.bad {
-  color: var(--color-danger);
+.plot-detail-note.bad {
+  color: #ffb3a8;
 }
 .dock {
   background: var(--color-bg);
@@ -1053,6 +1146,13 @@
 .search:focus {
   border-color: var(--color-accent);
 }
+.table-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
 .table-wrap {
   overflow: auto;
   padding: 0 18px 18px;
@@ -1061,6 +1161,36 @@
   color: var(--color-muted);
   font-size: 14px;
   padding: 12px 0 8px;
+}
+.table-pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 18px 14px;
+  font-size: 11.5px;
+  color: var(--color-muted);
+}
+.table-pager-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.table-pager-nav button {
+  border: 1px solid var(--color-line);
+  background: var(--color-elevated);
+  color: var(--color-fg);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font: 600 11px var(--font-sans);
+}
+.table-pager-nav button:disabled {
+  opacity: 0.4;
+}
+.table-pager-nav button:not(:disabled):hover {
+  background: var(--color-foam);
 }
 table {
   width: 100%;
@@ -1078,6 +1208,97 @@ th {
   position: sticky;
   top: 0;
   background: var(--color-bg);
+}
+.th-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.col-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  padding: 0;
+  flex: none;
+}
+.col-filter-btn:hover {
+  background: var(--color-line);
+}
+.col-filter-btn.on {
+  color: var(--color-accent-2);
+}
+.col-filter-menu {
+  position: fixed;
+  z-index: 60;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.col-filter-menu-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-line);
+  font: 600 11px var(--font-display);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-fg);
+}
+.col-filter-menu-head button {
+  border: 0;
+  background: transparent;
+  color: var(--color-accent-2);
+  font: 600 10.5px var(--font-sans);
+  padding: 2px 4px;
+}
+.col-filter-menu-head button:disabled {
+  color: var(--color-muted);
+  opacity: 0.5;
+}
+.col-filter-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+.col-filter-menu li label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-fg);
+}
+.col-filter-menu li label:hover {
+  background: var(--color-foam);
+}
+.col-filter-menu li label span {
+  flex: 1;
+  min-width: 0;
+}
+.col-filter-menu li label b {
+  color: var(--color-muted);
+  font-weight: 500;
+  font-size: 10.5px;
 }
 td {
   padding: 5px 8px;

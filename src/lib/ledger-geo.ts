@@ -207,6 +207,7 @@ export function decoratePlots(fc: Fc | null, mills: MillRecord[]): Fc | null {
           _comply: normComply(f.properties),
           _risk: normRisk(f.properties),
           _mitigation: normMitigation(f.properties),
+          _location: locationText(f.properties),
         },
       };
     }),
