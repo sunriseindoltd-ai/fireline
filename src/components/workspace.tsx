@@ -413,6 +413,7 @@ export function Workspace({ role }: { role: GateRole }) {
                     umlIds={selectedMill.umlId ? [selectedMill.umlId] : []}
                     emptyLabel={t.millSummaryEmpty}
                     loadingLabel={t.eudrLoading}
+                    partialLabel={t.eudrPartialCoverage}
                   />
                 </div>
               ) : null}
@@ -478,6 +479,7 @@ export function Workspace({ role }: { role: GateRole }) {
                     umlIds={mills.map((m) => m.umlId).filter(Boolean)}
                     emptyLabel={t.eudrEmpty}
                     loadingLabel={t.eudrLoading}
+                    partialLabel={t.eudrPartialCoverage}
                   />
                 ) : (
                   <div className="stage-map">

@@ -1471,6 +1471,30 @@ tr.on td:first-child {
   color: var(--color-muted);
   font-size: 14px;
 }
+/* Warning banner for "no plot data at all" (replaces the charts entirely)
+   and "only some mills have data" (sits above the charts, which then only
+   reflect the covered subset) — same treatment as .chip.warn's tan/brown
+   palette, already the app's established "heads up" color. */
+.eudr-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #efe4d2;
+  color: var(--color-warn);
+  border: 1px solid #e0cfa8;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.eudr-notice svg {
+  flex: none;
+  margin-top: 1px;
+}
+.eudr-notice p {
+  margin: 0;
+}
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

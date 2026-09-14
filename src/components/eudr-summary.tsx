@@ -12,14 +12,28 @@ import {
   YAxis,
 } from "recharts";
 import { useI18n } from "@/lib/i18n";
-import type { EudrSummary } from "@/lib/eudr-aggregates.server";
+import type { EudrSummaryResult } from "@/lib/eudr-aggregates.server";
 import { MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
 
 type Props = {
   umlIds: string[];
   emptyLabel: string;
   loadingLabel: string;
+  /** Shown as a warning banner above the charts when only some of the
+   * requested mills have plot data uploaded — must contain "{covered}" and
+   * "{total}" placeholders. */
+  partialLabel: string;
 };
+
+function WarningIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 3 1 21h22L12 3z" strokeLinejoin="round" />
+      <line x1="12" y1="10" x2="12" y2="14" />
+      <line x1="12" y1="17.5" x2="12" y2="17.51" />
+    </svg>
+  );
+}
 
 const RISK_COLORS = ["var(--color-accent-2)", "var(--color-warn)", "var(--color-danger)"];
 const COMPLY_COLORS = ["var(--color-comply)", "var(--color-noncomply)"];
@@ -71,9 +85,9 @@ function renderPercentLabel({ cx, cy, midAngle, outerRadius, percent }: PercentL
   );
 }
 
-export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel }: Props) {
+export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel, partialLabel }: Props) {
   const { t } = useI18n();
-  const [summary, setSummary] = useState<EudrSummary | null>(null);
+  const [summary, setSummary] = useState<EudrSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
   const umlIdsKey = umlIds.join(",");
 
@@ -86,7 +100,7 @@ export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel }: Props) {
       body: JSON.stringify({ umlIds: umlIdsKey ? umlIdsKey.split(",") : [] }),
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: EudrSummary | null) => {
+      .then((data: EudrSummaryResult | null) => {
         if (!cancelled) setSummary(data);
       })
       .catch(() => {
@@ -107,15 +121,23 @@ export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel }: Props) {
       </div>
     );
   }
-  if (!summary || summary.totalPlots === 0) {
+  // millsWithData (not totalPlots) is the right check here — a mill with a
+  // prepared-but-genuinely-empty plot file would have totalPlots === 0 yet
+  // still count as "covered", which totalPlots alone can't distinguish from
+  // "no data uploaded at all".
+  if (!summary || summary.millsWithData === 0) {
     return (
       <div className="eudr-summary">
-        <p className="eudr-empty">{emptyLabel}</p>
+        <div className="eudr-notice">
+          <WarningIcon />
+          <p>{emptyLabel}</p>
+        </div>
       </div>
     );
   }
 
-  const complyPct = Math.round((summary.comply.yes / summary.totalPlots) * 100);
+  const partial = summary.millsWithData < summary.millsRequested;
+  const complyPct = summary.totalPlots > 0 ? Math.round((summary.comply.yes / summary.totalPlots) * 100) : 0;
   const complyData = [
     { name: t.comply, value: summary.comply.yes },
     { name: t.nonComply, value: summary.comply.no },
@@ -139,6 +161,16 @@ export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel }: Props) {
 
   return (
     <div className="eudr-summary">
+      {partial ? (
+        <div className="eudr-notice">
+          <WarningIcon />
+          <p>
+            {partialLabel
+              .replaceAll("{covered}", summary.millsWithData.toLocaleString("id-ID"))
+              .replaceAll("{total}", summary.millsRequested.toLocaleString("id-ID"))}
+          </p>
+        </div>
+      ) : null}
       <div className="portfolio-kpis">
         <div>
           <b className="tabular-nums">{summary.totalPlots.toLocaleString("id-ID")}</b>
@@ -149,7 +181,11 @@ export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel }: Props) {
           <span>{t.mappedAreaKpi}</span>
         </div>
         <div>
-          <b className="tabular-nums">{umlIds.length}</b>
+          <b className="tabular-nums">
+            {partial
+              ? `${summary.millsWithData.toLocaleString("id-ID")}/${summary.millsRequested.toLocaleString("id-ID")}`
+              : summary.millsWithData.toLocaleString("id-ID")}
+          </b>
           <span>{t.millKpi}</span>
         </div>
         <div>

@@ -279,7 +279,23 @@ function isOle(buf: ArrayBuffer) {
   );
 }
 
-export async function readFirstSheetRows(buf: ArrayBuffer): Promise<string[][]> {
+/** Every `<sheet name="..." r:id="...">` in the workbook, in tab order. */
+export async function listSheetNames(buf: ArrayBuffer): Promise<string[]> {
+  const files = await unzip(buf);
+  const wb = xmlText(files.get("xl/workbook.xml")!);
+  const names: string[] = [];
+  const sheetRe = /<sheet\b([^>]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = sheetRe.exec(wb))) names.push(attr(m[1]!, "name"));
+  return names;
+}
+
+/** Rows of one sheet, picked by name (case-insensitive) or by 0-based tab
+ * index when `sheet` is a number — defaults to the first sheet. */
+export async function readSheetRows(
+  buf: ArrayBuffer,
+  sheet: string | number = 0,
+): Promise<string[][]> {
   if (isOle(buf)) {
     throw new Error("xls-legacy");
   }
@@ -301,9 +317,17 @@ export async function readFirstSheetRows(buf: ArrayBuffer): Promise<string[][]> 
   while ((rm = relRe.exec(rels))) {
     relMap.set(attr(rm[1]!, "Id"), attr(rm[1]!, "Target"));
   }
-  const sheetM = wb.match(/<sheet\b([^>]*)/);
-  if (!sheetM) throw new Error("xlsx has no sheet");
-  const rid = attr(sheetM[1]!, "id") || attr(sheetM[1]!, "r:id");
+  const sheetTags: string[] = [];
+  const sheetRe = /<sheet\b([^>]*)/g;
+  let sm: RegExpExecArray | null;
+  while ((sm = sheetRe.exec(wb))) sheetTags.push(sm[1]!);
+  if (!sheetTags.length) throw new Error("xlsx has no sheet");
+  const sheetTag =
+    typeof sheet === "number"
+      ? sheetTags[sheet]
+      : sheetTags.find((tag) => attr(tag, "name").toLowerCase() === sheet.toLowerCase());
+  if (!sheetTag) throw new Error(`xlsx has no sheet ${JSON.stringify(sheet)}`);
+  const rid = attr(sheetTag, "id") || attr(sheetTag, "r:id");
   const target = relMap.get(rid) || "worksheets/sheet1.xml";
   const sheetPath = joinPath("xl/workbook.xml", target);
   const sheetXml = get(sheetPath);
@@ -311,6 +335,10 @@ export async function readFirstSheetRows(buf: ArrayBuffer): Promise<string[][]> 
   const sstXml = get("xl/sharedStrings.xml") ?? "";
   const sst = sstXml ? parseSst(sstXml) : [];
   return parseSheet(sheetXml, sst);
+}
+
+export async function readFirstSheetRows(buf: ArrayBuffer): Promise<string[][]> {
+  return readSheetRows(buf, 0);
 }
 
 function zipStore(files: { name: string; data: Uint8Array }[]): Uint8Array {

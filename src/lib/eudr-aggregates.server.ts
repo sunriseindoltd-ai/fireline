@@ -9,6 +9,19 @@ export type EudrSummary = {
   plotType: Record<string, { count: number; areaHa: number }>;
 };
 
+// Only Permata KIM's plots have been uploaded so far — most mills across
+// every other refinery/chain have no prepared stats entry at all. Silently
+// summing whichever few requested UML IDs happen to have data (the previous
+// behavior) let a whole-chain summary look like a complete picture — e.g.
+// "SJIM, 203 mills, 100% EUDR Comply" when in reality only 1-2 of those 203
+// mills contributed any numbers. millsWithData/millsRequested let the UI
+// (eudr-summary.tsx) tell "fully covered" apart from "mostly missing" and
+// warn accordingly, instead of presenting a partial aggregate as complete.
+export type EudrSummaryResult = EudrSummary & {
+  millsWithData: number;
+  millsRequested: number;
+};
+
 const MITIGATION_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
 const DEF_YEARS = [
   ["Def_21", "2021"],
@@ -87,22 +100,31 @@ function addInto(target: EudrSummary, src: EudrSummary) {
 // only changes via a redeploy (which clears this module-level cache), same
 // as before.
 const CACHE_TTL_MS = 5 * 60_000;
-const cache = new Map<string, { at: number; value: EudrSummary }>();
+const cache = new Map<string, { at: number; value: EudrSummaryResult }>();
 
 /** Real EUDR aggregates for the given mills — summed from precomputed per-mill totals. */
-export async function getEudrSummary(umlIds: string[]): Promise<EudrSummary> {
-  const cacheKey = [...umlIds].sort().join(",");
+export async function getEudrSummary(umlIds: string[]): Promise<EudrSummaryResult> {
+  // De-duped: a physical mill can supply more than one refinery within the
+  // same group (so the same UML ID can appear twice in one chain's mill
+  // list) — without this, its plots would be summed into the total twice.
+  const distinctIds = [...new Set(umlIds)];
+  const cacheKey = distinctIds.sort().join(",");
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
-  if (umlIds.length === 0) return emptySummary();
+  if (distinctIds.length === 0) return { ...emptySummary(), millsWithData: 0, millsRequested: 0 };
 
   const stats = await millStats();
   const summary = emptySummary();
-  for (const umlId of umlIds) {
+  let millsWithData = 0;
+  for (const umlId of distinctIds) {
     const s = stats[umlId];
-    if (s) addInto(summary, s);
+    if (s) {
+      addInto(summary, s);
+      millsWithData++;
+    }
   }
 
-  cache.set(cacheKey, { at: Date.now(), value: summary });
-  return summary;
+  const result: EudrSummaryResult = { ...summary, millsWithData, millsRequested: distinctIds.length };
+  cache.set(cacheKey, { at: Date.now(), value: result });
+  return result;
 }

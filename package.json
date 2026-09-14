@@ -15,6 +15,8 @@
     "prepare:areas": "node scripts/prepare-areas.mjs",
     "prepare:forest": "node scripts/prepare-forest-cover.mjs",
     "prepare:eudr-stats": "node scripts/prepare-eudr-stats.mjs",
+    "patch:sjim-refinery": "node --experimental-strip-types scripts/patch-sjim-refinery.mjs",
+    "patch:sjim-refinery-fallback": "node scripts/patch-sjim-refinery-fallback.mjs",
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",
     "preview": "node scripts/with-app-env.mjs vite preview",
     "preview:restart": "node scripts/preview.mjs restart",
