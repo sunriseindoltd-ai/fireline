@@ -85,7 +85,6 @@ export default async function grokPwaMiddleware(
     acceptsHtml(event.req.headers.get("accept"))
   ) {
     const html = renderInstallPageHtml(installPageTemplate, {
-      host: requestHost(event),
       url: urlWithQuery,
     });
     return new Response(html, {
