@@ -275,10 +275,11 @@
   top: 0;
   z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 22px;
+  gap: 10px 16px;
+  padding: clamp(10px, 2vw, 14px) clamp(14px, 4vw, 22px);
   border-bottom: 1px solid var(--color-line);
   background: var(--color-surface);
 }
@@ -286,13 +287,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 .word {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: clamp(16px, 4.5vw, 22px);
   font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1;
+  line-height: 1.15;
 }
 .org {
   font-size: 11px;
@@ -674,7 +676,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 240px;
+  max-width: min(240px, 42vw);
   pointer-events: none;
 }
 .map-panels > * {
@@ -692,7 +694,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  max-width: 240px;
+  max-width: min(240px, 42vw);
   background: color-mix(in oklab, var(--color-fg) 82%, transparent);
   color: var(--color-bg);
   border-radius: var(--radius-md);
@@ -830,7 +832,7 @@
 /* Search-plot + go-to-coordinate control, same card treatment as
    .map-layers, stacked above it in .map-panels. */
 .map-find {
-  max-width: 240px;
+  max-width: min(240px, 42vw);
   background: color-mix(in oklab, var(--color-fg) 82%, transparent);
   color: var(--color-bg);
   border-radius: var(--radius-md);
@@ -937,7 +939,7 @@
      right underneath it, silently swallowing clicks meant for the close
      button. */
   top: 78px;
-  max-width: 280px;
+  max-width: min(280px, 44vw);
   max-height: calc(100% - 90px);
   display: flex;
   flex-direction: column;
@@ -1643,6 +1645,19 @@ tr.on td:first-child {
   padding: 10px;
 }
 
+/* Tablet-landscape and smaller laptops (iPad ~1024–1194, 13"–14" laptop
+   viewports just above the stacked-layout cutoff below) — the desktop
+   sidebar width and 5-up KPI row are tuned for wide displays and get
+   cramped here, so trim both back before the layout stacks entirely. */
+@media (max-width: 1280px) {
+  .body {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  }
+  .portfolio-kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 900px) {
   .body {
     grid-template-columns: 1fr;
@@ -1667,6 +1682,37 @@ tr.on td:first-child {
   }
   .chart-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Phones — tighten the paddings sized for desktop/tablet so the header,
+   login card, and portfolio page don't feel oversized on a ~360–430px
+   viewport. Grid column counts above already suit this width; only
+   spacing needs a further pass. */
+@media (max-width: 480px) {
+  .login-shell {
+    padding: 16px;
+  }
+  .login-card {
+    padding: 28px 20px 24px;
+  }
+  .top {
+    padding: 10px 14px;
+  }
+  .portfolio {
+    padding: 20px 16px 16px;
+  }
+  .dock-head {
+    padding: 8px 14px 6px;
+  }
+  .table-tools {
+    padding: 0 14px 6px;
+  }
+  .table-wrap {
+    padding: 0 14px 14px;
+  }
+  .table-pager {
+    padding: 8px 14px 12px;
   }
 }
 
