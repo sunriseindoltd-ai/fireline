@@ -3,7 +3,7 @@ export type Lang = "en" | "id";
 export const copy = {
   en: {
     app: "Kanopi",
-    org: "EarthLine",
+    org: "Satellite Powered Traceability with AI Analytics",
     signIn: "Sign in",
     id: "ID",
     password: "Password",
@@ -110,7 +110,7 @@ export const copy = {
   },
   id: {
     app: "Kanopi",
-    org: "EarthLine",
+    org: "Satellite Powered Traceability with AI Analytics",
     signIn: "Masuk",
     id: "ID",
     password: "Kata sandi",

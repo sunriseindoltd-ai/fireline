@@ -2,7 +2,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { LanguageProvider } from "@/lib/i18n";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Kanopi — EarthLine";
+const APP_NAME = "Kanopi — Satellite Powered Traceability with AI Analytics";
 
 export const Route = createRootRoute({
   head: () => ({
