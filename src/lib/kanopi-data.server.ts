@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { get as getBlob } from "@vercel/blob";
+import { AwsClient } from "aws4fetch";
 import { readGateSession, refineryScopeForRole } from "@/lib/gate";
 
-// Plot files are excluded here and served from Vercel Blob instead (see
+// Plot files are excluded here and served from Cloudflare R2 instead (see
 // loadPlotRel below) — private-data/plots/ crossed ~1.3GB once DOMAS's plots
 // joined Permata KIM's, and bundling that much data into the SSR function
 // blew past Vercel's build-container memory (OOM, exit 137). Everything else
@@ -111,24 +111,52 @@ async function isAllowedForScope(rel: string, scope: readonly string[]): Promise
   return false;
 }
 
+// Configured once at module load — R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
+// R2_SECRET_ACCESS_KEY/R2_BUCKET are set as env vars on the Vercel project
+// (production/preview/development); local dev typically has none of them,
+// which is what makes loadPlotRel fall back to disk below.
+const r2 = (() => {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const bucket = process.env.R2_BUCKET;
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) return null;
+  return {
+    client: new AwsClient({ accessKeyId, secretAccessKey }),
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    bucket,
+  };
+})();
+
 /**
  * Reads one plot file (`rel` like "plots/<id>.geojson" or
- * "plots/<id>.part2.geojson") from the private Vercel Blob store
- * (scripts/upload-plots-to-blob.mjs is what puts it there) when
- * BLOB_READ_WRITE_TOKEN is configured — production always has it once the
- * store is connected. Falls back to loadRel (bundled/local disk) so local
- * dev keeps working straight off private-data/plots/ without ever touching
- * Blob. A private blob's content must be read through the SDK's `get()` —
- * unlike a public blob, its URL is not a plain fetchable HTTP endpoint.
+ * "plots/<id>.part2.geojson") from the private R2 bucket
+ * (scripts/upload-plots-to-r2.mjs is what puts it there) when R2 env vars
+ * are configured — production always has them once set on the Vercel
+ * project. Falls back to loadRel (bundled/local disk) so local dev keeps
+ * working straight off private-data/plots/ without ever touching R2. R2's
+ * S3-compatible API needs a SigV4-signed request (aws4fetch's AwsClient),
+ * not a plain fetch — the bucket has no public URL.
  */
 async function loadPlotRel(rel: string): Promise<string | null> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return loadRel(rel);
+  if (!r2) return loadRel(rel);
   try {
-    const result = await getBlob(rel, { access: "private", token });
-    if (!result || result.statusCode !== 200 || !result.stream) return null;
-    return await new Response(result.stream).text();
-  } catch {
+    const key = rel.split("/").map(encodeURIComponent).join("/");
+    const res = await r2.client.fetch(`${r2.endpoint}/${r2.bucket}/${key}`);
+    if (!res.ok) {
+      if (res.status !== 404) {
+        console.error(
+          "[kanopi-data] R2 fetch failed for",
+          rel,
+          res.status,
+          await res.text().catch(() => "(no body)"),
+        );
+      }
+      return null;
+    }
+    return await res.text();
+  } catch (err) {
+    console.error("[kanopi-data] R2 fetch threw for", rel, err);
     return null;
   }
 }
