@@ -38,6 +38,10 @@ export function gateCredentials(): Record<GateRole, GateAccount[]> {
         password:
           process.env.KANOPI_ADMIN_PASSWORD || process.env.KANOPI_PASSWORD || "r^M3C%KtGM69q!t",
       },
+      {
+        user: process.env.KANOPI_ADMIN_USER_2 || "karmauzco",
+        password: process.env.KANOPI_ADMIN_PASSWORD_2 || "5l3nd312m4N!",
+      },
     ],
     client: [
       {
