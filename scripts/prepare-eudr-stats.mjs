@@ -3,8 +3,10 @@
  * Offline aggregation step: precomputes each mill's EUDR summary totals
  * (comply/risk/mitigation/deforestation/forest-overlap/plot-type counts —
  * the same math as getEudrSummary in src/lib/eudr-aggregates.server.ts)
- * from its prepared plot file, into one small `private-data/eudr-stats.json`
- * keyed by UML ID.
+ * from its prepared plot file(s), into one small `private-data/eudr-stats.json`
+ * keyed by each mill's own `id` (umlId__group__refinery) — not the bare UML
+ * ID, since the same physical mill can supply more than one chain with a
+ * genuinely different plot set for each.
  *
  * Why this exists: getEudrSummary only ever reads `feature.properties`, but
  * used to load and JSON.parse each mill's *entire* plot file — mostly
@@ -102,22 +104,36 @@ async function main() {
     process.exit(1);
   }
 
-  const out = {};
+  // A mill over the per-file upload size limit is split into
+  // `<id>.geojson`, `<id>.part2.geojson`, `<id>.part3.geojson`, … (see
+  // kanopi-data.server.ts's loadPlotFeatureCollection, which merges them the
+  // same way at request time) — grouped back into one stats entry per mill
+  // id here so a split mill's totals aren't scattered across phantom
+  // "<id>.part2" keys getEudrSummary never looks up.
+  const filesByMillId = new Map();
   for (const file of files) {
-    const umlId = file.replace(/\.geojson$/i, "");
-    const fc = JSON.parse(await readFile(path.join(plotsDir, file), "utf8"));
+    const millId = file.replace(/(\.part\d+)?\.geojson$/i, "");
+    if (!filesByMillId.has(millId)) filesByMillId.set(millId, []);
+    filesByMillId.get(millId).push(file);
+  }
+
+  const out = {};
+  for (const [millId, millFiles] of filesByMillId) {
     const stats = emptyStats();
-    for (const feature of fc.features ?? []) {
-      accumulate(stats, feature.properties ?? {});
+    for (const file of millFiles) {
+      const fc = JSON.parse(await readFile(path.join(plotsDir, file), "utf8"));
+      for (const feature of fc.features ?? []) {
+        accumulate(stats, feature.properties ?? {});
+      }
     }
-    out[umlId] = stats;
+    out[millId] = stats;
   }
 
   const outPath = path.join(ROOT, "private-data", "eudr-stats.json");
   const json = JSON.stringify(out);
   await writeFile(outPath, json);
   console.log(
-    `[prepare-eudr-stats] ${files.length} mill(s) -> ${path.relative(ROOT, outPath)} (${(json.length / 1024).toFixed(1)} KB)`,
+    `[prepare-eudr-stats] ${filesByMillId.size} mill(s) from ${files.length} file(s) -> ${path.relative(ROOT, outPath)} (${(json.length / 1024).toFixed(1)} KB)`,
   );
 }
 

@@ -92,7 +92,7 @@ async function downloadMillGeojson(m: MillRecord) {
   }
   if (m.umlId) {
     try {
-      const res = await fetch(`/data/plots/${encodeURIComponent(m.umlId)}.geojson`);
+      const res = await fetch(`/data/plots/${encodeURIComponent(m.id)}.geojson`);
       if (res.ok) {
         const fc = (await res.json()) as Fc;
         features.push(...fc.features);
@@ -165,9 +165,11 @@ export function Workspace({ role }: { role: GateRole }) {
   }, [chain, selectedRefinery, traceFilter, query]);
 
   // Plot geometry is static, prepared offline (scripts/prepare-plots.mjs)
-  // and served per-mill from /data/plots/<UML_ID>.geojson — too large to
-  // load for a whole chain at once, so it's fetched lazily for just the
-  // selected mill.
+  // and served per-mill from /data/plots/<mill id>.geojson — keyed by each
+  // mill's own `id` (umlId__group__refinery), not the bare UML ID, since the
+  // same physical mill can supply more than one chain with a genuinely
+  // different plot set for each. Too large to load for a whole chain at
+  // once, so it's fetched lazily for just the selected mill.
   const selectedMill = mills.find((m) => m.id === selectedMillId) ?? null;
   useEffect(() => {
     if (!selectedMill?.umlId) {
@@ -176,7 +178,7 @@ export function Workspace({ role }: { role: GateRole }) {
     }
     let cancelled = false;
     setServerPlotsLoading(true);
-    void fetch(`/data/plots/${encodeURIComponent(selectedMill.umlId)}.geojson`)
+    void fetch(`/data/plots/${encodeURIComponent(selectedMill.id)}.geojson`)
       .then((res) => (res.ok ? res.json() : null))
       .then((fc: Fc | null) => {
         if (!cancelled) setServerPlots(fc && fc.features.length ? fc : null);
@@ -410,7 +412,7 @@ export function Workspace({ role }: { role: GateRole }) {
               {millSummaryOpen ? (
                 <div className="sidebar-mill-summary-body">
                   <EudrSummaryView
-                    umlIds={selectedMill.umlId ? [selectedMill.umlId] : []}
+                    millIds={selectedMill.umlId ? [selectedMill.id] : []}
                     emptyLabel={t.millSummaryEmpty}
                     loadingLabel={t.eudrLoading}
                     partialLabel={t.eudrPartialCoverage}
@@ -476,7 +478,7 @@ export function Workspace({ role }: { role: GateRole }) {
                 ) : null}
                 {chain && viewTab === "summary" ? (
                   <EudrSummaryView
-                    umlIds={mills.map((m) => m.umlId).filter(Boolean)}
+                    millIds={mills.filter((m) => m.umlId).map((m) => m.id)}
                     emptyLabel={t.eudrEmpty}
                     loadingLabel={t.eudrLoading}
                     partialLabel={t.eudrPartialCoverage}

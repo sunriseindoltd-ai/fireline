@@ -31,3 +31,5 @@ screenshots/
 # OS/editor cruft.
 .DS_Store
 Thumbs.db
+
+.env*

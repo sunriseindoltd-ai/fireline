@@ -9,31 +9,31 @@ export const Route = createFileRoute("/eudr-summary/")({
         if (!session) {
           return new Response("Unauthorized", { status: 401 });
         }
-        let umlIds: unknown;
+        let millIds: unknown;
         try {
-          ({ umlIds } = await request.json());
+          ({ millIds } = await request.json());
         } catch {
           return new Response("Bad request", { status: 400 });
         }
-        if (!Array.isArray(umlIds) || !umlIds.every((v) => typeof v === "string")) {
+        if (!Array.isArray(millIds) || !millIds.every((v) => typeof v === "string")) {
           return new Response("Bad request", { status: 400 });
         }
         // A restricted role (supplier/auditor) could otherwise request an
-        // aggregate over any UML ID it can guess, regardless of refinery —
+        // aggregate over any mill id it can guess, regardless of refinery —
         // mills.json and the plot/area files are already scoped server-side
         // (kanopi-data.server.ts), so this aggregate needs the same check.
         const scope = refineryScopeForRole(session.role);
-        let scopedUmlIds = umlIds;
+        let scopedMillIds = millIds;
         if (scope) {
           const { loadMills } = await import("@/lib/kanopi-data.server");
           const mills = await loadMills();
           const allowed = new Set(
-            mills.filter((m) => m.refinery && scope.includes(m.refinery)).map((m) => m.umlId),
+            mills.filter((m) => m.refinery && scope.includes(m.refinery)).map((m) => m.id),
           );
-          scopedUmlIds = umlIds.filter((id) => allowed.has(id));
+          scopedMillIds = millIds.filter((id) => allowed.has(id));
         }
         const { getEudrSummary } = await import("@/lib/eudr-aggregates.server");
-        const summary = await getEudrSummary(scopedUmlIds);
+        const summary = await getEudrSummary(scopedMillIds);
         return new Response(JSON.stringify(summary), {
           headers: { "content-type": "application/json; charset=utf-8" },
         });

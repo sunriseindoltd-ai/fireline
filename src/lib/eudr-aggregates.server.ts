@@ -47,7 +47,10 @@ function emptySummary(): EudrSummary {
 }
 
 // Per-mill totals, precomputed offline by scripts/prepare-eudr-stats.mjs
-// from the full plot files (prepared by scripts/prepare-plots.mjs). Some
+// from the full plot files (prepared by scripts/prepare-plots.mjs), keyed by
+// each mill's own `id` (umlId__group__refinery) rather than the bare UML ID
+// — the same physical mill can supply more than one chain with a genuinely
+// different plot set for each. Some
 // prepared plot files are tens of MB — nearly all of it geometry this
 // aggregation never reads — so loading and JSON.parse-ing every mill's full
 // file on every request doesn't scale: a large refinery (e.g. Permata KIM,
@@ -103,11 +106,11 @@ const CACHE_TTL_MS = 5 * 60_000;
 const cache = new Map<string, { at: number; value: EudrSummaryResult }>();
 
 /** Real EUDR aggregates for the given mills — summed from precomputed per-mill totals. */
-export async function getEudrSummary(umlIds: string[]): Promise<EudrSummaryResult> {
-  // De-duped: a physical mill can supply more than one refinery within the
-  // same group (so the same UML ID can appear twice in one chain's mill
-  // list) — without this, its plots would be summed into the total twice.
-  const distinctIds = [...new Set(umlIds)];
+export async function getEudrSummary(millIds: string[]): Promise<EudrSummaryResult> {
+  // De-duped defensively — each `id` already uniquely identifies one
+  // group/refinery row in mills.json, so callers shouldn't produce repeats,
+  // but summing the same id's plots twice would silently double-count them.
+  const distinctIds = [...new Set(millIds)];
   const cacheKey = distinctIds.sort().join(",");
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
@@ -116,8 +119,8 @@ export async function getEudrSummary(umlIds: string[]): Promise<EudrSummaryResul
   const stats = await millStats();
   const summary = emptySummary();
   let millsWithData = 0;
-  for (const umlId of distinctIds) {
-    const s = stats[umlId];
+  for (const millId of distinctIds) {
+    const s = stats[millId];
     if (s) {
       addInto(summary, s);
       millsWithData++;

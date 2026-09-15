@@ -16,7 +16,10 @@ import type { EudrSummaryResult } from "@/lib/eudr-aggregates.server";
 import { MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
 
 type Props = {
-  umlIds: string[];
+  /** Each mill's own `id` (umlId__group__refinery), not the bare UML ID —
+   * the same physical mill can supply more than one chain with a genuinely
+   * different plot set for each. */
+  millIds: string[];
   emptyLabel: string;
   loadingLabel: string;
   /** Shown as a warning banner above the charts when only some of the
@@ -85,11 +88,11 @@ function renderPercentLabel({ cx, cy, midAngle, outerRadius, percent }: PercentL
   );
 }
 
-export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel, partialLabel }: Props) {
+export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabel }: Props) {
   const { t } = useI18n();
   const [summary, setSummary] = useState<EudrSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const umlIdsKey = umlIds.join(",");
+  const millIdsKey = millIds.join(",");
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +100,7 @@ export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel, partialLabel
     void fetch("/eudr-summary", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ umlIds: umlIdsKey ? umlIdsKey.split(",") : [] }),
+      body: JSON.stringify({ millIds: millIdsKey ? millIdsKey.split(",") : [] }),
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: EudrSummaryResult | null) => {
@@ -112,7 +115,7 @@ export function EudrSummaryView({ umlIds, emptyLabel, loadingLabel, partialLabel
     return () => {
       cancelled = true;
     };
-  }, [umlIdsKey]);
+  }, [millIdsKey]);
 
   if (loading) {
     return (
