@@ -47,7 +47,7 @@ export function NavTree({
       <p className="nav-tree-kicker">{supplyChainListLabel}</p>
 
       <select
-        className="nav-tree-select"
+        className="nav-tree-select nav-tree-select-group"
         aria-label={supplyChainListLabel}
         value={selectedChain ?? ""}
         onChange={(e) => onSelect(e.target.value || null, null)}
