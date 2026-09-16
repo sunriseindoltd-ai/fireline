@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Fc } from "@/lib/ledger";
-import { describeNonComplyIssue, locationText, MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
+import {
+  describeNonComplyIssue,
+  ISSUE_DESCRIPTIONS,
+  locationText,
+  MITIGATION_DESCRIPTIONS,
+} from "@/lib/ledger-geo";
 import {
   EMPTY_PLOT_FILTERS,
   plotFilterExpression,
@@ -164,6 +169,13 @@ export type ChainMapLabels = {
   clearFilters: string;
   filtersActive: string;
   clear: string;
+  seeMore: string;
+  back: string;
+  nonComplyDetailTitle: string;
+  physicalReasonLabel: string;
+  socialReasonLabel: string;
+  deforestationByYearLabel: string;
+  forestOverlapLabel: string;
 };
 
 type Props = {
@@ -425,13 +437,85 @@ function haShort(n: number) {
     : Math.round(n).toLocaleString("id-ID");
 }
 
+// Mirrors DEF_YEARS in src/lib/eudr-aggregates.server.ts / scripts/prepare-eudr-stats.mjs.
+const DEF_YEAR_FIELDS = [
+  ["Def_21", "2021"],
+  ["Def_22", "2022"],
+  ["Def_23", "2023"],
+  ["Def_24", "2024"],
+  ["Def_25", "2025"],
+  ["Def_26", "2026"],
+] as const;
+
+// Every forest/protected-area code a plot can carry its own ha overlap
+// under — a superset of the 4 (HL/HP/HPK/HPT) the EUDR summary chart
+// tracks, since a single plot's own non-compliance can be driven by any of
+// these (see ISSUE_DESCRIPTIONS, src/lib/ledger-geo.ts).
+const OVERLAP_CODES: readonly string[] = [
+  "HL",
+  "HP",
+  "HPK",
+  "HPT",
+  "CA",
+  "FL_LAIN",
+  "KSA_KPA",
+  "SM",
+  "TAHURA",
+  "TB",
+  "TN",
+  "TWA",
+];
+
+type NonComplyDetail = {
+  physicalReason: string;
+  socialReason: string;
+  deforestationByYear: { year: string; ha: number }[];
+  overlapBreakdown: { label: string; ha: number }[];
+};
+
 type PlotDetail = {
+  id: string;
   title: string;
   rows: { label: string; value: string; cls?: "ok" | "bad" }[];
   coordinates: { lat: number; lon: number } | null;
   mitigation: { label: string; text: string };
   nonComplyReason: string;
+  // null when the plot complies (there's nothing to drill into) or when a
+  // non-compliant plot's own fields don't actually carry any of this
+  // detail — same defensive stance as the rest of this file toward
+  // possibly-sparse source data.
+  nonComplyDetail: NonComplyDetail | null;
 };
+
+/**
+ * The "See more" slide's content — deliberately reads straight from the
+ * plot's own already-prepared explanatory fields (Physical_Reason,
+ * Social_Reason) and per-category ha columns rather than re-deriving
+ * anything, so it can only ever say more than the one-line
+ * describeNonComplyIssue() summary already shown, never something
+ * inconsistent with it.
+ */
+function buildNonComplyDetail(props: Record<string, unknown>): NonComplyDetail | null {
+  const physicalReason = String(props.Physical_Reason ?? "").trim();
+  const socialReason = String(props.Social_Reason ?? "").trim();
+  const deforestationByYear = DEF_YEAR_FIELDS.map(([col, year]) => ({
+    year,
+    ha: Number(props[col]) || 0,
+  })).filter((d) => d.ha > 0);
+  const issueCodes = String(props.Desc_Issue ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const overlapBreakdown = issueCodes
+    .filter((code) => OVERLAP_CODES.includes(code))
+    .map((code) => ({ label: ISSUE_DESCRIPTIONS[code] ?? code, ha: Number(props[code]) || 0 }))
+    .filter((o) => o.ha > 0);
+
+  if (!physicalReason && !socialReason && deforestationByYear.length === 0 && overlapBreakdown.length === 0) {
+    return null;
+  }
+  return { physicalReason, socialReason, deforestationByYear, overlapBreakdown };
+}
 
 /**
  * Structured plot attributes for the right-side detail deck — a plain data
@@ -482,6 +566,7 @@ function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels)
   rows.push({ label: labels.type, value: type });
 
   return {
+    id: plotId || uml || mill,
     title: mill || uml || "Plot",
     rows,
     coordinates: hasCoords ? { lat, lon } : null,
@@ -490,6 +575,7 @@ function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels)
       text: mitigationText,
     },
     nonComplyReason,
+    nonComplyDetail: complyRaw === "NO" ? buildNonComplyDetail(props) : null,
   };
 }
 
@@ -1334,7 +1420,19 @@ export function ChainMap({
           ) : null}
         </div>
       </div>
-      {selectedPlot ? <PlotDetailDeck detail={buildPlotDetail(selectedPlot.props, labels)} labels={labels} onClose={() => setSelectedPlot(null)} /> : null}
+      {selectedPlot ? (
+        <PlotDetailDeck
+          // Remounts (resetting back to slide 1) whenever the selected plot
+          // actually changes, rather than persisting whichever slide was
+          // open across an unrelated re-render — selectPlot() already
+          // treats re-clicking the *same* plot as toggling closed, so this
+          // key only ever changes for a genuinely different plot.
+          key={selectedPlot.id}
+          detail={buildPlotDetail(selectedPlot.props, labels)}
+          labels={labels}
+          onClose={() => setSelectedPlot(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1352,6 +1450,13 @@ function PlotDetailDeck({
   labels: ChainMapLabels;
   onClose: () => void;
 }) {
+  // Slide 2 only ever exists for a non-compliant plot with actual detail to
+  // show (see buildNonComplyDetail) — reset to slide 1 happens for free
+  // since this component remounts (its call site keys it by plot id) each
+  // time a different plot is selected.
+  const [slide, setSlide] = useState<1 | 2>(1);
+  const showDetailSlide = slide === 2 && detail.nonComplyDetail;
+
   return (
     <div className="plot-detail">
       <div className="plot-detail-header">
@@ -1360,36 +1465,84 @@ function PlotDetailDeck({
           ×
         </button>
       </div>
-      <div className="plot-detail-body">
-        {detail.rows.map((r) => (
-          <div className="plot-detail-row" key={r.label}>
-            <span>{r.label}</span>
-            <b className={r.cls ?? ""}>{r.value}</b>
-          </div>
-        ))}
-        {detail.coordinates ? (
-          <div className="plot-detail-row">
-            <span>{labels.coordinates}</span>
-            <a
-              href={`https://www.google.com/maps?q=${detail.coordinates.lat},${detail.coordinates.lon}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {detail.coordinates.lat.toFixed(5)}, {detail.coordinates.lon.toFixed(5)}
-            </a>
-          </div>
-        ) : null}
-        <p className="plot-detail-note">
-          <span>{detail.mitigation.label}</span>
-          {detail.mitigation.text}
-        </p>
-        {detail.nonComplyReason ? (
-          <p className="plot-detail-note bad">
-            <span>{labels.nonComplyReason}</span>
-            {detail.nonComplyReason}
+      {showDetailSlide && detail.nonComplyDetail ? (
+        <div className="plot-detail-body">
+          <button type="button" className="plot-detail-seemore" onClick={() => setSlide(1)}>
+            ‹ {labels.back}
+          </button>
+          <p className="plot-detail-subhead">{labels.nonComplyDetailTitle}</p>
+          {detail.nonComplyDetail.physicalReason ? (
+            <p className="plot-detail-note bad">
+              <span>{labels.physicalReasonLabel}</span>
+              {detail.nonComplyDetail.physicalReason}
+            </p>
+          ) : null}
+          {detail.nonComplyDetail.socialReason ? (
+            <p className="plot-detail-note">
+              <span>{labels.socialReasonLabel}</span>
+              {detail.nonComplyDetail.socialReason}
+            </p>
+          ) : null}
+          {detail.nonComplyDetail.deforestationByYear.length > 0 ? (
+            <div className="plot-detail-breakdown">
+              <span>{labels.deforestationByYearLabel}</span>
+              {detail.nonComplyDetail.deforestationByYear.map((d) => (
+                <div className="plot-detail-row" key={d.year}>
+                  <span>{d.year}</span>
+                  <b>{haShort(d.ha)} ha</b>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {detail.nonComplyDetail.overlapBreakdown.length > 0 ? (
+            <div className="plot-detail-breakdown">
+              <span>{labels.forestOverlapLabel}</span>
+              {detail.nonComplyDetail.overlapBreakdown.map((o) => (
+                <div className="plot-detail-row" key={o.label}>
+                  <span>{o.label}</span>
+                  <b>{haShort(o.ha)} ha</b>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="plot-detail-body">
+          {detail.rows.map((r) => (
+            <div className="plot-detail-row" key={r.label}>
+              <span>{r.label}</span>
+              <b className={r.cls ?? ""}>{r.value}</b>
+            </div>
+          ))}
+          {detail.coordinates ? (
+            <div className="plot-detail-row">
+              <span>{labels.coordinates}</span>
+              <a
+                href={`https://www.google.com/maps?q=${detail.coordinates.lat},${detail.coordinates.lon}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {detail.coordinates.lat.toFixed(5)}, {detail.coordinates.lon.toFixed(5)}
+              </a>
+            </div>
+          ) : null}
+          <p className="plot-detail-note">
+            <span>{detail.mitigation.label}</span>
+            {detail.mitigation.text}
           </p>
-        ) : null}
-      </div>
+          {detail.nonComplyReason ? (
+            <p className="plot-detail-note bad">
+              <span>{labels.nonComplyReason}</span>
+              {detail.nonComplyReason}
+              {detail.nonComplyDetail ? (
+                <button type="button" className="plot-detail-seemore" onClick={() => setSlide(2)}>
+                  {labels.seeMore} »
+                </button>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

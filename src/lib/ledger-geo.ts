@@ -141,7 +141,7 @@ export const MITIGATION_DESCRIPTIONS: Record<string, string> = {
  * chart, HL/HP/HPK/HPT). Expanded here into a readable label so a plot
  * popup can say *why* a plot failed, not just a bare code.
  */
-const ISSUE_DESCRIPTIONS: Record<string, string> = {
+export const ISSUE_DESCRIPTIONS: Record<string, string> = {
   Deforestation: "Deforestation detected after the 2020 cutoff",
   HL: "HL — Hutan Lindung (Protected Forest)",
   HP: "HP — Hutan Produksi (Production Forest)",

@@ -574,6 +574,13 @@ export function Workspace({ role }: { role: GateRole }) {
                         clearFilters: t.clearFilters,
                         filtersActive: t.filtersActive,
                         clear: t.clear,
+                        seeMore: t.seeMore,
+                        back: t.back,
+                        nonComplyDetailTitle: t.nonComplyDetailTitle,
+                        physicalReasonLabel: t.physicalReasonLabel,
+                        socialReasonLabel: t.socialReasonLabel,
+                        deforestationByYearLabel: t.deforestationByYearLabel,
+                        forestOverlapLabel: t.forestOverlapLabel,
                       }}
                     />
                     {serverPlotsLoading ? (

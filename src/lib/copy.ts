@@ -110,6 +110,13 @@ export const copy = {
     clearFilters: "Clear filters",
     filtersActive: "Filters active: {n}",
     slideOf: "Slide {n} of {total}",
+    seeMore: "See more",
+    back: "Back",
+    nonComplyDetailTitle: "Non-Compliance Detail",
+    physicalReasonLabel: "Physical Risk",
+    socialReasonLabel: "Social Risk",
+    deforestationByYearLabel: "Deforestation by Year",
+    forestOverlapLabel: "Protected/Production Area Overlap",
   },
   id: {
     app: "Kanopi",
@@ -220,6 +227,13 @@ export const copy = {
     clearFilters: "Hapus filter",
     filtersActive: "Filter aktif: {n}",
     slideOf: "Slide {n} dari {total}",
+    seeMore: "Lihat detail",
+    back: "Kembali",
+    nonComplyDetailTitle: "Detail Ketidakpatuhan",
+    physicalReasonLabel: "Risiko Fisik",
+    socialReasonLabel: "Risiko Sosial",
+    deforestationByYearLabel: "Deforestasi per Tahun",
+    forestOverlapLabel: "Overlap Kawasan Hutan/Produksi",
   },
 } as const;
 

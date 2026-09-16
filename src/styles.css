@@ -1132,6 +1132,39 @@
 .plot-detail-note.bad {
   color: #ffb3a8;
 }
+/* Distinct from the surrounding .bad (salmon) non-comply text on purpose —
+   reads as a link/action, not more of the warning it sits inside. Doubles
+   as the "‹ Back" control on the detail slide it leads to. */
+.plot-detail-seemore {
+  display: inline-block;
+  margin-top: 4px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #bcd9ff;
+  font: 600 11px var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+.plot-detail-seemore:hover {
+  text-decoration: underline;
+}
+.plot-detail-subhead {
+  margin: 2px 0 6px;
+  font: 600 12px var(--font-display);
+  color: rgba(244, 239, 230, 0.9);
+}
+.plot-detail-breakdown {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid rgba(244, 239, 230, 0.16);
+  font-size: 11px;
+}
+.plot-detail-breakdown > span {
+  display: block;
+  color: rgba(244, 239, 230, 0.65);
+  margin-bottom: 2px;
+}
 .dock {
   background: var(--color-bg);
   border-top: 1px solid var(--color-line);
