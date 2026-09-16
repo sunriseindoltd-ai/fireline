@@ -128,36 +128,48 @@ const r2 = (() => {
   };
 })();
 
+// Distinguishes "this mill genuinely has no plot file" (a normal state —
+// most mills across most chains have no data uploaded yet) from "the fetch
+// itself broke" (R2 unreachable, misconfigured credentials, a suspended
+// store, …) — collapsing both into one `null` is exactly how the Vercel
+// Blob outage went unnoticed for a while: the map/table just looked empty,
+// identical to a mill that had never had data. serveKanopiData below turns
+// "error" into a distinct HTTP status so the client (workspace.tsx) can
+// show "couldn't load, try again" instead of a plain empty state.
+type PlotFetchResult = { ok: true; text: string } | { ok: false; reason: "not-found" | "error" };
+
 /**
  * Reads one plot file (`rel` like "plots/<id>.geojson" or
  * "plots/<id>.part2.geojson") from the private R2 bucket
  * (scripts/upload-plots-to-r2.mjs is what puts it there) when R2 env vars
  * are configured — production always has them once set on the Vercel
  * project. Falls back to loadRel (bundled/local disk) so local dev keeps
- * working straight off private-data/plots/ without ever touching R2. R2's
- * S3-compatible API needs a SigV4-signed request (aws4fetch's AwsClient),
- * not a plain fetch — the bucket has no public URL.
+ * working straight off private-data/plots/ without ever touching R2 (a
+ * missing local file is just treated as "not-found" — there's no separate
+ * failure mode to distinguish when reading off disk). R2's S3-compatible
+ * API needs a SigV4-signed request (aws4fetch's AwsClient), not a plain
+ * fetch — the bucket has no public URL.
  */
-async function loadPlotRel(rel: string): Promise<string | null> {
-  if (!r2) return loadRel(rel);
+async function loadPlotRel(rel: string): Promise<PlotFetchResult> {
+  if (!r2) {
+    const text = await loadRel(rel);
+    return text == null ? { ok: false, reason: "not-found" } : { ok: true, text };
+  }
   try {
     const key = rel.split("/").map(encodeURIComponent).join("/");
     const res = await r2.client.fetch(`${r2.endpoint}/${r2.bucket}/${key}`);
-    if (!res.ok) {
-      if (res.status !== 404) {
-        console.error(
-          "[kanopi-data] R2 fetch failed for",
-          rel,
-          res.status,
-          await res.text().catch(() => "(no body)"),
-        );
-      }
-      return null;
-    }
-    return await res.text();
+    if (res.ok) return { ok: true, text: await res.text() };
+    if (res.status === 404) return { ok: false, reason: "not-found" };
+    console.error(
+      "[kanopi-data] R2 fetch failed for",
+      rel,
+      res.status,
+      await res.text().catch(() => "(no body)"),
+    );
+    return { ok: false, reason: "error" };
   } catch (err) {
     console.error("[kanopi-data] R2 fetch threw for", rel, err);
-    return null;
+    return { ok: false, reason: "error" };
   }
 }
 
@@ -167,25 +179,31 @@ async function loadPlotRel(rel: string): Promise<string | null> {
  * per-mill upload size limit) — merged back into one FeatureCollection here so
  * every caller still deals with a single response per mill, same as before
  * splitting existed. Only `plots/<id>.geojson` (never `.partN.geojson`
- * directly) reaches this — see the check at its call site.
+ * directly) reaches this — see the check at its call site. A "not-found" on
+ * `.part2` (etc.) just means the split sequence ended, not a failure; a real
+ * "error" fetching a part is propagated rather than silently returning a
+ * truncated merge.
  */
-async function loadPlotFeatureCollection(rel: string): Promise<string | null> {
-  const baseText = await loadPlotRel(rel);
-  if (baseText == null) return null;
+async function loadPlotFeatureCollection(rel: string): Promise<PlotFetchResult> {
+  const base = await loadPlotRel(rel);
+  if (!base.ok) return base;
 
   const withoutExt = rel.slice(0, -".geojson".length);
   const parts: unknown[] = [];
   for (let n = 2; ; n++) {
-    const partText = await loadPlotRel(`${withoutExt}.part${n}.geojson`);
-    if (partText == null) break;
-    const partFc = JSON.parse(partText) as { features?: unknown[] };
+    const part = await loadPlotRel(`${withoutExt}.part${n}.geojson`);
+    if (!part.ok) {
+      if (part.reason === "error") return part;
+      break;
+    }
+    const partFc = JSON.parse(part.text) as { features?: unknown[] };
     if (Array.isArray(partFc.features)) parts.push(...partFc.features);
   }
-  if (parts.length === 0) return baseText;
+  if (parts.length === 0) return base;
 
-  const merged = JSON.parse(baseText) as { features?: unknown[] };
+  const merged = JSON.parse(base.text) as { features?: unknown[] };
   merged.features = [...(merged.features ?? []), ...parts];
-  return JSON.stringify(merged);
+  return { ok: true, text: JSON.stringify(merged) };
 }
 
 export async function serveKanopiData(request: Request): Promise<Response> {
@@ -218,7 +236,22 @@ export async function serveKanopiData(request: Request): Promise<Response> {
 
   const isPlotFile =
     rel.startsWith("plots/") && rel.endsWith(".geojson") && !/\.part\d+\.geojson$/i.test(rel);
-  const body = isPlotFile ? await loadPlotFeatureCollection(rel) : await loadRel(rel);
+
+  if (isPlotFile) {
+    const result = await loadPlotFeatureCollection(rel);
+    if (!result.ok) {
+      // 502: this mill's data exists but couldn't be retrieved right now
+      // (vs. a plain 404 for "never uploaded") — see PlotFetchResult above.
+      return new Response("Upstream storage error", {
+        status: result.reason === "not-found" ? 404 : 502,
+      });
+    }
+    return new Response(result.text, {
+      headers: { "content-type": mimeFor(rel), "cache-control": "private, no-store" },
+    });
+  }
+
+  const body = await loadRel(rel);
   if (body == null) return new Response("Not found", { status: 404 });
   return new Response(body, {
     headers: {

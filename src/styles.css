@@ -580,6 +580,9 @@
   color: var(--color-accent);
   margin: 10px 0 0;
 }
+.notice.danger {
+  color: var(--color-danger);
+}
 .stage {
   min-width: 0;
   min-height: 0;
@@ -631,6 +634,52 @@
 }
 .map-loading-card p {
   margin: 0;
+}
+/* A persistent failure (the fetch itself broke — network, or the storage
+   backend erroring) rather than the transient .map-loading-overlay above,
+   which only ever means "still in flight". Deliberately not a full-screen
+   overlay like loading — the map behind it may still be worth panning
+   around — and deliberately distinct in color/wording from "no plots
+   recorded" (see also t.plotsLoadError), since those two used to render
+   identically and that's exactly how the Blob-storage outage went
+   unnoticed for a while. */
+.map-error-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, 90%);
+  background: #fbe4e0;
+  color: #7a2a20;
+  border: 1px solid #f0c4bc;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font: 500 12.5px var(--font-sans);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  animation: slide-down-fade-in 0.18s ease;
+}
+.map-error-banner svg {
+  flex: none;
+}
+.map-error-banner p {
+  margin: 0;
+  flex: 1;
+}
+.map-error-banner button {
+  flex: none;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: 600 11.5px var(--font-sans);
+}
+.map-error-banner button:hover {
+  background: rgba(122, 42, 32, 0.08);
 }
 .spinner {
   width: 16px;

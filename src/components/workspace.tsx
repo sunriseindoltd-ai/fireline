@@ -35,6 +35,16 @@ import { NavTree } from "@/components/nav-tree";
 import { PortfolioView } from "@/components/portfolio-view";
 import { EudrSummaryView } from "@/components/eudr-summary";
 
+function WarningTriangleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 3 1 21h22L12 3z" strokeLinejoin="round" />
+      <line x1="12" y1="10" x2="12" y2="14" />
+      <line x1="12" y1="17.5" x2="12" y2="17.51" />
+    </svg>
+  );
+}
+
 // Matches scripts/prepare-areas.mjs's slugify exactly — that script names
 // each prepared areas file after its Refinery/KCP this same way.
 function refinerySlug(name: string) {
@@ -119,6 +129,15 @@ export function Workspace({ role }: { role: GateRole }) {
   const [dockOpen, setDockOpen] = useState(true);
   const [serverPlots, setServerPlots] = useState<Fc | null>(null);
   const [serverPlotsLoading, setServerPlotsLoading] = useState(false);
+  // True only when the fetch itself failed (network error, or the server
+  // responded with something other than a plain "not found") — kept
+  // separate from serverPlots being empty so the UI can tell "this mill
+  // genuinely has no data yet" apart from "something broke while loading
+  // it", which used to look identical (see loadPlotRel's git history: the
+  // Vercel Blob outage that silently zeroed out DOMAS's plots for a while
+  // before anyone noticed, because both cases just rendered as empty).
+  const [serverPlotsError, setServerPlotsError] = useState(false);
+  const [plotRetryNonce, setPlotRetryNonce] = useState(0);
   // Set by clicking a row in the plot table (once a mill is selected) — a
   // fresh nonce each time so clicking the same plot twice still re-flies
   // the map to it (see ChainMap's focusPlot effect).
@@ -174,17 +193,31 @@ export function Workspace({ role }: { role: GateRole }) {
   useEffect(() => {
     if (!selectedMill?.umlId) {
       setServerPlots(null);
+      setServerPlotsError(false);
       return;
     }
     let cancelled = false;
     setServerPlotsLoading(true);
+    setServerPlotsError(false);
     void fetch(`/data/plots/${encodeURIComponent(selectedMill.id)}.geojson`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((fc: Fc | null) => {
-        if (!cancelled) setServerPlots(fc && fc.features.length ? fc : null);
+      .then(async (res) => {
+        if (res.ok) return { fc: (await res.json()) as Fc, failed: false };
+        // A plain 404 means this mill's plots were never uploaded — a real
+        // state, not a bug. Anything else (403 from a stale client-side
+        // scope check, 502 from kanopi-data.server.ts's R2 fetch failing,
+        // ...) means the data exists but couldn't be retrieved right now.
+        return { fc: null, failed: res.status !== 404 };
+      })
+      .then(({ fc, failed }) => {
+        if (cancelled) return;
+        setServerPlots(fc && fc.features.length ? fc : null);
+        setServerPlotsError(failed);
       })
       .catch(() => {
-        if (!cancelled) setServerPlots(null);
+        if (!cancelled) {
+          setServerPlots(null);
+          setServerPlotsError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setServerPlotsLoading(false);
@@ -192,7 +225,7 @@ export function Workspace({ role }: { role: GateRole }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedMill?.umlId]);
+  }, [selectedMill?.umlId, selectedMill?.id, plotRetryNonce]);
 
   // Memoized so ChainMap's props keep a stable reference across unrelated
   // re-renders (e.g. typing in the mill search box) — otherwise its mount
@@ -551,6 +584,18 @@ export function Workspace({ role }: { role: GateRole }) {
                         </div>
                       </div>
                     ) : null}
+                    {serverPlotsError ? (
+                      <div className="map-error-banner">
+                        <WarningTriangleIcon />
+                        <p>{t.plotsLoadError}</p>
+                        <button
+                          type="button"
+                          onClick={() => setPlotRetryNonce((n) => n + 1)}
+                        >
+                          {t.retry}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </>
@@ -612,10 +657,11 @@ export function Workspace({ role }: { role: GateRole }) {
                         </div>
                       ) : null}
                       {serverPlotsLoading ? <p className="notice">{t.loadingPlots}</p> : null}
+                      {serverPlotsError ? <p className="notice danger">{t.plotsLoadError}</p> : null}
                     </div>
                     <div className="table-wrap">
                       {matchingPlotRows.length === 0 ? (
-                        <p className="table-empty">{t.noPlots}</p>
+                        <p className="table-empty">{serverPlotsError ? t.plotsLoadError : t.noPlots}</p>
                       ) : (
                         <table>
                           <thead>
