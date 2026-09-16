@@ -107,6 +107,7 @@ export const copy = {
     clear: "Clear",
     clearFilters: "Clear filters",
     filtersActive: "Filters active: {n}",
+    slideOf: "Slide {n} of {total}",
   },
   id: {
     app: "Kanopi",
@@ -214,6 +215,7 @@ export const copy = {
     clear: "Hapus",
     clearFilters: "Hapus filter",
     filtersActive: "Filter aktif: {n}",
+    slideOf: "Slide {n} dari {total}",
   },
 } as const;
 

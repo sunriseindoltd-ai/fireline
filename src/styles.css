@@ -1588,6 +1588,67 @@ tr.on td:first-child {
   height: 100%;
 }
 
+/* One-slide-at-a-time viewport (EudrSummaryView's layout="carousel") — the
+   sidebar mill summary uses this instead of stacking its KPI grid + 6
+   charts vertically, so the panel never needs its own internal scroll. */
+.carousel-viewport {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.carousel-slide {
+  flex: 1;
+  min-width: 0;
+  animation: carousel-fade 0.18s ease;
+}
+@keyframes carousel-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.carousel-arrow {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: var(--color-elevated);
+  color: var(--color-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.carousel-arrow:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  background: var(--color-line);
+  cursor: pointer;
+}
+.carousel-dot.on {
+  width: 8px;
+  height: 8px;
+  background: var(--color-accent);
+}
+
 /* Mill-scoped EUDR insight, shown in the left sidebar below NavTree once a
    mill is selected — reuses EudrSummaryView (normally the whole-chain
    "Ringkasan" tab) scoped to just that mill's UML ID. Lives in the sidebar

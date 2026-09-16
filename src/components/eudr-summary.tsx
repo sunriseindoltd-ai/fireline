@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Carousel } from "@/components/carousel";
 import { useI18n } from "@/lib/i18n";
 import type { EudrSummaryResult } from "@/lib/eudr-aggregates.server";
 import { MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
@@ -26,6 +27,14 @@ type Props = {
    * requested mills have plot data uploaded — must contain "{covered}" and
    * "{total}" placeholders. */
   partialLabel: string;
+  /** "grid" (default): the full 2-column chart-grid used by the chain-wide
+   * Summary tab. "carousel": one slide at a time with dot/arrow nav — used
+   * by the sidebar's fixed-height per-mill summary so it never needs to
+   * scroll internally. */
+  layout?: "grid" | "carousel";
+  prevSlideLabel?: string;
+  nextSlideLabel?: string;
+  slideOfLabel?: string;
 };
 
 function WarningIcon() {
@@ -88,7 +97,16 @@ function renderPercentLabel({ cx, cy, midAngle, outerRadius, percent }: PercentL
   );
 }
 
-export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabel }: Props) {
+export function EudrSummaryView({
+  millIds,
+  emptyLabel,
+  loadingLabel,
+  partialLabel,
+  layout = "grid",
+  prevSlideLabel,
+  nextSlideLabel,
+  slideOfLabel,
+}: Props) {
   const { t } = useI18n();
   const [summary, setSummary] = useState<EudrSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -162,51 +180,41 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
   const typeData = Object.entries(summary.plotType).filter(([, v]) => v.count > 0);
   const typeTotalArea = typeData.reduce((s, [, v]) => s + v.areaHa, 0);
 
-  return (
-    <div className="eudr-summary">
-      {partial ? (
-        <div className="eudr-notice">
-          <WarningIcon />
-          <p>
-            {partialLabel
-              .replaceAll("{covered}", summary.millsWithData.toLocaleString("id-ID"))
-              .replaceAll("{total}", summary.millsRequested.toLocaleString("id-ID"))}
-          </p>
-        </div>
-      ) : null}
-      <div className="portfolio-kpis">
-        <div>
-          <b className="tabular-nums">{summary.totalPlots.toLocaleString("id-ID")}</b>
-          <span>{t.totalPlotKpi}</span>
-        </div>
-        <div>
-          <b className="tabular-nums">{haFmt(summary.totalAreaHa)}</b>
-          <span>{t.mappedAreaKpi}</span>
-        </div>
-        <div>
-          <b className="tabular-nums">
-            {partial
-              ? `${summary.millsWithData.toLocaleString("id-ID")}/${summary.millsRequested.toLocaleString("id-ID")}`
-              : summary.millsWithData.toLocaleString("id-ID")}
-          </b>
-          <span>{t.millKpi}</span>
-        </div>
-        <div>
-          <b className="tabular-nums" style={{ color: "var(--color-comply)" }}>
-            {complyPct}%
-          </b>
-          <span>{t.eudrComplyKpi}</span>
-        </div>
-        <div>
-          <b className="tabular-nums" style={{ color: "var(--color-danger)" }}>
-            {haFmt(totalDefo)}
-          </b>
-          <span>{t.defoPost2020Kpi}</span>
-        </div>
+  const kpiCard = (
+    <div className="portfolio-kpis">
+      <div>
+        <b className="tabular-nums">{summary.totalPlots.toLocaleString("id-ID")}</b>
+        <span>{t.totalPlotKpi}</span>
       </div>
+      <div>
+        <b className="tabular-nums">{haFmt(summary.totalAreaHa)}</b>
+        <span>{t.mappedAreaKpi}</span>
+      </div>
+      <div>
+        <b className="tabular-nums">
+          {partial
+            ? `${summary.millsWithData.toLocaleString("id-ID")}/${summary.millsRequested.toLocaleString("id-ID")}`
+            : summary.millsWithData.toLocaleString("id-ID")}
+        </b>
+        <span>{t.millKpi}</span>
+      </div>
+      <div>
+        <b className="tabular-nums" style={{ color: "var(--color-comply)" }}>
+          {complyPct}%
+        </b>
+        <span>{t.eudrComplyKpi}</span>
+      </div>
+      <div>
+        <b className="tabular-nums" style={{ color: "var(--color-danger)" }}>
+          {haFmt(totalDefo)}
+        </b>
+        <span>{t.defoPost2020Kpi}</span>
+      </div>
+    </div>
+  );
 
-      <div className="chart-grid">
-        <div className="chart-card">
+  const chartCards: ReactNode[] = [
+        <div className="chart-card" key="comply">
           <h3>{t.eudrComplianceChart}</h3>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
@@ -234,9 +242,9 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
 
-        <div className="chart-card">
+        <div className="chart-card" key="risk">
           <h3>{t.riskDistributionChart}</h3>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
@@ -264,9 +272,9 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
 
-        <div className="chart-card">
+        <div className="chart-card" key="defo">
           <h3>{t.deforestationChart}</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={defoData} margin={{ top: 20 }}>
@@ -278,9 +286,9 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </div>,
 
-        <div className="chart-card">
+        <div className="chart-card" key="mitigation">
           <h3>{t.mitigationChart}</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={mitigationData} layout="vertical" margin={{ left: 8, right: 48 }}>
@@ -305,9 +313,9 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
 
-        <div className="chart-card">
+        <div className="chart-card" key="overlap">
           <h3>{t.forestOverlapChart}</h3>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={overlapData} layout="vertical" margin={{ left: 8, right: 48 }}>
@@ -322,9 +330,9 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </div>,
 
-        <div className="chart-card">
+        <div className="chart-card" key="type">
           <h3>{t.plotTypeChart}</h3>
           <div className="stacked-bar">
             {typeData.map(([name, v], i) => (
@@ -344,8 +352,34 @@ export function EudrSummaryView({ millIds, emptyLabel, loadingLabel, partialLabe
               </li>
             ))}
           </ul>
+        </div>,
+  ];
+
+  return (
+    <div className="eudr-summary">
+      {partial ? (
+        <div className="eudr-notice">
+          <WarningIcon />
+          <p>
+            {partialLabel
+              .replaceAll("{covered}", summary.millsWithData.toLocaleString("id-ID"))
+              .replaceAll("{total}", summary.millsRequested.toLocaleString("id-ID"))}
+          </p>
         </div>
-      </div>
+      ) : null}
+      {layout === "carousel" ? (
+        <Carousel
+          slides={[kpiCard, ...chartCards]}
+          prevLabel={prevSlideLabel ?? "Previous"}
+          nextLabel={nextSlideLabel ?? "Next"}
+          slideOfLabel={slideOfLabel ?? "Slide {n} of {total}"}
+        />
+      ) : (
+        <>
+          {kpiCard}
+          <div className="chart-grid">{chartCards}</div>
+        </>
+      )}
     </div>
   );
 }

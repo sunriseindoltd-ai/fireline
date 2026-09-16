@@ -416,6 +416,10 @@ export function Workspace({ role }: { role: GateRole }) {
                     emptyLabel={t.millSummaryEmpty}
                     loadingLabel={t.eudrLoading}
                     partialLabel={t.eudrPartialCoverage}
+                    layout="carousel"
+                    prevSlideLabel={t.prevPage}
+                    nextSlideLabel={t.nextPage}
+                    slideOfLabel={t.slideOf}
                   />
                 </div>
               ) : null}
