@@ -1174,6 +1174,31 @@
   min-height: 0;
   animation: slide-up-fade-in 0.2s ease;
 }
+/* Grip for dragging .dock's height — an inline style (set once the user
+   drags) overrides the max-height above, including its mobile breakpoint
+   override below, for exactly this browser from then on. */
+.dock-resize-handle {
+  flex: none;
+  height: 6px;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+}
+.dock-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+.dock-resize-handle:hover::after,
+.dock-resize-handle:active::after {
+  background: var(--color-accent);
+}
 /* Always-visible strip that collapses the rest of .dock away — when closed,
    .dock's own content shrinks to just this handle, so .stage's grid row
    (grid-template-rows: minmax(220px,1fr) auto) hands that reclaimed height
@@ -1336,6 +1361,16 @@ table {
   border-collapse: collapse;
   font-size: 12.5px;
 }
+/* Only the plot table (workspace.tsx) opts into fixed, per-column widths
+   driven by a <colgroup> + drag handles — table-layout:fixed makes a
+   column's rendered width strictly follow its <col>, ignoring content,
+   which is what a resize handle actually needs to feel responsive. */
+table.resizable-cols {
+  table-layout: fixed;
+}
+table.resizable-cols td.truncate {
+  max-width: none;
+}
 th {
   text-align: left;
   font-size: 10px;
@@ -1347,6 +1382,26 @@ th {
   position: sticky;
   top: 0;
   background: var(--color-bg);
+}
+/* th's own `position: sticky` already establishes a containing block for
+   the handle's `position: absolute` — no separate `position: relative`
+   needed (and adding one would fight the sticky behavior). */
+.resizable-cols th {
+  padding-right: 14px;
+  overflow: hidden;
+}
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: color-mix(in oklab, var(--color-accent) 35%, transparent);
 }
 .th-cell {
   display: inline-flex;

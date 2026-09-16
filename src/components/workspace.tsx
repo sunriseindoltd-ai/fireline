@@ -45,6 +45,93 @@ function WarningTriangleIcon() {
   );
 }
 
+const PLOT_COL_KEYS = [
+  "plotId",
+  "company",
+  "location",
+  "hectare",
+  "comply",
+  "risk",
+  "mitigation",
+  "type",
+] as const;
+type PlotColKey = (typeof PLOT_COL_KEYS)[number];
+const DEFAULT_PLOT_COL_WIDTHS: Record<PlotColKey, number> = {
+  plotId: 190,
+  company: 200,
+  location: 200,
+  hectare: 80,
+  comply: 110,
+  risk: 100,
+  mitigation: 90,
+  type: 160,
+};
+const MIN_COL_WIDTH = 50;
+const PLOT_COL_WIDTHS_KEY = "kanopi-plot-col-widths";
+const DOCK_HEIGHT_KEY = "kanopi-dock-height";
+
+function loadStoredWidths(): Record<PlotColKey, number> {
+  try {
+    const raw = localStorage.getItem(PLOT_COL_WIDTHS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? { ...DEFAULT_PLOT_COL_WIDTHS, ...parsed } : DEFAULT_PLOT_COL_WIDTHS;
+  } catch {
+    return DEFAULT_PLOT_COL_WIDTHS;
+  }
+}
+
+function loadStoredDockHeight(): number | null {
+  try {
+    const raw = localStorage.getItem(DOCK_HEIGHT_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A drag grip appended to the end of a `<th>` (column width) or the top of
+ * `.dock` (panel height) — a plain pointer-events drag rather than a
+ * library, since it's just "track one axis of movement while a button is
+ * held." Pointer Events (not mouse events) so the same handler covers
+ * mouse, touch, and pen without separate code paths.
+ */
+function DragHandle({
+  axis,
+  className,
+  onDrag,
+}: {
+  axis: "x" | "y";
+  className: string;
+  onDrag: (deltaPx: number) => void;
+}) {
+  return (
+    <span
+      className={className}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = e.currentTarget;
+        target.setPointerCapture(e.pointerId);
+        let last = axis === "x" ? e.clientX : e.clientY;
+        function onMove(ev: PointerEvent) {
+          const pos = axis === "x" ? ev.clientX : ev.clientY;
+          onDrag(pos - last);
+          last = pos;
+        }
+        function onUp() {
+          target.releasePointerCapture(e.pointerId);
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+        }
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      }}
+    />
+  );
+}
+
 // Matches scripts/prepare-areas.mjs's slugify exactly — that script names
 // each prepared areas file after its Refinery/KCP this same way.
 function refinerySlug(name: string) {
@@ -127,6 +214,32 @@ export function Workspace({ role }: { role: GateRole }) {
   // otherwise the table's own max-height (42vh) permanently eats into the
   // map above it even when the user just wants to look at the map.
   const [dockOpen, setDockOpen] = useState(true);
+  // Both persisted per-browser (not per-account — there's no server-side
+  // "my preferences" concept here) so a resize sticks across reloads.
+  // `dockHeight` stays null (deferring to .dock's CSS default, including its
+  // own mobile breakpoint) until the user actually drags it once.
+  const [plotColWidths, setPlotColWidths] = useState<Record<PlotColKey, number>>(loadStoredWidths);
+  const [dockHeight, setDockHeight] = useState<number | null>(loadStoredDockHeight);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PLOT_COL_WIDTHS_KEY, JSON.stringify(plotColWidths));
+    } catch {
+      // Private-browsing/blocked storage — resizing still works for this
+      // session, it just won't be remembered next time.
+    }
+  }, [plotColWidths]);
+  useEffect(() => {
+    if (dockHeight == null) return;
+    try {
+      localStorage.setItem(DOCK_HEIGHT_KEY, String(dockHeight));
+    } catch {
+      // Same as above.
+    }
+  }, [dockHeight]);
+  function resizePlotCol(key: PlotColKey, deltaPx: number) {
+    setPlotColWidths((w) => ({ ...w, [key]: Math.max(MIN_COL_WIDTH, w[key] + deltaPx) }));
+  }
   const [serverPlots, setServerPlots] = useState<Fc | null>(null);
   const [serverPlotsLoading, setServerPlotsLoading] = useState(false);
   // True only when the fetch itself failed (network error, or the server
@@ -609,7 +722,22 @@ export function Workspace({ role }: { role: GateRole }) {
             )}
           </div>
           {chain && viewTab === "data" ? (
-            <div className="dock">
+            <div
+              className="dock"
+              ref={dockRef}
+              style={dockHeight != null ? { maxHeight: dockHeight } : undefined}
+            >
+              <DragHandle
+                axis="y"
+                className="dock-resize-handle"
+                onDrag={(deltaPx) => {
+                  const current = dockHeight ?? dockRef.current?.getBoundingClientRect().height ?? 0;
+                  // Dragging the top edge up should grow the panel, so the
+                  // sign is inverted relative to a plain pointer-Y delta.
+                  const next = Math.min(Math.max(current - deltaPx, 120), window.innerHeight * 0.85);
+                  setDockHeight(next);
+                }}
+              />
               <div className="dock-handle">
                 <button
                   type="button"
@@ -670,11 +798,22 @@ export function Workspace({ role }: { role: GateRole }) {
                       {matchingPlotRows.length === 0 ? (
                         <p className="table-empty">{serverPlotsError ? t.plotsLoadError : t.noPlots}</p>
                       ) : (
-                        <table>
+                        <table className="resizable-cols">
+                          <colgroup>
+                            {PLOT_COL_KEYS.map((k) => (
+                              <col key={k} style={{ width: plotColWidths[k] }} />
+                            ))}
+                          </colgroup>
                           <thead>
                             <tr>
-                              <th>{t.plotId}</th>
-                              <th>{t.company}</th>
+                              <th>
+                                {t.plotId}
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("plotId", d)} />
+                              </th>
+                              <th>
+                                {t.company}
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("company", d)} />
+                              </th>
                               <th>
                                 <span className="th-cell">
                                   {t.location}
@@ -690,8 +829,12 @@ export function Workspace({ role }: { role: GateRole }) {
                                     clearLabel={t.clear}
                                   />
                                 </span>
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("location", d)} />
                               </th>
-                              <th>{t.popupHectare}</th>
+                              <th>
+                                {t.popupHectare}
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("hectare", d)} />
+                              </th>
                               <th>
                                 <span className="th-cell">
                                   {t.eudrComplyKpi}
@@ -707,6 +850,7 @@ export function Workspace({ role }: { role: GateRole }) {
                                     clearLabel={t.clear}
                                   />
                                 </span>
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("comply", d)} />
                               </th>
                               <th>
                                 <span className="th-cell">
@@ -730,6 +874,7 @@ export function Workspace({ role }: { role: GateRole }) {
                                     clearLabel={t.clear}
                                   />
                                 </span>
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("risk", d)} />
                               </th>
                               <th>
                                 <span className="th-cell">
@@ -746,6 +891,7 @@ export function Workspace({ role }: { role: GateRole }) {
                                     clearLabel={t.clear}
                                   />
                                 </span>
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("mitigation", d)} />
                               </th>
                               <th>
                                 <span className="th-cell">
@@ -762,6 +908,7 @@ export function Workspace({ role }: { role: GateRole }) {
                                     clearLabel={t.clear}
                                   />
                                 </span>
+                                <DragHandle axis="x" className="col-resize-handle" onDrag={(d) => resizePlotCol("type", d)} />
                               </th>
                             </tr>
                           </thead>
