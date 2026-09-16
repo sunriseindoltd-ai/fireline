@@ -543,6 +543,14 @@ export function Workspace({ role }: { role: GateRole }) {
                         clear: t.clear,
                       }}
                     />
+                    {serverPlotsLoading ? (
+                      <div className="map-loading-overlay">
+                        <div className="map-loading-card">
+                          <span className="spinner" aria-hidden="true" />
+                          <p>{t.loadingPlots}</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </>

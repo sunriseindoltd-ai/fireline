@@ -602,6 +602,48 @@
   min-height: 220px;
   position: relative;
 }
+/* Shown while a newly-selected mill's plots are being fetched and drawn —
+   without it the map just sits empty/stale for a beat with no sign
+   anything is happening, which for a large mill (thousands of plots) reads
+   as broken rather than busy. */
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 20, 18, 0.12);
+}
+.map-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  font: 500 13px var(--font-sans);
+  color: var(--color-fg);
+}
+.map-loading-card p {
+  margin: 0;
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid var(--color-line);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* Sticky so the Ringkasan/Data toggle stays reachable while the (often
    tall) Ringkasan panel scrolls underneath it inside .stage-main. */
 .stage-topbar {
