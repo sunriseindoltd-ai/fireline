@@ -191,6 +191,20 @@ function normMitigation(props: Record<string, unknown> | null | undefined): stri
   return MITIGATION_LETTERS.has(letter) ? letter : "";
 }
 
+/**
+ * Permata's prepared plots use `HECTARAGE`; DOMAS's use `Hectarage` (both
+ * traced back to how each source's original GDB/CSV happened to name the
+ * column) — reading only the first silently zeroed out every area figure
+ * (Mapped Area KPI, EUDR area charts, this popup's own Hectare row) for all
+ * 38 DOMAS mills. Checked both here rather than renaming the field in the
+ * ~1.2GB of already-uploaded DOMAS plot files.
+ */
+function hectarage(props: Record<string, unknown> | null | undefined): number {
+  const raw = props?.HECTARAGE ?? props?.Hectarage;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function decoratePlots(fc: Fc | null, mills: MillRecord[]): Fc | null {
   if (!fc) return null;
   return {
@@ -208,6 +222,7 @@ export function decoratePlots(fc: Fc | null, mills: MillRecord[]): Fc | null {
           _risk: normRisk(f.properties),
           _mitigation: normMitigation(f.properties),
           _location: locationText(f.properties),
+          _hectarage: hectarage(f.properties),
         },
       };
     }),

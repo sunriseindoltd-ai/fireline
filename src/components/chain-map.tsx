@@ -447,7 +447,11 @@ function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels)
   // shown as "the" plot id.
   const plotId = String(props.PlotID ?? "");
   const company = String(props.COMPANY ?? "").trim();
-  const ha = Number(props.HECTARAGE ?? 0);
+  // `_hectarage` (set by decoratePlots, src/lib/ledger-geo.ts) rather than
+  // reading `HECTARAGE` here directly — DOMAS's prepared plots use
+  // `Hectarage` instead, and this deck receives whatever properties the
+  // clicked map feature already carries (decorated, not raw).
+  const ha = Number(props._hectarage ?? 0);
   const complyRaw = props.EUDR_Comply;
   const comply = complyRaw === "YES" ? labels.comply : complyRaw === "NO" ? labels.nonComply : "—";
   const complyClass = complyRaw === "YES" ? "ok" : complyRaw === "NO" ? "bad" : undefined;

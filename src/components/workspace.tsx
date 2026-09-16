@@ -718,7 +718,7 @@ export function Workspace({ role }: { role: GateRole }) {
                               const comply = f.properties?._comply;
                               const risk = f.properties?._risk;
                               const mitigation = String(f.properties?._mitigation ?? "");
-                              const hectarage = Number(f.properties?.HECTARAGE ?? 0);
+                              const hectarage = Number(f.properties?._hectarage ?? 0);
                               return (
                                 <tr
                                   key={index}

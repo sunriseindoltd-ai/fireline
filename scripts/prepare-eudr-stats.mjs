@@ -49,6 +49,13 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Permata's prepared plots use `HECTARAGE`; DOMAS's use `Hectarage` (mirrors
+// the same fallback in src/lib/ledger-geo.ts's hectarage()) — reading only
+// the first silently zeroed out every area figure for all 38 DOMAS mills.
+function hectarage(p) {
+  return num(p.HECTARAGE ?? p.Hectarage);
+}
+
 function emptyStats() {
   return {
     totalPlots: 0,
@@ -66,8 +73,8 @@ function emptyStats() {
 // accumulation exactly.
 function accumulate(stats, p) {
   stats.totalPlots += 1;
-  const hectarage = num(p.HECTARAGE);
-  stats.totalAreaHa += hectarage;
+  const ha = hectarage(p);
+  stats.totalAreaHa += ha;
 
   if (p.EUDR_Comply === "YES") stats.comply.yes += 1;
   else if (p.EUDR_Comply === "NO") stats.comply.no += 1;
@@ -79,7 +86,7 @@ function accumulate(stats, p) {
   const mitLetter = String(p.Risk_Mitigation_Class ?? "").trim().charAt(0).toUpperCase();
   if (MITIGATION_LETTERS.includes(mitLetter)) {
     stats.mitigation[mitLetter].count += 1;
-    stats.mitigation[mitLetter].areaHa += hectarage;
+    stats.mitigation[mitLetter].areaHa += ha;
   }
 
   for (const [col, year] of DEF_YEARS) stats.deforestationByYear[year] += num(p[col]);
@@ -92,7 +99,7 @@ function accumulate(stats, p) {
   const type = String(p.TYPE ?? "");
   if (PLOT_TYPES.includes(type)) {
     stats.plotType[type].count += 1;
-    stats.plotType[type].areaHa += hectarage;
+    stats.plotType[type].areaHa += ha;
   }
 }
 
