@@ -1471,18 +1471,12 @@ function PlotDetailDeck({
             ‹ {labels.back}
           </button>
           <p className="plot-detail-subhead">{labels.nonComplyDetailTitle}</p>
-          {detail.nonComplyDetail.physicalReason ? (
-            <p className="plot-detail-note bad">
-              <span>{labels.physicalReasonLabel}</span>
-              {detail.nonComplyDetail.physicalReason}
-            </p>
-          ) : null}
-          {detail.nonComplyDetail.socialReason ? (
-            <p className="plot-detail-note">
-              <span>{labels.socialReasonLabel}</span>
-              {detail.nonComplyDetail.socialReason}
-            </p>
-          ) : null}
+          {/* The specific evidence behind *this* plot's flagged issue comes
+              first (deforestation-by-year, forest/protected-area overlap —
+              whichever actually applies), ahead of the broader Physical/Social
+              Risk narrative below it, which for a Village Level plot describes
+              the whole village rather than this polygon (see project memory:
+              village-level-risk-methodology). */}
           {detail.nonComplyDetail.deforestationByYear.length > 0 ? (
             <div className="plot-detail-breakdown">
               <span>{labels.deforestationByYearLabel}</span>
@@ -1504,6 +1498,18 @@ function PlotDetailDeck({
                 </div>
               ))}
             </div>
+          ) : null}
+          {detail.nonComplyDetail.physicalReason ? (
+            <p className="plot-detail-note bad">
+              <span>{labels.physicalReasonLabel}</span>
+              {detail.nonComplyDetail.physicalReason}
+            </p>
+          ) : null}
+          {detail.nonComplyDetail.socialReason ? (
+            <p className="plot-detail-note">
+              <span>{labels.socialReasonLabel}</span>
+              {detail.nonComplyDetail.socialReason}
+            </p>
           ) : null}
         </div>
       ) : (
@@ -1534,10 +1540,14 @@ function PlotDetailDeck({
             <p className="plot-detail-note bad">
               <span>{labels.nonComplyReason}</span>
               {detail.nonComplyReason}
+              {/\.\s*$/.test(detail.nonComplyReason) ? "" : "."}
               {detail.nonComplyDetail ? (
-                <button type="button" className="plot-detail-seemore" onClick={() => setSlide(2)}>
-                  {labels.seeMore} »
-                </button>
+                <>
+                  {" "}
+                  <button type="button" className="plot-detail-seemore" onClick={() => setSlide(2)}>
+                    {labels.seeMore} »
+                  </button>
+                </>
               ) : null}
             </p>
           ) : null}
