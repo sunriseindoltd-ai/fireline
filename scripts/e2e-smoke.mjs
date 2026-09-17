@@ -39,10 +39,12 @@ const DOMAS_SPLIT_ID = "PO1000020081__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
 const OVERLAP_PERMATA_ID = "PO1000004167__Permata__Permata KIM";
 const OVERLAP_DOMAS_ID = "PO1000004167__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
 const ADOLINA_ID = "PO1000004497__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
-// UML ID PO1000006247 (MULTIAGRO SUMATERAJAYA) — has a UML ID in mills.json
-// but no plot file was ever found for it; a deliberately-unresolved case
-// (see project notes), which makes it a stable "genuinely no data" fixture.
-const GENUINELY_MISSING_ID = "PO1000006247__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
+// ADELA (JINLEE group) — has a UML ID in mills.json but JINLEE has no plot
+// data uploaded at all (only Permata KIM/DOMAS/YORGO do), making this a
+// stable "genuinely no data" fixture. (The previous fixture here,
+// MULTIAGRO SUMATERAJAYA's DOMAS-group id, got real plot data of its own —
+// this test correctly caught that the moment it happened.)
+const GENUINELY_MISSING_ID = "PO1000000236__JINLEE__JINLEE";
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
