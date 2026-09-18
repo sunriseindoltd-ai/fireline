@@ -49,11 +49,12 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Permata's prepared plots use `HECTARAGE`; DOMAS's use `Hectarage` (mirrors
-// the same fallback in src/lib/ledger-geo.ts's hectarage()) — reading only
-// the first silently zeroed out every area figure for all 38 DOMAS mills.
+// Permata's prepared plots use `HECTARAGE`; DOMAS's use `Hectarage`; SJIM's
+// use `ha` (mirrors the same fallback in src/lib/ledger-geo.ts's
+// hectarage()) — reading only one silently zeroed out every area figure for
+// every mill in whichever group used a different name.
 function hectarage(p) {
-  return num(p.HECTARAGE ?? p.Hectarage);
+  return num(p.HECTARAGE ?? p.Hectarage ?? p.ha);
 }
 
 function emptyStats() {

@@ -111,7 +111,12 @@ export async function getEudrSummary(millIds: string[]): Promise<EudrSummaryResu
   // group/refinery row in mills.json, so callers shouldn't produce repeats,
   // but summing the same id's plots twice would silently double-count them.
   const distinctIds = [...new Set(millIds)];
-  const cacheKey = distinctIds.sort().join(",");
+  // JSON.stringify, not .join(",") — some refinery names contain a literal
+  // comma (e.g. SJIM's "SINAR TAYAN INTI MULYA, KALBAR"), which a plain
+  // join could in principle collide with a different id combination that
+  // happens to concatenate the same way; this key is only ever used as an
+  // opaque Map key, never split back apart, so unambiguous is all it needs.
+  const cacheKey = JSON.stringify(distinctIds.sort());
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
   if (distinctIds.length === 0) return { ...emptySummary(), millsWithData: 0, millsRequested: 0 };

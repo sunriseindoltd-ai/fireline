@@ -110,7 +110,13 @@ export function EudrSummaryView({
   const { t } = useI18n();
   const [summary, setSummary] = useState<EudrSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const millIdsKey = millIds.join(",");
+  // A plain string key so the effect below doesn't re-run on every render
+  // just because `millIds` is a new array reference with the same content.
+  // JSON.stringify, not millIds.join(","): SJIM's refinery names contain a
+  // literal comma ("SINAR TAYAN INTI MULYA, KALBAR"), which a join/split
+  // round-trip through "," silently shredded a composite mill id in two —
+  // every SJIM EUDR summary request came out empty because of it.
+  const millIdsKey = JSON.stringify(millIds);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +124,7 @@ export function EudrSummaryView({
     void fetch("/eudr-summary", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ millIds: millIdsKey ? millIdsKey.split(",") : [] }),
+      body: JSON.stringify({ millIds }),
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: EudrSummaryResult | null) => {
@@ -133,6 +139,7 @@ export function EudrSummaryView({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `millIds` intentionally excluded: `millIdsKey` (JSON.stringify of it) is the stable proxy dependency, and always changes exactly when `millIds`'s content does.
   }, [millIdsKey]);
 
   if (loading) {

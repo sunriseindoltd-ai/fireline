@@ -192,15 +192,16 @@ function normMitigation(props: Record<string, unknown> | null | undefined): stri
 }
 
 /**
- * Permata's prepared plots use `HECTARAGE`; DOMAS's use `Hectarage` (both
- * traced back to how each source's original GDB/CSV happened to name the
- * column) — reading only the first silently zeroed out every area figure
- * (Mapped Area KPI, EUDR area charts, this popup's own Hectare row) for all
- * 38 DOMAS mills. Checked both here rather than renaming the field in the
- * ~1.2GB of already-uploaded DOMAS plot files.
+ * Permata's prepared plots use `HECTARAGE`; DOMAS's use `Hectarage`; SJIM's
+ * use `ha` (all three traced back to how each source's original GDB/CSV
+ * happened to name the column) — reading only one silently zeroed out
+ * every area figure (Mapped Area KPI, EUDR area charts, this popup's own
+ * Hectare row) for every mill in whichever group used a different name.
+ * Checked all three here rather than renaming the field in gigabytes of
+ * already-uploaded plot files.
  */
 function hectarage(props: Record<string, unknown> | null | undefined): number {
-  const raw = props?.HECTARAGE ?? props?.Hectarage;
+  const raw = props?.HECTARAGE ?? props?.Hectarage ?? props?.ha;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
 }
