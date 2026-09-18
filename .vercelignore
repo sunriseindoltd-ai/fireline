@@ -9,6 +9,14 @@ node_modules
 # scripts/prepare-*.mjs — the running app reads private-data/ instead.
 Data Storage
 
+# Prepared plot GeoJSON (multiple GB) — kanopi-data.server.ts's SSR bundle
+# glob explicitly excludes private-data/plots/** and serves it from
+# Cloudflare R2 at runtime instead (see scripts/upload-plots-to-r2.mjs),
+# so the deploy never needs these files at all. Without this, the deploy
+# upload itself started failing once this folder passed a few GB (SJIM's
+# addition pushed it well past that).
+private-data/plots
+
 # Previous local build output — Vercel rebuilds this itself.
 .vercel/output
 
