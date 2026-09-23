@@ -33,3 +33,4 @@ screenshots/
 Thumbs.db
 
 .env*
+.vercel
