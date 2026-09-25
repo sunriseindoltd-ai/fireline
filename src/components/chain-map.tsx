@@ -16,9 +16,57 @@ import {
 } from "@/lib/plot-filters";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-type BasemapId = "esri" | "google" | "osm";
+type BasemapId = "esri" | "google" | "osm" | "s2-2020" | "s2-2026";
 
-type Basemap = { label: string; tiles: string[]; attribution: string };
+type Basemap = {
+  label: string;
+  tiles: string[];
+  attribution: string;
+  /** Imagery year for a dated layer — also drives the note shown under the
+   * basemap switcher. Undefined for the undated "latest" basemaps. */
+  year?: number;
+  /** Zoom range this source actually serves tiles for. Below `minzoom` the
+   * Esri basemap stands in (as a context-only underlay); above `maxzoom`
+   * MapLibre overzooms the last level instead of requesting more tiles. */
+  minzoom?: number;
+  maxzoom?: number;
+  /** Same-year imagery drawn directly beneath `tiles` to fill whatever it
+   * leaves empty — never a different year, so a gap can't be papered over
+   * with undated or later imagery. */
+  fillTiles?: string[];
+};
+
+// Dated Sentinel-2 L2A imagery (10 m, Copernicus data — free for commercial
+// use) for deforestation evidence either side of the EUDR cutoff
+// (31 Dec 2020). Esri Wayback was the obvious first pick but can't serve
+// this purpose: its "2020" and "2026" releases are snapshot dates, not
+// capture dates — around BNS's BUMI KHATULISTIWA MANDIRI mill both are the
+// same 10 Sep 2015 WorldView-2 scene.
+//
+// Served by Microsoft Planetary Computer's mosaic tiler, anonymously (no
+// key). Each id below is the deterministic hash of a registered search —
+// re-POSTing the same body to
+// https://planetarycomputer.microsoft.com/api/data/v1/mosaic/register
+// reproduces the same id, so one call restores it if ever purged:
+//   {"filter-lang":"cql2-json","filter":{"op":"and","args":[
+//     {"op":"=","args":[{"property":"collection"},"sentinel-2-l2a"]},
+//     {"op":"anyinteracts","args":[{"property":"datetime"},
+//       {"interval":["<year>-01-01T00:00:00Z","<year>-12-31T23:59:59Z"]}]},
+//     {"op":"<=","args":[{"property":"eo:cloud_cover"},30]}]},
+//    "sortby":[{"field":"eo:cloud_cover","direction":"asc"}]}
+//
+// 2020 is a per-pixel median of the 10 clearest scenes — any single 2020
+// scene over Sumatra still carries 20%+ cloud, which the median removes.
+// The tiler caps each tile at ~5 s, though, so near an orbit's swath edge
+// the median can run out of time before covering the whole tile; the
+// clearest-scene mosaic of the same 2020 search sits underneath as
+// `fillTiles` (complete coverage, cloudier) so those strips still show 2020.
+// 2026 has too few scenes yet for a median to beat cloud, so it takes the
+// clearest scene per tile instead (already cloud-free in the areas tested).
+// Tiles render on demand: a few seconds each on first view.
+const PC_MOSAIC = "https://planetarycomputer.microsoft.com/api/data/v1/mosaic";
+const S2_VISUAL = "collection=sentinel-2-l2a&assets=visual&asset_bidx=visual%7C1%2C2%2C3&nodata=0&format=png";
+const S2_ATTRIBUTION = "Contains modified Copernicus Sentinel data · Microsoft Planetary Computer";
 
 // Google's mt0-mt3.google.com tile endpoints are undocumented/unofficial —
 // Google's terms require the Maps Platform API (a key + billing account)
@@ -44,6 +92,25 @@ const BASEMAPS: Record<BasemapId, Basemap> = {
     tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
     attribution: "© OpenStreetMap contributors",
   },
+  "s2-2020": {
+    label: "Sentinel-2 2020",
+    tiles: [
+      `${PC_MOSAIC}/c4cd1dfa0bd799858b2fc5d40af4d2da/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?${S2_VISUAL}&pixel_selection=median&skipcovered=false&exitwhenfull=false&items_limit=10`,
+    ],
+    fillTiles: [`${PC_MOSAIC}/c4cd1dfa0bd799858b2fc5d40af4d2da/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?${S2_VISUAL}`],
+    attribution: `${S2_ATTRIBUTION} (2020)`,
+    year: 2020,
+    minzoom: 10,
+    maxzoom: 14,
+  },
+  "s2-2026": {
+    label: "Sentinel-2 2026",
+    tiles: [`${PC_MOSAIC}/37869bf8977442843b3315fa4b866e0d/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?${S2_VISUAL}`],
+    attribution: `${S2_ATTRIBUTION} (2026)`,
+    year: 2026,
+    minzoom: 10,
+    maxzoom: 14,
+  },
 };
 
 const DEFAULT_BASEMAP: BasemapId = "esri";
@@ -58,16 +125,45 @@ const DEFAULT_BASEMAP: BasemapId = "esri";
 const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 const LABEL_FONT = ["Open Sans Semibold"];
 
-function basemapStyle(id: BasemapId) {
+/** The "sat" source/layer for `id`, plus — for a zoom-limited basemap —
+ * "sat-under" (Esri, zoomed out only) and, if it has one, "sat-fill" (its
+ * same-year gap filler). Shared by the initial style and setBasemap. */
+function basemapParts(id: BasemapId) {
   const bm = BASEMAPS[id];
-  return {
-    version: 8 as const,
-    glyphs: GLYPHS_URL,
-    sources: {
-      sat: { type: "raster" as const, tileSize: 256, tiles: bm.tiles, attribution: bm.attribution },
-    },
-    layers: [{ id: "sat", type: "raster" as const, source: "sat" }],
+  const esri = BASEMAPS.esri;
+  const zoomLimited = bm.minzoom != null;
+  const sources: Record<string, import("maplibre-gl").RasterSourceSpecification> = {};
+  const layers: import("maplibre-gl").RasterLayerSpecification[] = [];
+  // A zoom-limited source (the dated Sentinel-2 layers) gets Esri drawn
+  // beneath it only where it serves nothing (zoomed out past its minzoom),
+  // so a wide view still has context without ever mixing Esri's undated
+  // imagery into the dated layer's own zoom range.
+  if (zoomLimited) {
+    sources["sat-under"] = { type: "raster", tileSize: 256, tiles: esri.tiles, attribution: esri.attribution };
+    layers.push({ id: "sat-under", type: "raster", source: "sat-under", maxzoom: bm.minzoom });
+  }
+  const zoomProps = {
+    ...(bm.minzoom != null ? { minzoom: bm.minzoom } : {}),
+    ...(bm.maxzoom != null ? { maxzoom: bm.maxzoom } : {}),
   };
+  if (bm.fillTiles) {
+    sources["sat-fill"] = { type: "raster", tileSize: 256, tiles: bm.fillTiles, ...zoomProps };
+    layers.push({ id: "sat-fill", type: "raster", source: "sat-fill", ...(zoomLimited ? { minzoom: bm.minzoom } : {}) });
+  }
+  sources.sat = {
+    type: "raster",
+    tileSize: 256,
+    tiles: bm.tiles,
+    attribution: bm.attribution,
+    ...zoomProps,
+  };
+  layers.push({ id: "sat", type: "raster", source: "sat", ...(zoomLimited ? { minzoom: bm.minzoom } : {}) });
+  return { sources, layers };
+}
+
+function basemapStyle(id: BasemapId) {
+  const { sources, layers } = basemapParts(id);
+  return { version: 8 as const, glyphs: GLYPHS_URL, sources, layers };
 }
 
 /** Swaps the basemap in place (remove+re-add the "sat" source/layer with
@@ -77,19 +173,16 @@ function basemapStyle(id: BasemapId) {
  * bottom of the layer stack — wherever the first custom layer currently
  * is — so switching basemap never covers up the data layers on top of it. */
 function setBasemap(map: import("maplibre-gl").Map, id: BasemapId) {
-  const bm = BASEMAPS[id];
   const beforeId = ["forest-fill", "areas-fill", "plots-fill", "mills"].find((l) =>
     map.getLayer(l),
   );
-  if (map.getLayer("sat")) map.removeLayer("sat");
-  if (map.getSource("sat")) map.removeSource("sat");
-  map.addSource("sat", {
-    type: "raster",
-    tileSize: 256,
-    tiles: bm.tiles,
-    attribution: bm.attribution,
-  });
-  map.addLayer({ id: "sat", type: "raster", source: "sat" }, beforeId);
+  for (const layer of ["sat", "sat-fill", "sat-under"]) {
+    if (map.getLayer(layer)) map.removeLayer(layer);
+    if (map.getSource(layer)) map.removeSource(layer);
+  }
+  const { sources, layers } = basemapParts(id);
+  for (const [sourceId, source] of Object.entries(sources)) map.addSource(sourceId, source);
+  for (const layer of layers) map.addLayer(layer, beforeId);
 }
 
 /**
@@ -144,6 +237,9 @@ export type ChainMapLabels = {
   type: string;
   layersTitle: string;
   basemap: string;
+  /** Shown under the basemap switcher while a dated (Sentinel-2) layer is
+   * active — "{year}" is replaced with its imagery year. */
+  basemapDatedNote: string;
   comply: string;
   nonComply: string;
   nonComplyReason: string;
@@ -1131,7 +1227,13 @@ export function ChainMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.loaded()) return;
-    setBasemap(map as unknown as import("maplibre-gl").Map, basemap);
+    const mlMap = map as unknown as import("maplibre-gl").Map;
+    setBasemap(mlMap, basemap);
+    // Picking a dated layer while zoomed out past where it serves tiles
+    // would otherwise look like nothing happened (only the Esri underlay
+    // shows) — ease in to the first zoom it covers.
+    const minzoom = BASEMAPS[basemap].minzoom;
+    if (minzoom != null && mlMap.getZoom() < minzoom) mlMap.easeTo({ zoom: minzoom, duration: 600 });
   }, [basemap]);
 
   useEffect(() => {
@@ -1416,6 +1518,11 @@ export function ChainMap({
                   </button>
                 ))}
               </div>
+              {BASEMAPS[basemap].year ? (
+                <p className="map-layers-note">
+                  {labels.basemapDatedNote.replaceAll("{year}", String(BASEMAPS[basemap].year))}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>

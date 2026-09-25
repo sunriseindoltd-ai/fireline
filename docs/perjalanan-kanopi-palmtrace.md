@@ -107,6 +107,40 @@ Detail lengkap ketiga commit di atas: [sjim.md](sjim.md).
   internal di kode (folder, fungsi, env var `KANOPI_*`, cookie, key
   localStorage) sengaja nggak diubah biar sesi & preferensi user tetap jalan.
 
+### 2026-09-25 — Feedback ADM #1 (Roland Sinulingga)
+Email balasan ADM atas akun per grup (`Feedback/Feedback - 1.pdf`), 6 poin +
+1 ide. Yang dikerjakan di ronde ini: poin 2, 3, 5.
+- **(1) SUNRISE kosong** — memang belum di-ingest, dijadwalkan minggu ini.
+- **(2) Plot ID nimpa kolom Company** di tabel plot: sel Plot ID nggak
+  dipotong, jadi ID panjang (`IDN…-PO…-2609-0498`) tumpah ke kolom sebelah.
+  Kolom dilebarkan ke 260px + sel dipotong "…" (ID lengkap di tooltip). Key
+  lebar kolom di localStorage naik ke `-v2`, karena lebar lama (190px) sudah
+  tersimpan di tiap browser.
+- **(3) BNS "Couldn't load plots"** (BUMI KHATULISTIWA MANDIRI, akun `bns`):
+  data & scope-nya ternyata benar — file ada di R2 (upload 23/09), dan smoke
+  test lewat server lokal yang baca R2 lolos (akun `bns` → 633 plot, summary
+  ada). Log Vercel (Hobby) nggak nyimpen riwayat sejauh itu, jadi penyebab
+  persisnya di production nggak bisa dipastikan; paling mungkin request
+  gagal sesaat. Fix: fetch plot & EUDR summary sekarang retry otomatis
+  (5xx/network, 3 percobaan — `src/lib/fetch-retry.ts`); ringkasan mill yang
+  gagal dimuat sekarang bilang "gagal dimuat" + Coba lagi (dulu salah
+  tampil "belum ada data plot"); 401 dapat pesan "sesi berakhir". Cek BNS
+  ditambahkan ke `scripts/e2e-smoke.mjs`.
+- **(5) Citra 2020 & 2026**: Esri Wayback **nggak bisa** dipakai — tanggal
+  rilisnya bukan tanggal foto; di BUMI KHATULISTIWA versi "2020" dan "2026"
+  sama-sama foto 10/09/2015. Diganti **Sentinel-2 L2A** (10 m, Copernicus —
+  boleh komersial) lewat Microsoft Planetary Computer (tanpa API key):
+  basemap baru "Sentinel-2 2020" (median 10 scene tercerah 2020 + mosaik
+  scene tercerah 2020 di bawahnya buat isi celah) dan "Sentinel-2 2026"
+  (scene tercerah per tile). Tampil mulai zoom 10 (peta otomatis zoom ke
+  situ); di bawah itu Esri jadi latar konteks. Keterbatasan: tile dibuat
+  on-demand (~2–6 detik per tile saat pertama), dan server membatasi ~5
+  detik per tile, jadi di tepi jalur orbit kadang ada petak kecil tanpa
+  citra (tampil latar polos, bukan citra tahun lain). Search ID mosaiknya
+  deterministik — cara register ulang ada di komentar `chain-map.tsx`.
+- Belum dikerjakan: (4) satu mill SJIM di Afrika, (6) layer Peta Kawasan
+  Hutan 2026, dan ide klik "EUDR Comply 92%" → daftar lokasi non-comply.
+
 ## Status saat ini (per 2026-09-23)
 
 - SJIM: 189/192 mill ke-ingest ke Kanopi (3 mill masih belum match).

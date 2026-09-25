@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { Carousel } from "@/components/carousel";
+import { fetchWithRetry } from "@/lib/fetch-retry";
 import { useI18n } from "@/lib/i18n";
 import type { EudrSummaryResult } from "@/lib/eudr-aggregates.server";
 import { MITIGATION_DESCRIPTIONS } from "@/lib/ledger-geo";
@@ -110,6 +111,11 @@ export function EudrSummaryView({
   const { t } = useI18n();
   const [summary, setSummary] = useState<EudrSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
+  // Kept apart from "no data" so a failed request isn't reported as "no plot
+  // data has been prepared for this mill" — which is exactly what a supplier
+  // saw for a BNS mill whose data was there all along.
+  const [loadError, setLoadError] = useState<"" | "failed" | "session">("");
+  const [retryNonce, setRetryNonce] = useState(0);
   // A plain string key so the effect below doesn't re-run on every render
   // just because `millIds` is a new array reference with the same content.
   // JSON.stringify, not millIds.join(","): SJIM's refinery names contain a
@@ -121,17 +127,26 @@ export function EudrSummaryView({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void fetch("/eudr-summary", {
+    setLoadError("");
+    void fetchWithRetry("/eudr-summary", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ millIds }),
     })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: EudrSummaryResult | null) => {
-        if (!cancelled) setSummary(data);
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setSummary((await res.json()) as EudrSummaryResult);
+          return;
+        }
+        setSummary(null);
+        setLoadError(res.status === 401 ? "session" : "failed");
       })
       .catch(() => {
-        if (!cancelled) setSummary(null);
+        if (!cancelled) {
+          setSummary(null);
+          setLoadError("failed");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -140,12 +155,31 @@ export function EudrSummaryView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `millIds` intentionally excluded: `millIdsKey` (JSON.stringify of it) is the stable proxy dependency, and always changes exactly when `millIds`'s content does.
-  }, [millIdsKey]);
+  }, [millIdsKey, retryNonce]);
 
   if (loading) {
     return (
       <div className="eudr-summary">
         <p className="eudr-empty">{loadingLabel}</p>
+      </div>
+    );
+  }
+  if (loadError) {
+    return (
+      <div className="eudr-summary">
+        <div className="eudr-notice danger">
+          <WarningIcon />
+          <p>{loadError === "session" ? t.sessionExpired : t.eudrLoadError}</p>
+          {loadError === "session" ? (
+            <a className="eudr-notice-action" href="/login">
+              {t.signIn}
+            </a>
+          ) : (
+            <button type="button" className="eudr-notice-action" onClick={() => setRetryNonce((n) => n + 1)}>
+              {t.retry}
+            </button>
+          )}
+        </div>
       </div>
     );
   }

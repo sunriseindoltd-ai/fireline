@@ -33,22 +33,27 @@ const PLOTS_DIR = path.join(process.cwd(), "private-data", "plots");
 const ADMIN = { user: "earthline", pass: "r^M3C%KtGM69q!t" };
 const ADMIN_2 = { user: "karmauzco", pass: "5l3nd312m4N!" };
 // Supplier passwords are never committed (only their hashes, in gate.ts) —
-// read from KANOPI_SMOKE_PERMATA_PASSWORD, else the local, gitignored
+// read from KANOPI_SMOKE_<USER>_PASSWORD, else the local, gitignored
 // artifacts/akun-supplier.csv that hash-gate-password.mjs's output went into.
-function permataPassword() {
-  if (process.env.KANOPI_SMOKE_PERMATA_PASSWORD) return process.env.KANOPI_SMOKE_PERMATA_PASSWORD;
+function supplierPassword(user) {
+  const envVar = `KANOPI_SMOKE_${user.toUpperCase()}_PASSWORD`;
+  if (process.env[envVar]) return process.env[envVar];
   try {
     const csv = readFileSync(path.join(process.cwd(), "artifacts", "akun-supplier.csv"), "utf8");
-    const row = csv.split(/\r?\n/).find((line) => line.startsWith("permata,"));
+    const row = csv.split(/\r?\n/).find((line) => line.startsWith(`${user},`));
     if (row) return row.split(",")[1];
   } catch {}
   throw new Error(
-    "No password for supplier account 'permata' — set KANOPI_SMOKE_PERMATA_PASSWORD or add artifacts/akun-supplier.csv",
+    `No password for supplier account '${user}' — set ${envVar} or add artifacts/akun-supplier.csv`,
   );
 }
-const SUPPLIER = { user: "permata", pass: permataPassword() };
+const SUPPLIER = { user: "permata", pass: supplierPassword("permata") };
+const BNS_SUPPLIER = { user: "bns", pass: supplierPassword("bns") };
 
 const PERMATA_ID = "PO1000004173__Permata__Permata KIM";
+// The mill an ADM reviewer saw fail ("couldn't load plots") while signed in
+// as the BNS supplier on 2026-09-25.
+const BNS_BUMI_ID = "PO1000011198__BNS__Banyuasin Nusantara Sejahtera";
 const DOMAS_SPLIT_ID = "PO1000020081__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
 const OVERLAP_PERMATA_ID = "PO1000004167__Permata__Permata KIM";
 const OVERLAP_DOMAS_ID = "PO1000004167__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
@@ -184,6 +189,30 @@ async function main() {
   check("Permata supplier allowed for Permata KIM", supplierPermataRes.status === 200, `status=${supplierPermataRes.status}`);
   check("Permata supplier blocked (403) from DOMAS", supplierDomasRes.status === 403, `status=${supplierDomasRes.status}`);
   await supplierPage.close();
+
+  const bnsPage = await browser.newPage();
+  await loginAs(bnsPage, BNS_SUPPLIER);
+  const bnsBumiDisk = diskFeatures(BNS_BUMI_ID).length;
+  const bnsBumiRes = await fetchPlot(bnsPage, BNS_BUMI_ID);
+  check(
+    "BNS supplier loads BUMI KHATULISTIWA MANDIRI's plots (matches disk)",
+    bnsBumiRes.status === 200 && bnsBumiRes.body?.features?.length === bnsBumiDisk,
+    `status=${bnsBumiRes.status} server=${bnsBumiRes.body?.features?.length} disk=${bnsBumiDisk}`,
+  );
+  const bnsSummary = await bnsPage.evaluate(async (id) => {
+    const res = await fetch("/eudr-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ millIds: [id] }),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  }, BNS_BUMI_ID);
+  check(
+    "BNS supplier gets BUMI KHATULISTIWA MANDIRI's EUDR summary",
+    bnsSummary.status === 200 && bnsSummary.body?.millsWithData === 1,
+    `status=${bnsSummary.status} millsWithData=${bnsSummary.body?.millsWithData}`,
+  );
+  await bnsPage.close();
 
   const missingRes = await fetchPlot(page, GENUINELY_MISSING_ID);
   check(

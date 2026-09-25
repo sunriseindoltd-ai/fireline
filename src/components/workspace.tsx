@@ -1,6 +1,7 @@
 import { BrandMark } from "@/components/brand-mark";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { fetchWithRetry } from "@/lib/fetch-retry";
 import { gateLogout } from "@/lib/gate-actions";
 import type { GateRole } from "@/lib/gate";
 import { useI18n } from "@/lib/i18n";
@@ -57,7 +58,10 @@ const PLOT_COL_KEYS = [
 ] as const;
 type PlotColKey = (typeof PLOT_COL_KEYS)[number];
 const DEFAULT_PLOT_COL_WIDTHS: Record<PlotColKey, number> = {
-  plotId: 190,
+  // Wide enough for a full minted ID (e.g. IDN111407-PO1000000706-2608-09985)
+  // in the mono face; anything longer still ellipsizes rather than spilling
+  // into the Company column.
+  plotId: 260,
   company: 200,
   location: 200,
   hectare: 80,
@@ -67,7 +71,9 @@ const DEFAULT_PLOT_COL_WIDTHS: Record<PlotColKey, number> = {
   type: 160,
 };
 const MIN_COL_WIDTH = 50;
-const PLOT_COL_WIDTHS_KEY = "kanopi-plot-col-widths";
+// Bumped to -v2 when plotId's default widened: the widths are written back on
+// every mount, so every returning browser already had the old 190px stored.
+const PLOT_COL_WIDTHS_KEY = "kanopi-plot-col-widths-v2";
 const DOCK_HEIGHT_KEY = "kanopi-dock-height";
 
 function loadStoredWidths(): Record<PlotColKey, number> {
@@ -242,14 +248,16 @@ export function Workspace({ role }: { role: GateRole }) {
   }
   const [serverPlots, setServerPlots] = useState<Fc | null>(null);
   const [serverPlotsLoading, setServerPlotsLoading] = useState(false);
-  // True only when the fetch itself failed (network error, or the server
+  // Set only when the fetch itself failed (network error, or the server
   // responded with something other than a plain "not found") — kept
   // separate from serverPlots being empty so the UI can tell "this mill
   // genuinely has no data yet" apart from "something broke while loading
   // it", which used to look identical (see loadPlotRel's git history: the
   // Vercel Blob outage that silently zeroed out DOMAS's plots for a while
   // before anyone noticed, because both cases just rendered as empty).
-  const [serverPlotsError, setServerPlotsError] = useState(false);
+  // "session" is the 401 case — the sign-in expired while the page stayed
+  // open, which no amount of retrying fixes, so it gets its own message.
+  const [serverPlotsError, setServerPlotsError] = useState<"" | "failed" | "session">("");
   const [plotRetryNonce, setPlotRetryNonce] = useState(0);
   // Set by clicking a row in the plot table (once a mill is selected) — a
   // fresh nonce each time so clicking the same plot twice still re-flies
@@ -306,20 +314,23 @@ export function Workspace({ role }: { role: GateRole }) {
   useEffect(() => {
     if (!selectedMill?.umlId) {
       setServerPlots(null);
-      setServerPlotsError(false);
+      setServerPlotsError("");
       return;
     }
     let cancelled = false;
     setServerPlotsLoading(true);
-    setServerPlotsError(false);
-    void fetch(`/data/plots/${encodeURIComponent(selectedMill.id)}.geojson`)
+    setServerPlotsError("");
+    // fetchWithRetry: a transient 5xx/network blip is retried quietly
+    // before it ever reaches the error banner.
+    void fetchWithRetry(`/data/plots/${encodeURIComponent(selectedMill.id)}.geojson`)
       .then(async (res) => {
-        if (res.ok) return { fc: (await res.json()) as Fc, failed: false };
+        if (res.ok) return { fc: (await res.json()) as Fc, failed: "" as const };
         // A plain 404 means this mill's plots were never uploaded — a real
         // state, not a bug. Anything else (403 from a stale client-side
         // scope check, 502 from kanopi-data.server.ts's R2 fetch failing,
         // ...) means the data exists but couldn't be retrieved right now.
-        return { fc: null, failed: res.status !== 404 };
+        if (res.status === 404) return { fc: null, failed: "" as const };
+        return { fc: null, failed: res.status === 401 ? ("session" as const) : ("failed" as const) };
       })
       .then(({ fc, failed }) => {
         if (cancelled) return;
@@ -329,7 +340,7 @@ export function Workspace({ role }: { role: GateRole }) {
       .catch(() => {
         if (!cancelled) {
           setServerPlots(null);
-          setServerPlotsError(true);
+          setServerPlotsError("failed");
         }
       })
       .finally(() => {
@@ -662,6 +673,7 @@ export function Workspace({ role }: { role: GateRole }) {
                         type: t.typeLabel,
                         layersTitle: t.layersTitle,
                         basemap: t.basemap,
+                        basemapDatedNote: t.basemapDatedNote,
                         comply: t.comply,
                         nonComply: t.nonComply,
                         nonComplyReason: t.nonComplyReason,
@@ -707,13 +719,16 @@ export function Workspace({ role }: { role: GateRole }) {
                     {serverPlotsError ? (
                       <div className="map-error-banner">
                         <WarningTriangleIcon />
-                        <p>{t.plotsLoadError}</p>
-                        <button
-                          type="button"
-                          onClick={() => setPlotRetryNonce((n) => n + 1)}
-                        >
-                          {t.retry}
-                        </button>
+                        <p>{serverPlotsError === "session" ? t.sessionExpired : t.plotsLoadError}</p>
+                        {serverPlotsError === "session" ? (
+                          <button type="button" onClick={() => void logout()}>
+                            {t.signIn}
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => setPlotRetryNonce((n) => n + 1)}>
+                            {t.retry}
+                          </button>
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -792,11 +807,21 @@ export function Workspace({ role }: { role: GateRole }) {
                         </div>
                       ) : null}
                       {serverPlotsLoading ? <p className="notice">{t.loadingPlots}</p> : null}
-                      {serverPlotsError ? <p className="notice danger">{t.plotsLoadError}</p> : null}
+                      {serverPlotsError ? (
+                        <p className="notice danger">
+                          {serverPlotsError === "session" ? t.sessionExpired : t.plotsLoadError}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="table-wrap">
                       {matchingPlotRows.length === 0 ? (
-                        <p className="table-empty">{serverPlotsError ? t.plotsLoadError : t.noPlots}</p>
+                        <p className="table-empty">
+                          {serverPlotsError === "session"
+                            ? t.sessionExpired
+                            : serverPlotsError
+                              ? t.plotsLoadError
+                              : t.noPlots}
+                        </p>
                       ) : (
                         <table className="resizable-cols">
                           <colgroup>
@@ -925,7 +950,9 @@ export function Workspace({ role }: { role: GateRole }) {
                                   className={focusPlot?.index === index ? "on" : ""}
                                   onClick={() => setFocusPlot({ index, nonce: Date.now() })}
                                 >
-                                  <td className="mono">{plotId || "—"}</td>
+                                  <td className="mono truncate" title={plotId}>
+                                    {plotId || "—"}
+                                  </td>
                                   <td
                                     className="truncate"
                                     title={String(f.properties?.COMPANY ?? "")}
