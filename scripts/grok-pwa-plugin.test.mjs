@@ -382,9 +382,9 @@ test("renders the manifest with the app's default name", () => {
 });
 
 test("renders the manifest with the site.json title when set", () => {
-  const manifest = JSON.parse(renderWebManifest("example.com", { title: "Kanopi — EarthLine" }));
-  assert.equal(manifest.name, "Kanopi — EarthLine");
-  assert.equal(manifest.short_name, "Kanopi");
+  const manifest = JSON.parse(renderWebManifest("example.com", { title: "Earthline's PalmTrace — Satellite Traceability" }));
+  assert.equal(manifest.name, "Earthline's PalmTrace — Satellite Traceability");
+  assert.equal(manifest.short_name, "Earthline's PalmTrace");
 });
 
 // Tripwires: the deployed-app path only works if Nitro scans server/ — an

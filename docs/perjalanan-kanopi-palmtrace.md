@@ -88,6 +88,25 @@ Detail lengkap ketiga commit di atas: [sjim.md](sjim.md).
   sama) — total korpus plot sekarang ~4.2GB/406 file lintas semua grup
   (Permata/DOMAS/YORGO/SJIM/BNS).
 
+### 2026-09-25 — Akun login per grup supplier
+- Akun `supplier` bersama (dulu cuma lihat Permata KIM) diganti **11 akun,
+  satu per grup** (`group` di mills.json): `bns`, `domas`, `fgv`,
+  `hok-huat`, `jinlee`, `nam-lts`, `permata`, `sehcom`, `sjim`, `sunrise`,
+  `yorgo`. Tiap akun lihat semua refinery/KCP grupnya sendiri (mis.
+  `permata` = KIM + PAA Duri + HUTALOMBANG + NBK), nggak bisa lihat grup
+  lain — dicek di server (mills.json, file plot/area, EUDR summary).
+- Password supplier **nggak** disimpan di repo, cuma hash scrypt-nya di
+  `src/lib/gate.ts`. Password asli dikasih sekali (file lokal
+  `artifacts/akun-supplier.csv`, di luar git & deploy). Tambah grup /
+  ganti password: `node scripts/hash-gate-password.mjs <username>`.
+- Total akun sekarang 17: 2 admin, 3 client (ADM), 11 supplier, 1 auditor
+  (auditor masih Permata KIM saja).
+- Nama platform di tampilan diganti dari "Kanopi" jadi **"Earthline's
+  PalmTrace"**: judul tab, halaman login, header, share card, nama app saat
+  di-install ke HP, dan nama file unduhan (`palmtrace-<mill>-…`). Nama
+  internal di kode (folder, fungsi, env var `KANOPI_*`, cookie, key
+  localStorage) sengaja nggak diubah biar sesi & preferensi user tetap jalan.
+
 ## Status saat ini (per 2026-09-23)
 
 - SJIM: 189/192 mill ke-ingest ke Kanopi (3 mill masih belum match).

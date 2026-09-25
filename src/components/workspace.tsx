@@ -198,7 +198,7 @@ async function downloadMillGeojson(m: MillRecord) {
       // No plot data available for this mill — still download the point.
     }
   }
-  downloadGeojson(`kanopi-${m.id}-geometry.geojson`, { type: "FeatureCollection", features });
+  downloadGeojson(`palmtrace-${m.id}-geometry.geojson`, { type: "FeatureCollection", features });
 }
 
 export function Workspace({ role }: { role: GateRole }) {
@@ -1125,7 +1125,7 @@ export function Workspace({ role }: { role: GateRole }) {
                                     aria-label={`${t.download} CSV`}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      downloadMillsCsv(`kanopi-${m.id}-mill.csv`, [m]);
+                                      downloadMillsCsv(`palmtrace-${m.id}-mill.csv`, [m]);
                                     }}
                                   >
                                     <CsvIcon />

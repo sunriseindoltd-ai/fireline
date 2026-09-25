@@ -2,7 +2,7 @@ export type Lang = "en" | "id";
 
 export const copy = {
   en: {
-    app: "Kanopi",
+    app: "Earthline's PalmTrace",
     org: "Satellite Powered Traceability with AI Analytics",
     signIn: "Sign in",
     id: "ID",
@@ -119,7 +119,7 @@ export const copy = {
     forestOverlapLabel: "Protected/Production Area Overlap",
   },
   id: {
-    app: "Kanopi",
+    app: "Earthline's PalmTrace",
     org: "Satellite Powered Traceability with AI Analytics",
     signIn: "Masuk",
     id: "ID",
