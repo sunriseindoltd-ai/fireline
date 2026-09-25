@@ -32,7 +32,21 @@ const PLOTS_DIR = path.join(process.cwd(), "private-data", "plots");
 
 const ADMIN = { user: "earthline", pass: "r^M3C%KtGM69q!t" };
 const ADMIN_2 = { user: "karmauzco", pass: "5l3nd312m4N!" };
-const SUPPLIER = { user: "supplier", pass: "BWmGuQGM3TKuf@-" };
+// Supplier passwords are never committed (only their hashes, in gate.ts) —
+// read from KANOPI_SMOKE_PERMATA_PASSWORD, else the local, gitignored
+// artifacts/akun-supplier.csv that hash-gate-password.mjs's output went into.
+function permataPassword() {
+  if (process.env.KANOPI_SMOKE_PERMATA_PASSWORD) return process.env.KANOPI_SMOKE_PERMATA_PASSWORD;
+  try {
+    const csv = readFileSync(path.join(process.cwd(), "artifacts", "akun-supplier.csv"), "utf8");
+    const row = csv.split(/\r?\n/).find((line) => line.startsWith("permata,"));
+    if (row) return row.split(",")[1];
+  } catch {}
+  throw new Error(
+    "No password for supplier account 'permata' — set KANOPI_SMOKE_PERMATA_PASSWORD or add artifacts/akun-supplier.csv",
+  );
+}
+const SUPPLIER = { user: "permata", pass: permataPassword() };
 
 const PERMATA_ID = "PO1000004173__Permata__Permata KIM";
 const DOMAS_SPLIT_ID = "PO1000020081__DOMAS__PT. DOMAS SAWIT INTI PERDANA";
@@ -167,8 +181,8 @@ async function main() {
   await loginAs(supplierPage, SUPPLIER);
   const supplierPermataRes = await fetchPlot(supplierPage, PERMATA_ID);
   const supplierDomasRes = await fetchPlot(supplierPage, DOMAS_SPLIT_ID);
-  check("Supplier role allowed for Permata KIM", supplierPermataRes.status === 200, `status=${supplierPermataRes.status}`);
-  check("Supplier role blocked (403) from DOMAS", supplierDomasRes.status === 403, `status=${supplierDomasRes.status}`);
+  check("Permata supplier allowed for Permata KIM", supplierPermataRes.status === 200, `status=${supplierPermataRes.status}`);
+  check("Permata supplier blocked (403) from DOMAS", supplierDomasRes.status === 403, `status=${supplierDomasRes.status}`);
   await supplierPage.close();
 
   const missingRes = await fetchPlot(page, GENUINELY_MISSING_ID);

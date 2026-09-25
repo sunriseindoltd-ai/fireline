@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { AwsClient } from "aws4fetch";
-import { readGateSession, refineryScopeForRole } from "@/lib/gate";
+import { dataScopeForSession, millInScope, readGateSession, type DataScope } from "@/lib/gate";
 
 // Plot files are excluded here and served from Cloudflare R2 instead (see
 // loadPlotRel below) — private-data/plots/ crossed ~1.3GB once DOMAS's plots
@@ -56,7 +56,7 @@ async function loadRel(rel: string): Promise<string | null> {
   }
 }
 
-type MillLite = { id: string; umlId?: string; refinery?: string };
+type MillLite = { id: string; umlId?: string; group?: string; refinery?: string };
 
 // mills.json is small (hundreds of rows) and only needed here to check a
 // restricted role's scope, so it's just re-read+parsed per request rather
@@ -90,7 +90,7 @@ function slugifyRefinery(name: string) {
  * default rather than served as-is, since a new private-data shape added
  * later shouldn't silently become world-readable to a scoped role.
  */
-async function isAllowedForScope(rel: string, scope: readonly string[]): Promise<boolean> {
+async function isAllowedForScope(rel: string, scope: DataScope): Promise<boolean> {
   if (rel === "mills.json") return true;
   if (rel.startsWith("forest/")) return true; // a base layer, not mill-specific
   if (rel.startsWith("plots/")) {
@@ -100,13 +100,17 @@ async function isAllowedForScope(rel: string, scope: readonly string[]): Promise
     // and a genuinely different plot set), so a bare UML ID can no longer
     // resolve to a single refinery to check scope against.
     const millId = rel.slice("plots/".length).replace(/(\.part\d+)?\.geojson$/i, "");
-    const mills = await loadMills();
-    const refinery = mills.find((m) => m.id === millId)?.refinery;
-    return !!refinery && scope.includes(refinery);
+    const mill = (await loadMills()).find((m) => m.id === millId);
+    return !!mill && millInScope(mill, scope);
   }
   if (rel.startsWith("areas/")) {
+    // Area files are per refinery/KCP, so a group scope resolves to its
+    // refineries through mills.json.
     const slug = rel.slice("areas/".length).replace(/\.geojson$/i, "");
-    return scope.some((refinery) => slugifyRefinery(refinery) === slug);
+    const mills = await loadMills();
+    return mills.some(
+      (m) => !!m.refinery && slugifyRefinery(m.refinery) === slug && millInScope(m, scope),
+    );
   }
   return false;
 }
@@ -213,7 +217,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   const rel = safeRel(new URL(request.url).pathname);
   if (!rel) return new Response("Not found", { status: 404 });
 
-  const scope = refineryScopeForRole(session.role);
+  const scope = dataScopeForSession(session);
   if (scope && !(await isAllowedForScope(rel, scope))) {
     return new Response("Forbidden", { status: 403 });
   }
@@ -225,7 +229,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   // after signing in as a different role in the same browser.
   if (scope && rel === "mills.json") {
     const mills = await loadMills();
-    const filtered = mills.filter((m) => m.refinery && scope.includes(m.refinery));
+    const filtered = mills.filter((m) => millInScope(m, scope));
     return new Response(JSON.stringify(filtered), {
       headers: {
         "content-type": "application/json; charset=utf-8",

@@ -4,7 +4,7 @@ export const Route = createFileRoute("/eudr-summary/")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { readGateSession, refineryScopeForRole } = await import("@/lib/gate");
+        const { dataScopeForSession, millInScope, readGateSession } = await import("@/lib/gate");
         const session = await readGateSession(request);
         if (!session) {
           return new Response("Unauthorized", { status: 401 });
@@ -19,16 +19,16 @@ export const Route = createFileRoute("/eudr-summary/")({
           return new Response("Bad request", { status: 400 });
         }
         // A restricted role (supplier/auditor) could otherwise request an
-        // aggregate over any mill id it can guess, regardless of refinery —
+        // aggregate over any mill id it can guess, regardless of its scope —
         // mills.json and the plot/area files are already scoped server-side
         // (kanopi-data.server.ts), so this aggregate needs the same check.
-        const scope = refineryScopeForRole(session.role);
+        const scope = dataScopeForSession(session);
         let scopedMillIds = millIds;
         if (scope) {
           const { loadMills } = await import("@/lib/kanopi-data.server");
           const mills = await loadMills();
           const allowed = new Set(
-            mills.filter((m) => m.refinery && scope.includes(m.refinery)).map((m) => m.id),
+            mills.filter((m) => millInScope(m, scope)).map((m) => m.id),
           );
           scopedMillIds = millIds.filter((id) => allowed.has(id));
         }
