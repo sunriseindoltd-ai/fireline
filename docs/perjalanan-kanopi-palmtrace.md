@@ -88,6 +88,93 @@ Detail lengkap ketiga commit di atas: [sjim.md](sjim.md).
   sama) — total korpus plot sekarang ~4.2GB/406 file lintas semua grup
   (Permata/DOMAS/YORGO/SJIM/BNS).
 
+### 2026-09-24 — Paket upload TRACT buat BNS
+- `scripts/export-bns-tract.py` — bikin paket siap-upload TRACT dari plot BNS
+  yang sudah ada di Kanopi (`private-data/plots/*__BNS__*`), output ke
+  `Data Storage/BNS - TRACT Upload - Ready/` (`GeoJSON/<mill>.geojson` +
+  `Master Data/farmer_group_master_data_<mill>_BNS.xlsx` + `_export_report.csv`).
+  Aturannya disamain dengan ronde TRACT SJIM (`SJIM_PIPELINE_NOTES.md`): cuma
+  plot `EUDR_Comply = YES`, geometri lewat cleaner "brutal" yang sama (isi
+  hole, buang part < 0,02 ha / sliver < 1,5 m / nested / fitur < 0,1 ha),
+  ring dipaksa counter-clockwise, data Excel di row 3. Template Excel TRACT
+  (v5) yang bersih disimpan di `Data Storage/TRACT Templates/`.
+- PlotID tetap PlotID Kanopi, jadi error report / laporan defo dari TRACT
+  bisa langsung dipetakan balik ke plot Kanopi.
+- **KENANGA MILL** (PO1000016377) sudah terdaftar di TRACT sebagai node SJIM
+  (`2026-IDN-1000016377-1`). Per keputusan user: NodeID itu dipakai apa
+  adanya (nggak bikin `-2`), dan master data-nya **nggak** dibuat/di-upload
+  karena node-nya sudah ada — cuma GeoJSON plotnya yang diekspor. Jadi paket
+  ini isinya 24 GeoJSON + 23 master data.
+- Hasil: 24 mill, 56.763 plot patuh → **50.332 plot diekspor, 469.667 ha**
+  (99,8% luas patuh; yang kebuang hampir semuanya plot < 0,1 ha, total cuma
+  ~141 ha).
+- Ronde upload pertama (10 mill pertama, urut nama): 8 file ditolak TRACT,
+  84 plot "Boundary has self-intersections", padahal valid menurut shapely.
+  Ketemu penyebabnya: **TRACT ngecek geometri di presisi 6 desimal** —
+  83/84 plot itu jadi self-intersect kalau dibulatkan ke 6 desimal (leher/
+  spike sempit, sisi berseberangan cuma ~2 cm), sementara 0 dari 320 plot yang
+  lolos begitu. Fix: koordinat di-snap-round ke grid 6 desimal pakai GEOS
+  `set_precision` + tiap ring diverifikasi di grid itu. Semua 84 plot
+  keperbaiki (0 dibuang), 50.332 plot tetap. Catatan: `GeometryIndex` di error
+  report TRACT itu 1-based.
+- Ronde 2 (upload ulang 8 file tadi): 14 plot masih ditolak, dan **semuanya
+  MultiPolygon yang bagian-bagiannya saling nempel** (efek samping snap: leher
+  yang lebih sempit dari grid kebelah jadi 2 bagian yang share 1 vertex) —
+  TRACT juga nganggep itu self-intersection. Ternyata ke-33 MultiPolygon di
+  seluruh output kena masalah yang sama. Closing (dilate→erode) nggak mempan
+  (nggak ngelebarin leher, pas di-snap kebelah lagi); fix-nya bagian yang
+  lebih kecil dipotong 0,5 m di sekitar bagian yang lebih besar, jadi ada
+  celah jelas (min 0,44 m). 0 plot dibuang, luas praktis nggak berubah.
+- Ronde 3: lolos validasi geometri, tapi tahap analisis TRACT nolak 1 plot
+  BANYUASIN — "Insufficient area ... geometry 2: 0.0000 ha < 0.001 ha"
+  (serpihan sisa snap/potong di bagian ke-2 MultiPolygon). Report tahap ini
+  formatnya beda: `final_error_report_<uuid>.csv`, kolom `PlotId`/`NodeId`,
+  nama file-nya nggak bawa nama mill (mill-nya ketahuan dari UML_ID di
+  PlotID). Fix: setelah snap/potong, bagian < 0,02 ha (batas part cleaner
+  sendiri) dibuang lagi — ada 7 bagian begitu (3 di bawah 0,001 ha). 0 plot
+  dibuang, luas turun 0,02 ha.
+- Laporan deforestasi TRACT (`Deforestation Report/Defo Report.html`, format
+  sama dengan SJIM): **5.116 plot ditandai** di 23/24 mill (cuma BUMI
+  KHATULISTIWA yang bersih), ±48.877 ha. Script ekspor sekarang baca semua
+  HTML di folder itu dan ngeluarin PlotID yang ditandai dari GeoJSON + luas
+  master data (daftarnya di `_tract_defo_excluded.csv`), jadi tetap berlaku
+  tiap re-run. Hasil: **45.216 plot, 420.790 ha**.
+- **Catatan buat keputusan ambang 0,5 ha:** 2.772 dari plot yang ditandai
+  TRACT itu plot yang di data kita cuma punya deforestasi < 0,5 ha/tahun
+  (yang di-flip jadi compliant oleh `apply-bns-defo-threshold.mjs`) — 77%
+  dari semua plot ekspor yang punya Def > 0. Jadi TRACT nggak sepakat sama
+  ambang itu. 2.344 sisanya di data kita malah Def = 0 (TRACT pakai sumber
+  deforestasi sendiri).
+- Keputusan user: drop plot yang ditandai defo TRACT itu **khusus buat
+  paket TRACT** — Kanopi tetap pakai data lengkap (67.699 plot BNS, termasuk
+  plot yang ditandai; di Kanopi masih tampil sesuai `EUDR_Comply` hasil
+  analisis kita sendiri).
+- Riwayat upload TRACT (`Upload Report.html`, halaman 1 dari tabel file
+  history) dipakai buat ngisi sheet `BNS` di `Temporary Database\TRACT
+  Recap.xlsx` (tanggal, ID on TRACT, nama file master data/GeoJSON yang
+  terakhir SUCCESS, status defo per mill, upload status); 4 mill yang
+  belum ada di sheet (HAMITA, KENANGA, SURYA BUMI, TENGKALAT) ditambahin.
+  Ketauan juga master data **GARUDA BUMI PERKASA & SAWINDO KENCANA FAILED**
+  — dua-duanya ternyata sudah jadi node SJIM di TRACT sejak 2026-09-18
+  (mills.json nggak nyatet NodeID SJIM-nya), jadi diperlakukan sama kayak
+  KENANGA: node lama dipakai, master data BNS nggak dibuat. Paket TRACT
+  sekarang 24 GeoJSON + 21 master data.
+- 2026-09-25 — **Reuse plot buat mill BNS yang nggak punya data plot**
+  (instruksi user): buffer 20 km dari koordinat mill (`D:\000 Work\000
+  Databases\UML.xlsx`), plot paket TRACT BNS yang masuk penuh ke buffer
+  disalin, lalu UML_ID/nama mill/NodeID diganti ke mill itu dan PlotID
+  di-mint ulang (skema sama, `2609`; PlotID asal disimpan di
+  `Source_PlotID`). Hasil: TAMA BUANA JAYA 312 plot/947 ha, BANKA AGRO
+  PLANTARI 1.624/5.882 ha, BHUMI PALMINDO KENCANA 2.576/16.820 ha (semua
+  dari BUMI SAWIT + PUTERA BANGKA TANI). **MANGSANG** nggak punya plot
+  apa pun dalam 20 km (scan semua 406 file plot Kanopi; terdekat 23 km), jadi
+  per user pakai **30 km**: satu-satunya plot di radius itu punya SJIM AGRO
+  SINERGI SUKSES ABADI — sumbernya file SJIM yang *sudah di TRACT* (versi
+  `Dropped_Deforestation`, setelah drop defo TRACT 10/09; disalin ke
+  `Data Storage/TRACT Reuse Sources/`), lewat `clean()` yang sama →
+  **234 plot, 2.924 ha**. Filter defo sekarang juga ngecek PlotID baru hasil
+  reuse. Paket sekarang 28 GeoJSON + 25 master data (`_reuse_report.csv`).
+
 ### 2026-09-25 — Akun login per grup supplier
 - Akun `supplier` bersama (dulu cuma lihat Permata KIM) diganti **11 akun,
   satu per grup** (`group` di mills.json): `bns`, `domas`, `fgv`,
@@ -141,11 +228,159 @@ Email balasan ADM atas akun per grup (`Feedback/Feedback - 1.pdf`), 6 poin +
 - Belum dikerjakan: (4) satu mill SJIM di Afrika, (6) layer Peta Kawasan
   Hutan 2026, dan ide klik "EUDR Comply 92%" → daftar lokasi non-comply.
 
+### 2026-09-27 — Feedback 2: bugs, tampilan, landing (branch `feedback-2-palmtrace`)
+Tiga dokumen audit di `Feedback/Feedback 2/` (Dok. 1 bugs & tampilan, Dok. 2
+data publik, Dok. 3 branding). Yang dikerjakan di ronde ini:
+- **B-01 (data publik tanpa auth) ternyata false positive**: di produksi,
+  `/data/mills.json` dan `forest-cover.geojson` tanpa cookie sudah 401 —
+  auditor mengetesnya dari browser yang masih login. Tetap ditambah
+  `robots.txt` (disallow `/app`, `/data/`, `/coverage`, dll).
+- **B-02 peta 240px**: shell workspace sekarang tinggi tetap (100dvh), peta
+  mengisi kanvas secara absolut + `ResizeObserver` → ~52vh di desktop, penuh
+  di mode "Perluas peta". Penyebab tambahan: CSS MapLibre
+  (`.maplibregl-map{position:relative}`) menimpa `inset:0`.
+- **B-03 legend 0**: plot memang dimuat per PKS; legend sekarang menampilkan
+  petunjuk "pilih PKS" alih-alih "Patuh 0 · Tidak patuh 0".
+- **B-04/B-05 rute**: `/` = landing publik; `/login?next=`; workspace di
+  `/app/portfolio`, `/app/<grup>`, `/app/<grup>/data?refinery=&mill=`
+  (deep link, refresh, Back jalan). Halaman publik `/method`, `/about`,
+  `/contact` (+ alias `/metodologi`, `/tentang`, `/kontak`).
+- **B-06/B-07**: kata "on development" hilang dari UI; nama grup seragam
+  kapital; slug terpisah untuk URL.
+- **U-02/U-04/U-08**: kamus ID/EN lengkap (ID diketik terhadap kunci EN),
+  istilah PKS / Kilang / tingkat desa / "Buffer 20 km"; mitigasi A–F dan kode
+  kawasan hutan dwibahasa; satu helper format angka (`src/lib/format.ts`, tanpa
+  "k": 6.283,1k ha → 6,28 juta ha).
+- **U-05/U-06/U-07**: empty state grup tanpa plot + tombol ke peta; KPI
+  sidebar dobel dihapus, KPI kanvas punya tooltip definisi + "Data per";
+  pill status Plot siap / Sebagian / Master saja (endpoint baru `/coverage`);
+  chart overlap kawasan hutan diskalakan ke nilai terbesarnya, dipisah
+  tegas dari JRC.
+- **Sistem visual Opsi A** (ink navy + teal + emas hemat), Plus Jakarta Sans +
+  IBM Plex; mark/favicon/og.png baru; nama tampil "PalmTrace" + "by Earthline".
+- **Peta**: chip peta dasar selalu terlihat & diingat, rentang akuisisi
+  Sentinel-2, atribusi Esri lengkap, panel layer bergrup (Analisis Earthline /
+  Rantai pasok / Konteks EUDR), JRC default mati & dimuat lazy (~20 MB) dengan
+  catatan "tidak mengikat", halo di outline plot, skeleton saat memuat.
+- **Mode Present** (admin/klien), mobile (drawer, kartu PKS, peta 58vh), login
+  dengan tampil/sembunyikan sandi dan sandi tidak dikosongkan saat gagal.
+- `DATA_AS_OF` di `src/lib/data-meta.ts` **wajib diperbarui tiap ingest**.
+- Belum dikerjakan (butuh keputusan/data/infra): domain `palmtrace.earthline.info`
+  (DNS), layer KLHK/BIG/gambut/hotspot, rekonsiliasi UML, logo klien,
+  backend email untuk form kontak, vector tiles untuk plot & JRC.
+
+### 2026-09-27 — Redesign 2: "terang dan tenang"
+Setelah preview feedback 2, desain dinilai masih terasa template. Referensi
+yang dinilai terbaik: samsung.com/id, apple.com/id, asianagri.com,
+apicalgroup.com (good: locatorlogic, preferredbynature, mapid; just ok:
+bvarta — yang ternyata paling mirip desain sebelumnya: hero gelap, teal,
+Plus Jakarta Sans). Brief warna: hindari warna Kanopi dan warna "berani".
+- Sistem visual baru: putih/#F5F5F7, teks #1D1D1F, Inter, pill hitam,
+  satu nada tautan hijau-abu redup, warna data diredupkan. Mark monokrom.
+- Situs publik ditulis ulang (copy + struktur): hero citra Sentinel-2 asli
+  (`public/img/sentinel2-riau-2020.jpg`, 2020, skala regional, plot contoh
+  berlabel), bukti, masalah, 3 langkah, bento, untuk siapa, perbandingan,
+  FAQ. CTA utama "Minta Early Access" → `/contact?early=1`.
+- Workspace: sidebar dihapus; pemilih grup di header (bisa dicari);
+  portofolio jadi tabel yang bisa diurutkan dengan kolom cakupan; peta +
+  panel kanan (daftar PKS → detail PKS + KPI + unduhan); tabel plot jadi
+  laci bawah; login split dengan citra.
+- Perbaikan ikut: Esri dibatasi zoom 17 (tile abu di atasnya), ikon PKS
+  tanpa emoji, panel Layer tertutup default di HP.
+- Skill pihak ketiga yang dipakai: ui-ux-pro-max, copywriting (dipasang di
+  `Kanopi Project/.claude/skills/`, di luar repo).
+
+### 2026-09-28 — Redesign 2, ronde masukan + Feedback ADM #1 sisa
+- Citra publik sekarang memakai **plot asli** (atas izin user, cakupan kecil):
+  satu PKS YORGO, hanya plot patuh, tanpa nama/label/koordinat, dibakar ke
+  JPG Sentinel-2 2020 dan 2026 (`public/img/field-2020.jpg`,
+  `field-2026.jpg`). Dipakai di hero, login, tile peta, dan slider
+  perbandingan 2020↔2026 (menggantikan garis waktu yang tidak jelas gunanya).
+- Showcase produk di beranda (ala Samsung): 4 layar workspace yang berganti
+  otomatis. Layar diambil oleh `scripts/capture-showcase.mjs` dari dev server
+  dengan nama, lokasi, angka (diskalakan), ID, dan koordinat diganti, plus
+  cek kebocoran otomatis. **Jalankan ulang skrip itu kalau UI berubah.**
+- Beranda: A–F tidak terpotong lagi (arti + ritme pemantauan dari
+  metodologi), tile akses/tautan/format standar diisi, kartu "untuk siapa"
+  diberi pratinjau, ikon di bagian masalah, bagian **produk lain Earthline**
+  (citra, terrain, drone, survei, sensor Agrowing).
+- **Metodologi** ditulis ulang dari dokumen *EL Response — SRS EUDR
+  Information Requests* (24/09/2026): dua uji (bebas deforestasi + legal),
+  risiko desa, matriks A–F dengan pemantauan, baseline, alert & validasi,
+  model spasial, aturan geometri, QA/QC, format DDS, pemantauan ulang. Nama
+  klien, nomor SOP internal, dan bobot variabel **tidak** dimuat (dokumennya
+  confidential dan bobotnya indikatif per penugasan).
+- Workspace: **sankey** di Portofolio (grup → kilang → ketertelusuran /
+  cakupan plot, hover + klik); KPI Patuh EUDR & irisan donut bisa diklik →
+  daftar **"Di mana plot tidak patuh?"** per PKS → peta PKS dengan tabel plot
+  tersaring tidak patuh (`?plots=noncomply`) — ide dari email ADM. Donut
+  bereaksi saat hover.
+- Bug: peta tidak lagi ikut ter-scroll/terpotong saat menggulir daftar PKS.
+- Feedback ADM #1 poin 4: PKS SJIM "di Afrika" = INTI SAWIT SEJAHTERA
+  MAKMUR dengan koordinat **0,0** di master. Sekarang 0,0 dianggap "tidak ada
+  koordinat" (tidak digambar, ada catatan di detail PKS). **Koordinat aslinya
+  masih perlu dikirim/diperbaiki di master data.**
+- Belum: SUNRISE (data plot belum ada), Peta Kawasan Hutan 2026 (file belum
+  ada di Data Storage).
+
+### 2026-09-28 — Ingest SUNRISE + Kanopi production jadi PalmTrace
+- Sumber: `04. SUNRISE\SUNRISE.gdb` (281.849 plot, sudah bawa PlotID).
+  Diproses dengan pipeline YORGO/BNS (overlay 21 layer, EUDR_Comply,
+  Desc_Issue, join desa, kelas mitigasi, LAT/LON) → master
+  `ANALISIS\SUNRISE_28092026.gdb`. Detail lengkap:
+  `Data Storage/SUNRISE - Plot (GeoJSON)/SUNRISE_PIPELINE_NOTES.md`.
+- 519 PlotID dobel = baris duplikat persis (semua ADOLINA), di-drop. NodeID
+  diganti pakai `mills.json` (instruksi user). PlotID dipertahankan.
+- **Bug roster:** kolom UML ID di workbook ADM geser satu baris untuk 15 mill
+  SUNRISE (SAWIT LANGKAT … SOSA). Diperbaiki di `mills.json` lewat
+  `scripts/fix-sunrise-mill-ids.mjs`. Workbook ADM sendiri masih salah.
+- Hasil: **272.215 plot, 40/40 mill** (`scripts/prepare-sunrise-plots.mjs`),
+  96% patuh EUDR. 9.063 plot >100 km dari PKS (MAYANG, BERANGIR, TINJOWAN,
+  TIMUR) ditahan di `NEEDS VERIFICATION/`.
+- Kanopi production (kanopi-ochre) di-deploy dengan tampilan PalmTrace.
+  Daftar "Where are the non-compliant plots?" dirapikan (kolom sejajar lewat
+  subgrid). Login di kanopi-ochre **tetap password lama** untuk semua akun
+  (sudah dikirim ke ADM via email) — password CSV hanya berlaku di
+  palmtrace-one.
+- Role **auditor** tidak lagi melihat tombol download (CSV/GeoJSON PKS) di
+  workspace (`canDownload` di `workspace.tsx`).
+- Go-live: 56 file plot SUNRISE di-upload ke R2
+  (`upload-plots-to-r2.mjs __SUNRISE__` — script sekarang bisa difilter),
+  lalu deploy ke kanopi-ochre (`kanopi-7s0c30scg`). Dicek di production:
+  SUNRISE 40/40, plot terbaca dari R2, auditor tanpa download, login lama OK.
+
+### 2026-09-28 — Multi-klien: ruang BRC (Bakrie Renewable Chemicals)
+- PalmTrace sekarang **multi-tenant** (`src/lib/tenants.ts`): tiap sesi
+  membawa klien (`adm`/`brc`), server memilih data sesuai klien di sesi —
+  frontend tetap memanggil `/data/…`, `/coverage`, `/eudr-summary` yang sama.
+  ADM tidak berubah (file & path lama). Data klien lain di
+  `private-data/tenants/<id>/` dan R2 `tenants/<id>/`; path `tenants/…`
+  langsung selalu 404.
+- Akun BRC `brc-1..3` (hash di `gate.ts`, password di
+  `artifacts/akun-brc.csv`), terkunci ke BRC. Admin Earthline dapat pemilih
+  "Klien" di header. Auditor & supplier tetap di ADM.
+- Data BRC: versi dashboard BRC 24 Sep (basis DOMAS) — 34 mill disalin dari
+  plot DOMAS yang sudah diproses, 10 mill diproses pipeline baru. Detail:
+  `Data Storage/BRC - Plot (GeoJSON)/BRC_PIPELINE_NOTES.md`. Hasil 373.769
+  plot, 44/44 mill, 96,1% patuh. Plot >100 km dari PKS **tetap ditampilkan** untuk
+  BRC (keputusan user: BRC memberi data begitu dan tidak mau verifikasi).
+- Script baru/diubah: `build-brc-roster.mjs`, `prepare-brc-plots.mjs`,
+  `prepare-eudr-stats.mjs --tenant`, `upload-plots-to-r2.mjs --tenant`.
+  `e2e-smoke.mjs` +13 cek isolasi klien — 25/25 lolos di production.
+- Web lama BRC (Cloudflare `brc-eudr-portfolio`) tidak disentuh.
+
+### 2026-09-28 — Teks A–F mengikuti data
+- Kartu "Kategori A sampai F" di beranda dan tabel A–F di Metodologi sekarang
+  diturunkan langsung dari `MITIGATION_DESCRIPTIONS(_ID)` (= teks atribut
+  `Risk_Mitigation_Class` di data), bukan narasi dokumen SRS. Alasan (user):
+  narasi lama menyebut C "verifikasi segera / ditahan" sehingga plot C — yang
+  **patuh** — terbaca tidak patuh. Kolom "Pemantauan" dihapus.
+
 ## Status saat ini (per 2026-09-23)
 
 - SJIM: 189/192 mill ke-ingest ke Kanopi (3 mill masih belum match).
 - YORGO: 25/25 mill ke-ingest.
-- BNS: 24/33 mill ke-ingest (9 sisanya belum ada file plot dari sumbernya).
+- BNS: 24 mill ke-ingest (9 mill tanpa file plot sudah dihapus dari roster); paket upload TRACT 45.216 plot setelah plot yang ditandai defo TRACT di-drop (24 GeoJSON + 21 master data; KENANGA, GARUDA, SAWINDO pakai node SJIM yang sudah ada).
 - PalmTrace: belum ada progres yang tercatat di repo ini.
 
 ## Belum lengkap di catatan ini

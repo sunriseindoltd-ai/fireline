@@ -218,3 +218,42 @@ export function groupChains(mills: MillRecord[]): Chain[] {
     }))
     .sort((a, b) => b.mills.length - a.mills.length);
 }
+
+/**
+ * Group names arrive in whatever case each source sheet used ("Permata" next
+ * to "SJIM", "HOK HUAT") — shown uppercase everywhere so a group reads the
+ * same on its card, in the dropdown and in the breadcrumb (feedback 2,
+ * B-07). The raw name stays the identity; the URL uses groupSlug.
+ */
+export function groupLabel(name: string) {
+  return name.toUpperCase();
+}
+
+export function groupSlug(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/&/g, " ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Localized traceability badge: "Village Level" -> "Tingkat desa",
+ * "Buffer 20KM" -> "Buffer 20 km", and the one combined
+ * "Village Level+Buffer 10KM" row keeps both parts.
+ */
+export function traceLabel(
+  m: Pick<MillRecord, "traceability" | "traceabilityRaw">,
+  t: { traceVillage: string; traceBuffer: string; traceBufferPlain: string },
+): string {
+  const raw = m.traceabilityRaw.toLowerCase();
+  const parts: string[] = [];
+  if (raw.includes("village") || raw.includes("desa")) parts.push(t.traceVillage);
+  const km = parseBufferKm(m.traceabilityRaw);
+  if (km != null) parts.push(t.traceBuffer.replace("{km}", String(km)));
+  else if (raw.includes("buffer")) parts.push(t.traceBufferPlain);
+  if (parts.length) return parts.join(" + ");
+  if (m.traceability === "village") return t.traceVillage;
+  if (m.traceability === "buffer") return t.traceBufferPlain;
+  return "";
+}

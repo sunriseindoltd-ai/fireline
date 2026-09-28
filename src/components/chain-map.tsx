@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Copy, Lang } from "@/lib/copy";
+import { JRC_LAYER } from "@/lib/data-meta";
+import { formatCount, formatHa } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import type { Fc } from "@/lib/ledger";
-import {
-  describeNonComplyIssue,
-  ISSUE_DESCRIPTIONS,
-  locationText,
-  MITIGATION_DESCRIPTIONS,
-} from "@/lib/ledger-geo";
+import { describeNonComplyIssue, issueText, locationText, mitigationText } from "@/lib/ledger-geo";
+import { usePersistentState } from "@/lib/use-persistent";
 import {
   EMPTY_PLOT_FILTERS,
   plotFilterExpression,
@@ -76,11 +76,15 @@ const S2_ATTRIBUTION = "Contains modified Copernicus Sentinel data · Microsoft 
 // free-to-use services with no such caveat.
 const BASEMAPS: Record<BasemapId, Basemap> = {
   esri: {
-    label: "Esri Satellite",
+    label: "Esri World Imagery",
     tiles: [
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     ],
-    attribution: "Imagery © Esri",
+    attribution: "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    // Esri's imagery over rural Sumatra/Kalimantan often stops at z17 —
+    // past that it serves grey "Map data not yet available" tiles. Capping
+    // the source makes MapLibre overzoom the last real tile instead.
+    maxzoom: 17,
   },
   google: {
     label: "Google Satellite",
@@ -93,7 +97,7 @@ const BASEMAPS: Record<BasemapId, Basemap> = {
     attribution: "© OpenStreetMap contributors",
   },
   "s2-2020": {
-    label: "Sentinel-2 2020",
+    label: "Sentinel-2 · 2020",
     tiles: [
       `${PC_MOSAIC}/c4cd1dfa0bd799858b2fc5d40af4d2da/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?${S2_VISUAL}&pixel_selection=median&skipcovered=false&exitwhenfull=false&items_limit=10`,
     ],
@@ -104,7 +108,7 @@ const BASEMAPS: Record<BasemapId, Basemap> = {
     maxzoom: 14,
   },
   "s2-2026": {
-    label: "Sentinel-2 2026",
+    label: "Sentinel-2 · 2026",
     tiles: [`${PC_MOSAIC}/37869bf8977442843b3315fa4b866e0d/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?${S2_VISUAL}`],
     attribution: `${S2_ATTRIBUTION} (2026)`,
     year: 2026,
@@ -114,6 +118,10 @@ const BASEMAPS: Record<BasemapId, Basemap> = {
 };
 
 const DEFAULT_BASEMAP: BasemapId = "esri";
+// Esri and Google first — the imagery Earthline's team works on day to day
+// (feedback 2, Doc 2 §3); OSM as the schematic fallback; the dated
+// Sentinel-2 pair last, for before/after-cutoff comparison.
+const BASEMAP_ORDER: BasemapId[] = ["esri", "google", "osm", "s2-2020", "s2-2026"];
 
 // MapLibre's `text-field` needs a `glyphs` URL (an SDF font/glyph server)
 // configured in the style spec to render anything at all — without one,
@@ -173,7 +181,7 @@ function basemapStyle(id: BasemapId) {
  * bottom of the layer stack — wherever the first custom layer currently
  * is — so switching basemap never covers up the data layers on top of it. */
 function setBasemap(map: import("maplibre-gl").Map, id: BasemapId) {
-  const beforeId = ["forest-fill", "areas-fill", "plots-fill", "mills"].find((l) =>
+  const beforeId = ["forest-fill", "areas-fill", "plots-halo", "plots-fill", "mills"].find((l) =>
     map.getLayer(l),
   );
   for (const layer of ["sat", "sat-fill", "sat-under"]) {
@@ -278,7 +286,13 @@ type Props = {
   millGeom: Fc | null;
   areas: Fc | null;
   plots: Fc | null;
+  /** JRC forest cover — null until first switched on (it's ~20 MB). */
   forest: Fc | null;
+  forestOn: boolean;
+  forestLoading: boolean;
+  onForestOnChange: (on: boolean) => void;
+  /** The selected mill's plots are being fetched. */
+  plotsLoading: boolean;
   selectedMillId: string | null;
   onSelectMill: (id: string | null) => void;
   /** Set (with a fresh `nonce` each time, so clicking the same plot twice
@@ -294,31 +308,94 @@ type Props = {
    * narrow the exact same set of plots. */
   plotFilters: PlotFilters;
   onPlotFiltersChange: (next: PlotFilters) => void;
-  labels: ChainMapLabels;
+  /** Changes whenever the surrounding layout does (sidebar, dock, full-map,
+   * language) — a belt-and-braces resize on top of the ResizeObserver. */
+  layoutKey: string;
 };
+
+/** The ChainMapLabels shape, built from the shared dictionary. */
+function mapLabels(t: Copy): ChainMapLabels {
+  return {
+    empty: t.mapEmpty,
+    legendVillage: t.legendVillage,
+    legendBuffer: t.legendBuffer,
+    legendPlots: t.legendPlots,
+    legendMills: t.legendMills,
+    legendAreas: t.legendAreas,
+    legendForest: t.legendForest,
+    millsByRefinery: t.millsByRefinery,
+    colorBy: t.colorBy,
+    traceability: t.trace,
+    compliance: t.eudrComplyKpi,
+    risk: t.riskLabel,
+    mitigation: t.mitigationLabel,
+    type: t.typeLabel,
+    layersTitle: t.layersTitle,
+    basemap: t.basemap,
+    basemapDatedNote: t.basemapDatedNote,
+    comply: t.comply,
+    nonComply: t.nonComply,
+    nonComplyReason: t.nonComplyReason,
+    riskLow: t.riskLow,
+    riskMedium: t.riskMedium,
+    riskHigh: t.riskHigh,
+    uml: t.uml,
+    hectare: t.popupHectare,
+    findTitle: t.findTitle,
+    searchPlotPlaceholder: t.searchPlotPlaceholder,
+    searchPlotEmpty: t.searchPlotEmpty,
+    noMatches: t.noMatches,
+    plotId: t.plotId,
+    company: t.company,
+    location: t.location,
+    coordinates: t.coordinates,
+    goToCoordinate: t.goToCoordinate,
+    coordinatePlaceholder: t.coordinatePlaceholder,
+    go: t.go,
+    coordinateInvalid: t.coordinateInvalid,
+    noPlotAtCoordinate: t.noPlotAtCoordinate,
+    close: t.close,
+    clearFilters: t.clearFilters,
+    filtersActive: t.filtersActive,
+    clear: t.clear,
+    seeMore: t.seeMore,
+    back: t.back,
+    nonComplyDetailTitle: t.nonComplyDetailTitle,
+    physicalReasonLabel: t.physicalReasonLabel,
+    socialReasonLabel: t.socialReasonLabel,
+    deforestationByYearLabel: t.deforestationByYearLabel,
+    forestOverlapLabel: t.forestOverlapLabel,
+  };
+}
 
 // Same literal colors already established for these categories in
 // styles.css tokens (--color-comply/--color-noncomply, --color-accent-2/
 // --color-warn/--color-danger, --chart-a..f) and eudr-summary.tsx's
 // TYPE_COLORS — MapLibre paint expressions can't consume CSS custom
 // properties, so these are kept in sync by hand.
-const TRACE_COLORS = { village: "#4a9b94", buffer: "#c4a574", unknown: "#d7d0c4" };
-const COMPLY_COLORS = { yes: "#8bc178", no: "#e28a95" };
-const RISK_COLORS = { low: "#1c7a72", medium: "#8a6a3a", high: "#9a3f32" };
+// Soft, low-saturation tones (redesign 2: "hindari warna yang berani") that
+// still read on top of dark canopy imagery — every outline also gets a dark
+// halo underneath. Mirrors the data tokens in styles.css.
+const TRACE_COLORS = { village: "#a9d6c3", buffer: "#e6cf9a", unknown: "#c9ccd1" };
+const COMPLY_COLORS = { yes: "#9ed7b1", no: "#f0a197" };
+const RISK_COLORS = { low: "#a9d6c3", medium: "#ecc98a", high: "#f0a197" };
 const MIT_COLORS: Record<string, string> = {
-  A: "#0f7c73",
-  B: "#2f8f5b",
-  C: "#9a9a3c",
-  D: "#e08a2e",
-  E: "#c8631f",
-  F: "#b23a2e",
+  A: "#8fc7a8",
+  B: "#b3d69a",
+  C: "#d9d49a",
+  D: "#ecc98a",
+  E: "#eeae8c",
+  F: "#f0a197",
 };
 const TYPE_COLORS: Record<string, string> = {
-  "Independent Smallholder": "#1c7a72",
-  Company: "#0f4c4a",
-  "Scheme Smallholder": "#d5ebe8",
+  "Independent Smallholder": "#a9d6c3",
+  Company: "#b8c7e0",
+  "Scheme Smallholder": "#e6cf9a",
 };
-const FALLBACK_COLOR = "#d7d0c4";
+const FALLBACK_COLOR = "#c9ccd1";
+// Dark halo drawn under every plot outline — a pink/green outline straight
+// on top of green canopy imagery disappears (feedback 2, §4.2).
+const HALO_COLOR = "#111114";
 
 // Same dark green already established as "forest" in eudr-summary.tsx's
 // OVERLAP_COLORS / styles.css's --forest-hl token — reused here instead of
@@ -326,21 +403,21 @@ const FALLBACK_COLOR = "#d7d0c4";
 // outside the trace/comply/risk/mitigation/type families above (all
 // teal/tan/red/pale-green) so a plot fill on top of this layer never reads
 // as "part of the forest" or vice versa.
-const FOREST_COLOR = "#2e7d32";
+const FOREST_COLOR = "#3f6b4e";
 
 // Mill points are colored by refinery instead of by traceability whenever
 // more than one Refinery/KCP is in view at once (e.g. viewing a whole Group
 // that has several) — otherwise every mill would render identically and
 // there'd be no way to tell which refinery a given point belongs to.
 const REFINERY_COLORS = [
-  "#1c7a72",
-  "#c4a574",
-  "#5b8c9e",
-  "#9d6b53",
-  "#7a8c5a",
-  "#a66b8f",
-  "#4a7ba6",
-  "#b58b3e",
+  "#ffffff",
+  "#e6cf9a",
+  "#b8c7e0",
+  "#eeae8c",
+  "#a9d6c3",
+  "#d9c2e0",
+  "#c9ccd1",
+  "#d9d49a",
 ];
 
 function refineryColorFor(refinery: string, distinctRefineries: string[]): string {
@@ -349,14 +426,9 @@ function refineryColorFor(refinery: string, distinctRefineries: string[]): strin
 }
 
 /**
- * Registers a small factory-glyph bitmap as a MapLibre image, so mill
- * points can use `icon-image` instead of `text-field`. MapLibre's
- * `text-field` needs a `glyphs` URL (an SDF font/glyph server) configured
- * in the style spec to render anything at all, including emoji — our style
- * only has the satellite raster source, no glyph server, so text-field
- * would silently render nothing. Rendering the emoji to a canvas first
- * uses the browser's own font stack (which does support color emoji) and
- * sidesteps the glyph-server requirement entirely.
+ * Registers a small factory silhouette (drawn with canvas paths, not an
+ * emoji — emoji rendered differently per OS and read as clip-art) as a
+ * MapLibre image, so each mill point reads as "a mill" on top of its dot.
  */
 function ensureMillIcon(map: import("maplibre-gl").Map) {
   if (map.hasImage("mill-icon")) return;
@@ -366,20 +438,32 @@ function ensureMillIcon(map: import("maplibre-gl").Map) {
   canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.font = `${Math.round(size * 0.75)}px "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("🏭", size / 2, size / 2 + size * 0.04);
-  map.addImage("mill-icon", ctx.getImageData(0, 0, size, size));
+  ctx.fillStyle = "#1d1d1f";
+  ctx.beginPath();
+  // base + saw-tooth roof
+  ctx.moveTo(10, 38);
+  ctx.lineTo(10, 24);
+  ctx.lineTo(17, 29);
+  ctx.lineTo(17, 24);
+  ctx.lineTo(24, 29);
+  ctx.lineTo(24, 24);
+  ctx.lineTo(30, 28);
+  // chimney
+  ctx.lineTo(30, 11);
+  ctx.lineTo(36, 11);
+  ctx.lineTo(36, 38);
+  ctx.closePath();
+  ctx.fill();
+  map.addImage("mill-icon", ctx.getImageData(0, 0, size, size), { pixelRatio: 2 });
 }
 
 function millColorExpression(distinctRefineries: string[]): any {
   if (distinctRefineries.length > 1) {
     const stops: unknown[] = [];
     distinctRefineries.forEach((r) => stops.push(r, refineryColorFor(r, distinctRefineries)));
-    return ["match", ["get", "_refinery"], ...stops, "#f4efe6"];
+    return ["match", ["get", "_refinery"], ...stops, "#e8eef4"];
   }
-  return ["match", ["get", "_trace"], "village", "#d5ebe8", "buffer", "#efe4d2", "#f4efe6"];
+  return ["match", ["get", "_trace"], "village", TRACE_COLORS.village, "buffer", TRACE_COLORS.buffer, "#e8eef4"];
 }
 
 type ColorBy = "trace" | "comply" | "risk" | "mitigation" | "type";
@@ -455,7 +539,12 @@ function fillColorExpression(colorBy: ColorBy): any {
 
 type LegendEntry = { label: string; color: string; count: number; value: string };
 
-function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabels): LegendEntry[] {
+function legendEntries(
+  colorBy: ColorBy,
+  plots: Fc | null,
+  labels: ChainMapLabels,
+  typeNames: Record<string, string>,
+): LegendEntry[] {
   const features = plots?.features ?? [];
   const countBy = (key: string, value: string) =>
     features.filter((f) => String(f.properties?.[key] ?? "") === value).length;
@@ -487,11 +576,11 @@ function legendEntries(colorBy: ColorBy, plots: Fc | null, labels: ChainMapLabel
     }));
   }
   if (colorBy === "type") {
-    return Object.entries(TYPE_COLORS).map(([label, color]) => ({
-      label,
+    return Object.entries(TYPE_COLORS).map(([value, color]) => ({
+      label: typeNames[value] ?? value,
       color,
-      count: countBy("TYPE", label),
-      value: label,
+      count: countBy("TYPE", value),
+      value,
     }));
   }
   return [
@@ -527,11 +616,6 @@ function filterUniverse(colorBy: ColorBy): string[] {
   }
 }
 
-function haShort(n: number) {
-  return n >= 1000
-    ? `${(n / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })}k`
-    : Math.round(n).toLocaleString("id-ID");
-}
 
 // Mirrors DEF_YEARS in src/lib/eudr-aggregates.server.ts / scripts/prepare-eudr-stats.mjs.
 const DEF_YEAR_FIELDS = [
@@ -591,7 +675,7 @@ type PlotDetail = {
  * describeNonComplyIssue() summary already shown, never something
  * inconsistent with it.
  */
-function buildNonComplyDetail(props: Record<string, unknown>): NonComplyDetail | null {
+function buildNonComplyDetail(props: Record<string, unknown>, lang: Lang): NonComplyDetail | null {
   const physicalReason = String(props.Physical_Reason ?? "").trim();
   const socialReason = String(props.Social_Reason ?? "").trim();
   const deforestationByYear = DEF_YEAR_FIELDS.map(([col, year]) => ({
@@ -604,7 +688,7 @@ function buildNonComplyDetail(props: Record<string, unknown>): NonComplyDetail |
     .filter(Boolean);
   const overlapBreakdown = issueCodes
     .filter((code) => OVERLAP_CODES.includes(code))
-    .map((code) => ({ label: ISSUE_DESCRIPTIONS[code] ?? code, ha: Number(props[code]) || 0 }))
+    .map((code) => ({ label: issueText(code, lang), ha: Number(props[code]) || 0 }))
     .filter((o) => o.ha > 0);
 
   if (!physicalReason && !socialReason && deforestationByYear.length === 0 && overlapBreakdown.length === 0) {
@@ -618,7 +702,12 @@ function buildNonComplyDetail(props: Record<string, unknown>): NonComplyDetail |
  * object (not an HTML string, unlike the MapLibre popup this replaced) so
  * React renders and escapes it directly.
  */
-function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels): PlotDetail {
+function buildPlotDetail(
+  props: Record<string, unknown>,
+  labels: ChainMapLabels,
+  lang: Lang,
+  typeNames: Record<string, string>,
+): PlotDetail {
   const mill = String(props._mill || props.Mill_name || "");
   const uml = String(props.UML_ID ?? "");
   // `PlotID` (scripts/prepare-plots.mjs) — genuinely unique per plot. The
@@ -632,19 +721,33 @@ function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels)
   // `Hectarage` instead, and this deck receives whatever properties the
   // clicked map feature already carries (decorated, not raw).
   const ha = Number(props._hectarage ?? 0);
-  const complyRaw = props.EUDR_Comply;
-  const comply = complyRaw === "YES" ? labels.comply : complyRaw === "NO" ? labels.nonComply : "—";
-  const complyClass = complyRaw === "YES" ? "ok" : complyRaw === "NO" ? "bad" : undefined;
-  const risk = String(props.Overall_Risk ?? "—");
+  // `_comply` (decorated, ledger-geo.ts) rather than reading `EUDR_Comply`
+  // here directly — BNS's deforestation-noise-threshold adjustment only
+  // lands on the decorated field, so reading the raw property here would
+  // show "Non-Compliant" for a plot the table/mitigation badge both already
+  // treat as compliant.
+  const complyDecorated = props._comply;
+  const comply = complyDecorated === "yes" ? labels.comply : complyDecorated === "no" ? labels.nonComply : "—";
+  const complyClass = complyDecorated === "yes" ? "ok" : complyDecorated === "no" ? "bad" : undefined;
+  const riskKey = String(props._risk ?? "");
+  const risk =
+    riskKey === "low"
+      ? labels.riskLow
+      : riskKey === "medium"
+        ? labels.riskMedium
+        : riskKey === "high"
+          ? labels.riskHigh
+          : String(props.Overall_Risk ?? "—");
   const mitLetter = String(props._mitigation ?? "").toUpperCase();
   // The canonical A–F wording (src/lib/ledger-geo.ts) rather than this
   // plot's own free-text Risk_Mitigation_Class, which isn't always worded
   // identically across rows/mills even for the same letter — falls back to
   // the raw text only if the letter itself couldn't be parsed.
-  const mitigationText =
-    MITIGATION_DESCRIPTIONS[mitLetter] ?? String(props.Risk_Mitigation_Class ?? "—");
-  const type = String(props.TYPE ?? "—");
-  const nonComplyReason = complyRaw === "NO" ? describeNonComplyIssue(props.Desc_Issue) : "";
+  const mitigationDescription =
+    mitigationText(mitLetter, lang) ?? String(props.Risk_Mitigation_Class ?? "—");
+  const typeRaw = String(props.TYPE ?? "");
+  const type = typeNames[typeRaw] ?? (typeRaw || "—");
+  const nonComplyReason = complyDecorated === "no" ? describeNonComplyIssue(props.Desc_Issue, lang) : "";
   const location = locationText(props);
   const lat = Number(props.LAT ?? NaN);
   const lon = Number(props.LON ?? NaN);
@@ -656,7 +759,7 @@ function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels)
     { label: labels.uml, value: uml || "—" },
   ];
   if (location) rows.push({ label: labels.location, value: location });
-  rows.push({ label: labels.hectare, value: `${haShort(ha)} ha` });
+  rows.push({ label: labels.hectare, value: formatHa(ha, lang) });
   rows.push({ label: labels.compliance, value: comply, cls: complyClass });
   rows.push({ label: labels.risk, value: risk });
   rows.push({ label: labels.type, value: type });
@@ -668,10 +771,10 @@ function buildPlotDetail(props: Record<string, unknown>, labels: ChainMapLabels)
     coordinates: hasCoords ? { lat, lon } : null,
     mitigation: {
       label: `${labels.mitigation}${mitLetter ? ` (${mitLetter})` : ""}`,
-      text: mitigationText,
+      text: mitigationDescription,
     },
     nonComplyReason,
-    nonComplyDetail: complyRaw === "NO" ? buildNonComplyDetail(props) : null,
+    nonComplyDetail: complyDecorated === "no" ? buildNonComplyDetail(props, lang) : null,
   };
 }
 
@@ -699,7 +802,7 @@ function focusOnPlotFeature(
 ) {
   const bounds = featureBounds(feature);
   if (!bounds) return;
-  fitBoundsClamped(map, bounds, { padding: 60, minZoom: 14, maxZoom: 18, duration: 600 });
+  fitBoundsClamped(map, bounds, { padding: 60, minZoom: 14, maxZoom: 17, duration: 600 });
   const id = String(feature.properties?.PlotID ?? "");
   if (id) select(id, feature.properties ?? {});
 }
@@ -793,13 +896,27 @@ export function ChainMap({
   areas,
   plots,
   forest,
+  forestOn,
+  forestLoading,
+  onForestOnChange,
+  plotsLoading,
   selectedMillId,
   onSelectMill,
   focusPlot,
   plotFilters,
   onPlotFiltersChange,
-  labels,
+  layoutKey,
 }: Props) {
+  const { t, lang } = useI18n();
+  const labels = useMemo(() => mapLabels(t), [t]);
+  const typeNames = useMemo<Record<string, string>>(
+    () => ({
+      "Independent Smallholder": t.typeIndependent,
+      Company: t.typeCompany,
+      "Scheme Smallholder": t.typeScheme,
+    }),
+    [t],
+  );
   const root = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapHandle | null>(null);
   const maplibreRef = useRef<MaplibreGlNamespace | null>(null);
@@ -812,18 +929,38 @@ export function ChainMap({
   labelsRef.current = labels;
   const plotFiltersRef = useRef(plotFilters);
   plotFiltersRef.current = plotFilters;
+  // Bumped every time a (re)created map finishes loading — effects that add
+  // layers after the fact (the lazily-fetched JRC layer) key on it.
+  const [mapReady, setMapReady] = useState(0);
+  const [tilesReady, setTilesReady] = useState(false);
 
   const [colorBy, setColorBy] = useState<ColorBy>("comply");
   const colorByRef = useRef(colorBy);
   colorByRef.current = colorBy;
-  const [basemap, setBasemapState] = useState<BasemapId>(DEFAULT_BASEMAP);
+  // Remembered per browser (feedback 2, Doc 2 §4.1) — someone who works on
+  // Google imagery shouldn't have to re-pick it on every visit.
+  const [basemapStored, setBasemapState] = usePersistentState<BasemapId>("palmtrace.basemap", DEFAULT_BASEMAP);
+  const basemap: BasemapId = basemapStored in BASEMAPS ? basemapStored : DEFAULT_BASEMAP;
   const basemapRef = useRef(basemap);
   basemapRef.current = basemap;
-  const [visible, setVisible] = useState({ mills: true, plots: true, areas: true, forest: true });
+  const [basemapMenuOpen, setBasemapMenuOpen] = useState(false);
+  const [visible, setVisible] = useState({ mills: true, plots: true, areas: true });
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [findOpen, setFindOpen] = useState(true);
+  const forestOnRef = useRef(forestOn);
+  forestOnRef.current = forestOn;
+  const [panelOpen, setPanelOpen] = usePersistentState("palmtrace.panel.layers", true);
+  // On a phone the open Layers card covers most of the map — start it
+  // closed there unless the viewer has already chosen.
+  useEffect(() => {
+    try {
+      if (window.innerWidth < 860 && localStorage.getItem("palmtrace.panel.layers") == null) setPanelOpen(false);
+    } catch {
+      /* storage blocked — keep the default */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first render only.
+  }, []);
+  const [findOpen, setFindOpen] = usePersistentState("palmtrace.panel.find", false);
   const [plotQuery, setPlotQuery] = useState("");
   const [coordInput, setCoordInput] = useState("");
   // Stores whether the coordinate is invalid, not the translated message
@@ -872,6 +1009,7 @@ export function ChainMap({
     if (!root.current || !hasGeom) return;
     let cancelled = false;
     let map: import("maplibre-gl").Map | null = null;
+    setTilesReady(false);
 
     void (async () => {
       const maplibregl = (await import("maplibre-gl")).default;
@@ -886,7 +1024,14 @@ export function ChainMap({
         attributionControl: { compact: true },
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
       mapRef.current = map as unknown as MapHandle;
+      // Dev only: lets scripts/capture-showcase.mjs hide canvas-drawn labels
+      // (mill names) before taking the public product screenshots.
+      if (import.meta.env.DEV) (window as unknown as { __palmtraceMap?: unknown }).__palmtraceMap = map;
+      map.once("idle", () => {
+        if (!cancelled) setTilesReady(true);
+      });
 
       map.on("load", () => {
         if (!map) return;
@@ -903,23 +1048,6 @@ export function ChainMap({
           }
         };
 
-        // Added before areas/plots/mills so it always sits directly above
-        // the basemap and below every data layer — a solid-looking green
-        // wash that plot/area fills and outlines always render on top of,
-        // never the other way around.
-        if (forest && forest.features.length) {
-          map.addSource("forest", { type: "geojson", data: forest as GeoJSON.GeoJSON });
-          map.addLayer({
-            id: "forest-fill",
-            type: "fill",
-            source: "forest",
-            layout: { visibility: visibleRef.current.forest ? "visible" : "none" },
-            paint: {
-              "fill-color": FOREST_COLOR,
-              "fill-opacity": 0.45,
-            },
-          });
-        }
         if (areas && areas.features.length) {
           map.addSource("areas", { type: "geojson", data: areas as GeoJSON.GeoJSON });
           map.addLayer({
@@ -932,12 +1060,12 @@ export function ChainMap({
                 "match",
                 ["get", "_kind"],
                 "village",
-                "#0f4c4a",
+                TRACE_COLORS.village,
                 "buffer",
-                "#8a6a3a",
-                "#1c7a72",
+                TRACE_COLORS.buffer,
+                TRACE_COLORS.village,
               ],
-              "fill-opacity": 0.28,
+              "fill-opacity": 0.14,
             },
           });
           map.addLayer({
@@ -946,8 +1074,9 @@ export function ChainMap({
             source: "areas",
             layout: { visibility: visibleRef.current.areas ? "visible" : "none" },
             paint: {
-              "line-color": ["match", ["get", "_kind"], "buffer", "#efe4d2", "#d5ebe8"],
+              "line-color": ["match", ["get", "_kind"], "buffer", TRACE_COLORS.buffer, TRACE_COLORS.village],
               "line-width": 1.4,
+              "line-dasharray": [3, 2],
             },
           });
           ext(areas);
@@ -956,27 +1085,36 @@ export function ChainMap({
           map.addSource("plots", { type: "geojson", data: plots as GeoJSON.GeoJSON });
           // MapLibre filter expression; typed loosely like the paint expressions above.
           const plotFilter = plotFilterExpression(plotFiltersRef.current) as any;
+          const plotVis = visibleRef.current.plots ? "visible" : "none";
           map.addLayer({
             id: "plots-fill",
             type: "fill",
             source: "plots",
             filter: plotFilter,
-            layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
+            layout: { visibility: plotVis },
             paint: {
               "fill-color": fillColorExpression(colorByRef.current),
-              "fill-opacity": ["case", ["==", ["get", "_id"], sel], 0.35, 0.18],
+              "fill-opacity": ["case", ["==", ["get", "_id"], sel], 0.32, 0.2],
             },
+          });
+          map.addLayer({
+            id: "plots-halo",
+            type: "line",
+            source: "plots",
+            filter: plotFilter,
+            layout: { visibility: plotVis },
+            paint: { "line-color": HALO_COLOR, "line-opacity": 0.55, "line-width": 3.2 },
           });
           map.addLayer({
             id: "plots-line",
             type: "line",
             source: "plots",
             filter: plotFilter,
-            layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
+            layout: { visibility: plotVis },
             paint: {
               "line-color": fillColorExpression(colorByRef.current),
-              "line-opacity": 0.9,
-              "line-width": 1.1,
+              "line-opacity": 1,
+              "line-width": 1.4,
             },
           });
           // Blue highlight for whichever plot is currently open in the
@@ -989,16 +1127,16 @@ export function ChainMap({
             type: "fill",
             source: "plots",
             filter: ["==", ["get", "PlotID"], "__none__"],
-            layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
-            paint: { "fill-color": "#2f6fed", "fill-opacity": 0.25 },
+            layout: { visibility: plotVis },
+            paint: { "fill-color": "#ffffff", "fill-opacity": 0.22 },
           });
           map.addLayer({
             id: "plots-selected-line",
             type: "line",
             source: "plots",
             filter: ["==", ["get", "PlotID"], "__none__"],
-            layout: { visibility: visibleRef.current.plots ? "visible" : "none" },
-            paint: { "line-color": "#2f6fed", "line-width": 3 },
+            layout: { visibility: plotVis },
+            paint: { "line-color": "#ffffff", "line-width": 3 },
           });
           ext(plots);
 
@@ -1024,10 +1162,10 @@ export function ChainMap({
             source: "mills",
             layout: { visibility: visibleRef.current.mills ? "visible" : "none" },
             paint: {
-              "circle-radius": ["case", ["==", ["get", "_id"], sel], 10, 7],
+              "circle-radius": ["case", ["==", ["get", "_id"], sel], 13, 10],
               "circle-color": millColorExpression(distinctRefineries),
-              "circle-stroke-width": 1.6,
-              "circle-stroke-color": "#1a2423",
+              "circle-stroke-width": ["case", ["==", ["get", "_id"], sel], 3, 1.6],
+              "circle-stroke-color": ["case", ["==", ["get", "_id"], sel], "#ffffff", HALO_COLOR],
             },
           });
           // A small factory glyph on top of the colored dot, so mill points
@@ -1040,7 +1178,7 @@ export function ChainMap({
             layout: {
               visibility: visibleRef.current.mills ? "visible" : "none",
               "icon-image": "mill-icon",
-              "icon-size": ["case", ["==", ["get", "_id"], sel], 0.55, 0.38],
+              "icon-size": ["case", ["==", ["get", "_id"], sel], 0.75, 0.6],
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
             },
@@ -1065,9 +1203,9 @@ export function ChainMap({
               "text-optional": true,
             },
             paint: {
-              "text-color": "#f4efe6",
-              "text-halo-color": "#1a2423",
-              "text-halo-width": 1.2,
+              "text-color": "#ffffff",
+              "text-halo-color": HALO_COLOR,
+              "text-halo-width": 1.4,
             },
           });
           ext(millGeom);
@@ -1117,8 +1255,9 @@ export function ChainMap({
         if (selAny) {
           fitBoundsClamped(map, selBounds, { padding: 80, minZoom: 8, maxZoom: 13 });
         } else if (any) {
-          fitBoundsClamped(map, bounds, { padding: 48, minZoom: 4, maxZoom: 9 });
+          fitBoundsClamped(map, bounds, { padding: 48, minZoom: 3, maxZoom: 9 });
         }
+        setMapReady((n) => n + 1);
       });
     })();
 
@@ -1129,7 +1268,58 @@ export function ChainMap({
       map?.remove();
       mapRef.current = null;
     };
-  }, [hasGeom, millGeom, areas, plots, forest, distinctRefineries]);
+  }, [hasGeom, millGeom, areas, plots, distinctRefineries]);
+
+  // The collapsed-map bug (feedback 2, B-02): MapLibre sizes its canvas once,
+  // at construction, and never again on its own — a map built while its tab
+  // was still laying out, or before the sidebar/dock settled, stayed at that
+  // first (often ~0px) height. A ResizeObserver on the container catches
+  // every later change: tab switch, group switch, language (longer strings
+  // reflow the panels), sidebar/dock toggles, full-map mode, window resize.
+  useEffect(() => {
+    const el = root.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ro = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => mapRef.current?.resize(), 150);
+    });
+    ro.observe(el);
+    return () => {
+      if (timer) clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, [hasGeom]);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => mapRef.current?.resize());
+    return () => cancelAnimationFrame(id);
+  }, [layoutKey]);
+
+  // JRC forest cover sits directly above the basemap, below every data
+  // layer. Added (or shown/hidden) here rather than in the mount effect so
+  // the ~20 MB file loading late — or being switched on later — never
+  // rebuilds the whole map and loses the camera.
+  useEffect(() => {
+    const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
+    if (!map || !mapReady) return;
+    if (forest && forest.features.length && !map.getSource("forest")) {
+      map.addSource("forest", { type: "geojson", data: forest as GeoJSON.GeoJSON });
+      const beforeId = ["areas-fill", "plots-fill", "plots-halo", "mills"].find((l) => map.getLayer(l));
+      map.addLayer(
+        {
+          id: "forest-fill",
+          type: "fill",
+          source: "forest",
+          layout: { visibility: forestOnRef.current ? "visible" : "none" },
+          paint: { "fill-color": FOREST_COLOR, "fill-opacity": 0.42 },
+        },
+        beforeId,
+      );
+    }
+    if (map.getLayer("forest-fill")) {
+      map.setLayoutProperty("forest-fill", "visibility", forestOn ? "visible" : "none");
+    }
+  }, [forest, forestOn, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1139,19 +1329,19 @@ export function ChainMap({
       map.setPaintProperty("plots-fill", "fill-opacity", [
         "case",
         ["==", ["get", "_id"], sel],
-        0.35,
-        0.18,
+        0.32,
+        0.2,
       ]);
     }
     if (map.getLayer("mills")) {
-      map.setPaintProperty("mills", "circle-radius", ["case", ["==", ["get", "_id"], sel], 10, 7]);
+      map.setPaintProperty("mills", "circle-radius", ["case", ["==", ["get", "_id"], sel], 13, 10]);
     }
     if (map.getLayer("mills-icon")) {
       map.setLayoutProperty("mills-icon", "icon-size", [
         "case",
         ["==", ["get", "_id"], sel],
-        0.55,
-        0.38,
+        0.75,
+        0.6,
       ]);
     }
   }, [selectedMillId]);
@@ -1203,8 +1393,9 @@ export function ChainMap({
     const map = mapRef.current;
     if (!map || !map.getLayer("plots-fill")) return;
     const expr = plotFilterExpression(plotFilters) as any;
-    map.setFilter("plots-fill", expr);
-    if (map.getLayer("plots-line")) map.setFilter("plots-line", expr);
+    for (const layer of ["plots-fill", "plots-halo", "plots-line"]) {
+      if (map.getLayer(layer)) map.setFilter(layer, expr);
+    }
   }, [plotFilters]);
 
   // Keeps the blue highlight layers matched to whichever plot is open in
@@ -1224,9 +1415,11 @@ export function ChainMap({
 
   // Basemap switch — live-swap the raster source's tiles instead of
   // map.setStyle(), which would wipe every custom layer added since load.
+  // Keyed on mapReady too, so a stored basemap that differs from the one
+  // the style was built with is still applied after a remount.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.loaded()) return;
+    if (!map || !mapReady) return;
     const mlMap = map as unknown as import("maplibre-gl").Map;
     setBasemap(mlMap, basemap);
     // Picking a dated layer while zoomed out past where it serves tiles
@@ -1234,7 +1427,7 @@ export function ChainMap({
     // shows) — ease in to the first zoom it covers.
     const minzoom = BASEMAPS[basemap].minzoom;
     if (minzoom != null && mlMap.getZoom() < minzoom) mlMap.easeTo({ zoom: minzoom, duration: 600 });
-  }, [basemap]);
+  }, [basemap, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1245,22 +1438,19 @@ export function ChainMap({
       map.setLayoutProperty("mills-label", "visibility", visible.mills ? "visible" : "none");
     }
     if (map.getLayer("plots-fill")) {
-      map.setLayoutProperty("plots-fill", "visibility", visible.plots ? "visible" : "none");
-      map.setLayoutProperty("plots-line", "visibility", visible.plots ? "visible" : "none");
-      map.setLayoutProperty("plots-selected-fill", "visibility", visible.plots ? "visible" : "none");
-      map.setLayoutProperty("plots-selected-line", "visibility", visible.plots ? "visible" : "none");
+      for (const layer of ["plots-fill", "plots-halo", "plots-line", "plots-selected-fill", "plots-selected-line"]) {
+        map.setLayoutProperty(layer, "visibility", visible.plots ? "visible" : "none");
+      }
     }
     if (map.getLayer("areas-fill")) {
       map.setLayoutProperty("areas-fill", "visibility", visible.areas ? "visible" : "none");
       map.setLayoutProperty("areas-line", "visibility", visible.areas ? "visible" : "none");
     }
-    if (map.getLayer("forest-fill")) {
-      map.setLayoutProperty("forest-fill", "visibility", visible.forest ? "visible" : "none");
-    }
   }, [visible]);
 
-  const entries = useMemo(() => legendEntries(colorBy, plots, labels), [colorBy, plots, labels]);
+  const entries = useMemo(() => legendEntries(colorBy, plots, labels, typeNames), [colorBy, plots, labels, typeNames]);
   const searchResults = useMemo(() => matchingPlots(plots, plotQuery), [plots, plotQuery]);
+  const hasPlots = !!plots && plots.features.length > 0;
 
   function selectSearchResult(feature: Fc["features"][number]) {
     const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
@@ -1302,7 +1492,7 @@ export function ChainMap({
       if (id) setSelectedPlot({ id, props: hit.properties ?? {} });
       return;
     }
-    const marker = new maplibregl.Marker({ color: "#9a3f32" })
+    const marker = new maplibregl.Marker({ color: "#1d1d1f" })
       .setLngLat(point)
       .setPopup(new maplibregl.Popup({ closeButton: true }).setText(labels.noPlotAtCoordinate))
       .addTo(map);
@@ -1321,24 +1511,35 @@ export function ChainMap({
     { key: "mitigation", label: labels.mitigation },
     { key: "type", label: labels.type },
   ];
+  const bm = BASEMAPS[basemap];
+  const datedWindow = bm.year === 2020 ? t.s2Window2020 : bm.year === 2026 ? t.s2Window2026 : "";
+  const millCount = millGeom?.features.length ?? 0;
 
   return (
     <div className="map-wrap">
       <div ref={root} className="map-root" />
+      {!tilesReady ? (
+        // A skeleton instead of a solid block of colour while the first
+        // basemap tiles arrive (feedback 2, §4.7).
+        <div className="map-skeleton" aria-live="polite">
+          <span className="spinner" aria-hidden="true" />
+          <span>{t.mapLoading.replace("{n}", formatCount(millCount, lang))}</span>
+        </div>
+      ) : null}
       <div className="map-panels">
-        <div className="map-find">
+        <div className="map-find map-card">
           <button
             type="button"
             className="map-layers-header"
             aria-expanded={findOpen}
-            onClick={() => setFindOpen((v) => !v)}
+            onClick={() => setFindOpen(!findOpen)}
           >
             <span>{labels.findTitle}</span>
             <span className={`nav-tree-chevron ${findOpen ? "open" : ""}`} aria-hidden="true" />
           </button>
           {findOpen ? (
             <div className="map-layers-body">
-              {plots && plots.features.length ? (
+              {hasPlots ? (
                 <div className="map-find-search">
                   <input
                     type="search"
@@ -1377,6 +1578,7 @@ export function ChainMap({
               >
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={coordInput}
                   onChange={(e) => {
                     setCoordInput(e.target.value);
@@ -1391,142 +1593,194 @@ export function ChainMap({
             </div>
           ) : null}
         </div>
-        <div className="map-layers">
+        <div className="map-layers map-card">
           <button
             type="button"
             className="map-layers-header"
             aria-expanded={panelOpen}
-            onClick={() => setPanelOpen((v) => !v)}
+            onClick={() => setPanelOpen(!panelOpen)}
           >
             <span>{labels.layersTitle}</span>
             <span className={`nav-tree-chevron ${panelOpen ? "open" : ""}`} aria-hidden="true" />
           </button>
           {panelOpen ? (
             <div className="map-layers-body">
-              <p className="map-layers-kicker">{labels.colorBy}</p>
-              <div className="map-color-by">
-                {colorByOptions.map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    className={colorBy === opt.key ? "on" : ""}
-                    onClick={() => setColorBy(opt.key)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <ul className="map-legend-list">
-                {entries.map((e) => {
-                  const set = plotFilters[colorBy];
-                  const isOn = !set || set.has(e.value);
-                  return (
-                    <li key={e.value}>
-                      <button
-                        type="button"
-                        className={`map-legend-item ${isOn ? "" : "off"}`}
-                        aria-pressed={isOn}
-                        onClick={() =>
-                          onPlotFiltersChange(
-                            toggleFilterValue(plotFilters, colorBy, e.value, filterUniverse(colorBy)),
-                          )
-                        }
-                      >
-                        <i className="swatch" style={{ background: e.color }} />
-                        <span>{e.label}</span>
-                        <b className="tabular-nums">{e.count.toLocaleString("id-ID")}</b>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              {isPlotFilterActive(plotFilters) ? (
-                <div className="map-filter-summary">
-                  <span>{labels.filtersActive.replace("{n}", String(activePlotFilterCount(plotFilters)))}</span>
-                  <button
-                    type="button"
-                    className="map-filter-clear"
-                    onClick={() => onPlotFiltersChange(EMPTY_PLOT_FILTERS)}
-                  >
-                    {labels.clearFilters}
-                  </button>
-                </div>
-              ) : null}
-              <label className="map-layer-toggle">
-                <input
-                  type="checkbox"
-                  checked={visible.plots}
-                  onChange={(ev) => setVisible((v) => ({ ...v, plots: ev.target.checked }))}
-                />
-                {labels.legendPlots}
-              </label>
-              <label className="map-layer-toggle">
-                <input
-                  type="checkbox"
-                  checked={visible.mills}
-                  onChange={(ev) => setVisible((v) => ({ ...v, mills: ev.target.checked }))}
-                />
-                {labels.legendMills}
-              </label>
-              {areas && areas.features.length ? (
+              {/* One group per question (feedback 2, Doc 2 §7): Earthline's
+                  own verdicts, the supply chain itself, and public EUDR
+                  context — never mixed in one toggle. */}
+              <section className="map-layer-group">
+                <p className="map-layers-kicker">{t.layerGroupAnalysis}</p>
                 <label className="map-layer-toggle">
                   <input
                     type="checkbox"
-                    checked={visible.areas}
-                    onChange={(ev) => setVisible((v) => ({ ...v, areas: ev.target.checked }))}
+                    checked={visible.plots}
+                    onChange={(ev) => setVisible((v) => ({ ...v, plots: ev.target.checked }))}
                   />
-                  {labels.legendAreas}
+                  {labels.legendPlots}
                 </label>
-              ) : null}
-              {forest && forest.features.length ? (
+                {hasPlots ? (
+                  <>
+                    <p className="map-layers-sub">{labels.colorBy}</p>
+                    <div className="map-color-by">
+                      {colorByOptions.map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          className={colorBy === opt.key ? "on" : ""}
+                          aria-pressed={colorBy === opt.key}
+                          onClick={() => setColorBy(opt.key)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <ul className="map-legend-list">
+                      {entries.map((e) => {
+                        const set = plotFilters[colorBy];
+                        const isOn = !set || set.has(e.value);
+                        return (
+                          <li key={e.value}>
+                            <button
+                              type="button"
+                              className={`map-legend-item ${isOn ? "" : "off"}`}
+                              aria-pressed={isOn}
+                              onClick={() =>
+                                onPlotFiltersChange(
+                                  toggleFilterValue(plotFilters, colorBy, e.value, filterUniverse(colorBy)),
+                                )
+                              }
+                            >
+                              <i className="swatch" style={{ background: e.color }} />
+                              <span>{e.label}</span>
+                              <b className="tabular-nums">{formatCount(e.count, lang)}</b>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {isPlotFilterActive(plotFilters) ? (
+                      <div className="map-filter-summary">
+                        <span>{labels.filtersActive.replace("{n}", String(activePlotFilterCount(plotFilters)))}</span>
+                        <button
+                          type="button"
+                          className="map-filter-clear"
+                          onClick={() => onPlotFiltersChange(EMPTY_PLOT_FILTERS)}
+                        >
+                          {labels.clearFilters}
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  // No mill selected yet — plots load per mill, so the legend
+                  // would read "Compliant 0 · Non-compliant 0" next to a
+                  // summary of a million plots (feedback 2, B-03). Say what
+                  // to do instead.
+                  <p className="map-layers-hint">{plotsLoading ? t.loadingPlots : t.selectMillForPlots}</p>
+                )}
+              </section>
+
+              <section className="map-layer-group">
+                <p className="map-layers-kicker">{t.layerGroupChain}</p>
                 <label className="map-layer-toggle">
                   <input
                     type="checkbox"
-                    checked={visible.forest}
-                    onChange={(ev) => setVisible((v) => ({ ...v, forest: ev.target.checked }))}
+                    checked={visible.mills}
+                    onChange={(ev) => setVisible((v) => ({ ...v, mills: ev.target.checked }))}
+                  />
+                  {labels.legendMills}
+                  <b className="tabular-nums">{formatCount(millCount, lang)}</b>
+                </label>
+                {areas && areas.features.length ? (
+                  <label className="map-layer-toggle">
+                    <input
+                      type="checkbox"
+                      checked={visible.areas}
+                      onChange={(ev) => setVisible((v) => ({ ...v, areas: ev.target.checked }))}
+                    />
+                    {labels.legendAreas}
+                  </label>
+                ) : null}
+                {distinctRefineries.length > 1 ? (
+                  <>
+                    <p className="map-layers-sub">{labels.millsByRefinery}</p>
+                    <ul className="map-legend-list">
+                      {distinctRefineries.map((r) => (
+                        <li key={r} className="map-legend-static">
+                          <i
+                            className="swatch round"
+                            style={{ background: refineryColorFor(r, distinctRefineries) }}
+                          />
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </section>
+
+              <section className="map-layer-group">
+                <p className="map-layers-kicker">{t.layerGroupContext}</p>
+                <label className="map-layer-toggle">
+                  <input
+                    type="checkbox"
+                    checked={forestOn}
+                    onChange={(ev) => onForestOnChange(ev.target.checked)}
                   />
                   <i className="swatch" style={{ background: FOREST_COLOR }} />
                   {labels.legendForest}
+                  {forestLoading ? <span className="spinner small" aria-hidden="true" /> : null}
                 </label>
-              ) : null}
-              {distinctRefineries.length > 1 ? (
-                <>
-                  <p className="map-layers-kicker">{labels.millsByRefinery}</p>
-                  <ul className="map-legend-list">
-                    {distinctRefineries.map((r) => (
-                      <li key={r}>
-                        <i
-                          className="swatch"
-                          style={{ background: refineryColorFor(r, distinctRefineries) }}
-                        />
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-              <p className="map-layers-kicker">{labels.basemap}</p>
-              <div className="map-color-by">
-                {(Object.keys(BASEMAPS) as BasemapId[]).map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={basemap === id ? "on" : ""}
-                    onClick={() => setBasemapState(id)}
-                  >
-                    {BASEMAPS[id].label}
-                  </button>
-                ))}
-              </div>
-              {BASEMAPS[basemap].year ? (
-                <p className="map-layers-note">
-                  {labels.basemapDatedNote.replaceAll("{year}", String(BASEMAPS[basemap].year))}
-                </p>
-              ) : null}
+                <p className="map-layers-note">{t.jrcNote.replace("{version}", JRC_LAYER.version)}</p>
+              </section>
             </div>
           ) : null}
         </div>
       </div>
+
+      {/* Always-visible basemap chip (feedback 2, Doc 2 §4.1) — the switcher
+          used to live at the bottom of the Layers panel and vanished
+          whenever that collapsed. */}
+      <div className="basemap-chip">
+        {basemapMenuOpen ? (
+          <div className="basemap-menu" role="menu">
+            {BASEMAP_ORDER.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={basemap === id}
+                className={basemap === id ? "on" : ""}
+                onClick={() => {
+                  setBasemapState(id);
+                  setBasemapMenuOpen(false);
+                }}
+              >
+                {BASEMAPS[id].label}
+              </button>
+            ))}
+            {datedWindow ? (
+              <p className="map-layers-note">{labels.basemapDatedNote.replace("{window}", datedWindow)}</p>
+            ) : null}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className="basemap-chip-btn"
+          aria-haspopup="menu"
+          aria-expanded={basemapMenuOpen}
+          onClick={() => setBasemapMenuOpen((v) => !v)}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M12 3 2 8l10 5 10-5-10-5zM2 13l10 5 10-5" strokeLinejoin="round" />
+          </svg>
+          <span className="basemap-chip-label">
+            <small>{labels.basemap}</small>
+            {bm.label}
+          </span>
+        </button>
+      </div>
+
       {selectedPlot ? (
         <PlotDetailDeck
           // Remounts (resetting back to slide 1) whenever the selected plot
@@ -1535,8 +1789,9 @@ export function ChainMap({
           // treats re-clicking the *same* plot as toggling closed, so this
           // key only ever changes for a genuinely different plot.
           key={selectedPlot.id}
-          detail={buildPlotDetail(selectedPlot.props, labels)}
+          detail={buildPlotDetail(selectedPlot.props, labels, lang, typeNames)}
           labels={labels}
+          lang={lang}
           onClose={() => setSelectedPlot(null)}
         />
       ) : null}
@@ -1551,10 +1806,12 @@ export function ChainMap({
 function PlotDetailDeck({
   detail,
   labels,
+  lang,
   onClose,
 }: {
   detail: PlotDetail;
   labels: ChainMapLabels;
+  lang: Lang;
   onClose: () => void;
 }) {
   // Slide 2 only ever exists for a non-compliant plot with actual detail to
@@ -1565,7 +1822,7 @@ function PlotDetailDeck({
   const showDetailSlide = slide === 2 && detail.nonComplyDetail;
 
   return (
-    <div className="plot-detail">
+    <div className="plot-detail map-card" role="dialog" aria-label={detail.title}>
       <div className="plot-detail-header">
         <span className="truncate">{detail.title}</span>
         <button type="button" className="plot-detail-close" aria-label={labels.close} onClick={onClose}>
@@ -1590,7 +1847,7 @@ function PlotDetailDeck({
               {detail.nonComplyDetail.deforestationByYear.map((d) => (
                 <div className="plot-detail-row" key={d.year}>
                   <span>{d.year}</span>
-                  <b>{haShort(d.ha)} ha</b>
+                  <b>{formatHa(d.ha, lang)}</b>
                 </div>
               ))}
             </div>
@@ -1601,7 +1858,7 @@ function PlotDetailDeck({
               {detail.nonComplyDetail.overlapBreakdown.map((o) => (
                 <div className="plot-detail-row" key={o.label}>
                   <span>{o.label}</span>
-                  <b>{haShort(o.ha)} ha</b>
+                  <b>{formatHa(o.ha, lang)}</b>
                 </div>
               ))}
             </div>

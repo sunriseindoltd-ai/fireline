@@ -24,3 +24,6 @@ private-data/plots
 attachments
 artifacts
 screenshots
+
+# Per-tenant plot files — served from R2 under tenants/<id>/plots/.
+private-data/tenants/*/plots

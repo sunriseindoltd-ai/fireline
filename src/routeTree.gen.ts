@@ -10,18 +10,80 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as AppRouteRouteImport } from './routes/app/route'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as KontakRouteImport } from './routes/kontak'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MethodRouteImport } from './routes/method'
+import { Route as MetodologiRouteImport } from './routes/metodologi'
+import { Route as TentangRouteImport } from './routes/tentang'
+import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppPortfolioRouteImport } from './routes/app/portfolio'
+import { Route as CoverageIndexRouteImport } from './routes/coverage/index'
 import { Route as DataSplatRouteImport } from './routes/data/$'
 import { Route as EudrSummaryIndexRouteImport } from './routes/eudr-summary/index'
+import { Route as AppGroupIndexRouteImport } from './routes/app/$group/index'
+import { Route as AppGroupDataRouteImport } from './routes/app/$group/data'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRouteRoute = AppRouteRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KontakRoute = KontakRouteImport.update({
+  id: '/kontak',
+  path: '/kontak',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MethodRoute = MethodRouteImport.update({
+  id: '/method',
+  path: '/method',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MetodologiRoute = MetodologiRouteImport.update({
+  id: '/metodologi',
+  path: '/metodologi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TentangRoute = TentangRouteImport.update({
+  id: '/tentang',
+  path: '/tentang',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppPortfolioRoute = AppPortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const CoverageIndexRoute = CoverageIndexRouteImport.update({
+  id: '/coverage/',
+  path: '/coverage/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DataSplatRoute = DataSplatRouteImport.update({
@@ -34,38 +96,139 @@ const EudrSummaryIndexRoute = EudrSummaryIndexRouteImport.update({
   path: '/eudr-summary/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppGroupIndexRoute = AppGroupIndexRouteImport.update({
+  id: '/$group/',
+  path: '/$group/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppGroupDataRoute = AppGroupDataRouteImport.update({
+  id: '/$group/data',
+  path: '/$group/data',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteRouteWithChildren
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/kontak': typeof KontakRoute
   '/login': typeof LoginRoute
+  '/method': typeof MethodRoute
+  '/metodologi': typeof MetodologiRoute
+  '/tentang': typeof TentangRoute
+  '/app/portfolio': typeof AppPortfolioRoute
   '/data/$': typeof DataSplatRoute
+  '/app/': typeof AppIndexRoute
+  '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
+  '/app/$group/data': typeof AppGroupDataRoute
+  '/app/$group/': typeof AppGroupIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/kontak': typeof KontakRoute
   '/login': typeof LoginRoute
+  '/method': typeof MethodRoute
+  '/metodologi': typeof MetodologiRoute
+  '/tentang': typeof TentangRoute
+  '/app/portfolio': typeof AppPortfolioRoute
   '/data/$': typeof DataSplatRoute
+  '/app': typeof AppIndexRoute
+  '/coverage': typeof CoverageIndexRoute
   '/eudr-summary': typeof EudrSummaryIndexRoute
+  '/app/$group/data': typeof AppGroupDataRoute
+  '/app/$group': typeof AppGroupIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteRouteWithChildren
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/kontak': typeof KontakRoute
   '/login': typeof LoginRoute
+  '/method': typeof MethodRoute
+  '/metodologi': typeof MetodologiRoute
+  '/tentang': typeof TentangRoute
+  '/app/portfolio': typeof AppPortfolioRoute
   '/data/$': typeof DataSplatRoute
+  '/app/': typeof AppIndexRoute
+  '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
+  '/app/$group/data': typeof AppGroupDataRoute
+  '/app/$group/': typeof AppGroupIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/data/$' | '/eudr-summary/'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/about'
+    | '/contact'
+    | '/kontak'
+    | '/login'
+    | '/method'
+    | '/metodologi'
+    | '/tentang'
+    | '/app/portfolio'
+    | '/data/$'
+    | '/app/'
+    | '/coverage/'
+    | '/eudr-summary/'
+    | '/app/$group/data'
+    | '/app/$group/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/data/$' | '/eudr-summary'
-  id: '__root__' | '/' | '/login' | '/data/$' | '/eudr-summary/'
+  to:
+    | '/'
+    | '/about'
+    | '/contact'
+    | '/kontak'
+    | '/login'
+    | '/method'
+    | '/metodologi'
+    | '/tentang'
+    | '/app/portfolio'
+    | '/data/$'
+    | '/app'
+    | '/coverage'
+    | '/eudr-summary'
+    | '/app/$group/data'
+    | '/app/$group'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/about'
+    | '/contact'
+    | '/kontak'
+    | '/login'
+    | '/method'
+    | '/metodologi'
+    | '/tentang'
+    | '/app/portfolio'
+    | '/data/$'
+    | '/app/'
+    | '/coverage/'
+    | '/eudr-summary/'
+    | '/app/$group/data'
+    | '/app/$group/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRouteRoute: typeof AppRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
+  ContactRoute: typeof ContactRoute
+  KontakRoute: typeof KontakRoute
   LoginRoute: typeof LoginRoute
+  MethodRoute: typeof MethodRoute
+  MetodologiRoute: typeof MetodologiRoute
+  TentangRoute: typeof TentangRoute
   DataSplatRoute: typeof DataSplatRoute
+  CoverageIndexRoute: typeof CoverageIndexRoute
   EudrSummaryIndexRoute: typeof EudrSummaryIndexRoute
 }
 
@@ -78,11 +241,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kontak': {
+      id: '/kontak'
+      path: '/kontak'
+      fullPath: '/kontak'
+      preLoaderRoute: typeof KontakRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/method': {
+      id: '/method'
+      path: '/method'
+      fullPath: '/method'
+      preLoaderRoute: typeof MethodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/metodologi': {
+      id: '/metodologi'
+      path: '/metodologi'
+      fullPath: '/metodologi'
+      preLoaderRoute: typeof MetodologiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tentang': {
+      id: '/tentang'
+      path: '/tentang'
+      fullPath: '/tentang'
+      preLoaderRoute: typeof TentangRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/portfolio': {
+      id: '/app/portfolio'
+      path: '/portfolio'
+      fullPath: '/app/portfolio'
+      preLoaderRoute: typeof AppPortfolioRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/coverage/': {
+      id: '/coverage/'
+      path: '/coverage'
+      fullPath: '/coverage/'
+      preLoaderRoute: typeof CoverageIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/data/$': {
@@ -99,13 +332,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EudrSummaryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/$group/': {
+      id: '/app/$group/'
+      path: '/$group'
+      fullPath: '/app/$group/'
+      preLoaderRoute: typeof AppGroupIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/$group/data': {
+      id: '/app/$group/data'
+      path: '/$group/data'
+      fullPath: '/app/$group/data'
+      preLoaderRoute: typeof AppGroupDataRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
   }
 }
 
+interface AppRouteRouteChildren {
+  AppPortfolioRoute: typeof AppPortfolioRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppGroupDataRoute: typeof AppGroupDataRoute
+  AppGroupIndexRoute: typeof AppGroupIndexRoute
+}
+
+const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppPortfolioRoute: AppPortfolioRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppGroupDataRoute: AppGroupDataRoute,
+  AppGroupIndexRoute: AppGroupIndexRoute,
+}
+
+const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
+  AppRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRouteRoute: AppRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
+  ContactRoute: ContactRoute,
+  KontakRoute: KontakRoute,
   LoginRoute: LoginRoute,
+  MethodRoute: MethodRoute,
+  MetodologiRoute: MetodologiRoute,
+  TentangRoute: TentangRoute,
   DataSplatRoute: DataSplatRoute,
+  CoverageIndexRoute: CoverageIndexRoute,
   EudrSummaryIndexRoute: EudrSummaryIndexRoute,
 }
 export const routeTree = rootRouteImport

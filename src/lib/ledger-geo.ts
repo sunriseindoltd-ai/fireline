@@ -154,15 +154,46 @@ export const ISSUE_DESCRIPTIONS: Record<string, string> = {
   "Community Forest": "Overlaps recognized Community Forest",
 };
 
+/** Indonesian counterparts of the two tables above — same keys. */
+export const MITIGATION_DESCRIPTIONS_ID: Record<string, string> = {
+  A: "Patuh — area risiko rendah; disetujui untuk pengajuan",
+  B: "Patuh — area risiko sedang; disetujui dengan pemantauan rutin",
+  C: "Patuh — area risiko tinggi; disetujui dengan pemantauan ketat",
+  D: "Tidak patuh — area risiko rendah; menunggu tinjauan geospasial",
+  E: "Tidak patuh — area risiko sedang; perlu mitigasi sebelum pengajuan",
+  F: "Tidak patuh — area risiko tinggi; tidak disetujui untuk pengajuan",
+};
+
+export const ISSUE_DESCRIPTIONS_ID: Record<string, string> = {
+  Deforestation: "Deforestasi terdeteksi setelah cutoff 2020",
+  HL: "HL — Hutan Lindung",
+  HP: "HP — Hutan Produksi",
+  HPK: "HPK — Hutan Produksi Konversi",
+  HPT: "HPT — Hutan Produksi Terbatas",
+  KSA_KPA: "KSA/KPA — Kawasan Suaka Alam / Pelestarian Alam",
+  TWA: "TWA — Taman Wisata Alam",
+  TN: "TN — Taman Nasional",
+  "Indigenous Forest": "Tumpang tindih dengan hutan adat yang diakui",
+  "Community Forest": "Tumpang tindih dengan hutan kemasyarakatan yang diakui",
+};
+
+export function mitigationText(letter: string, lang: "en" | "id"): string | undefined {
+  return (lang === "id" ? MITIGATION_DESCRIPTIONS_ID : MITIGATION_DESCRIPTIONS)[letter];
+}
+
+export function issueText(code: string, lang: "en" | "id"): string {
+  return (lang === "id" ? ISSUE_DESCRIPTIONS_ID : ISSUE_DESCRIPTIONS)[code] ?? code;
+}
+
 /** "HP, HPK" -> "HP — Hutan Produksi (Production Forest); HPK — Hutan Produksi Konversi (...)" */
-export function describeNonComplyIssue(descIssue: unknown): string {
+export function describeNonComplyIssue(descIssue: unknown, lang: "en" | "id" = "en"): string {
   const raw = String(descIssue ?? "").trim();
   if (!raw) return "";
   return raw
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean)
-    .map((part) => ISSUE_DESCRIPTIONS[part] ?? part)
+    .map((part) => issueText(part, lang))
     .join("; ");
 }
 
@@ -206,6 +237,67 @@ function hectarage(props: Record<string, unknown> | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+const DEF_YEAR_KEYS = ["Def_21", "Def_22", "Def_23", "Def_24", "Def_25", "Def_26"];
+// Every other forest-category/social overlap flag a plot can carry besides
+// deforestation — mirrors eudr-aggregates.server.ts's forestOverlap fields
+// plus the Community_F/Indigenous_F/Social_F columns eudr-summary.tsx reads.
+const NON_DEFORESTATION_ISSUE_KEYS = [
+  "HL",
+  "HP",
+  "HPK",
+  "HPT",
+  "CA",
+  "FL_LAIN",
+  "KSA_KPA",
+  "SM",
+  "TAHURA",
+  "TB",
+  "TN",
+  "TWA",
+  "Community_F",
+  "Indigenous_F",
+  "Social_F",
+];
+// BNS-only: cross-checking BNS's own delivered per-plot deforestation
+// figures found 92.5% of the nonzero Def_21..Def_26 values are under 0.5ha —
+// sub-hectare, almost certainly satellite-resolution noise rather than real
+// land-clearing. Per stakeholder decision, a BNS plot whose *only* issue is
+// deforestation under this threshold (no genuine forest-category/social
+// overlap) is treated as compliant instead of inheriting the delivered
+// data's flat "any nonzero year disqualifies it" rule. Scoped to group ===
+// "BNS" only — every other group's EUDR_Comply/Risk_Mitigation_Class is left
+// exactly as delivered. Mirrored in scripts/prepare-eudr-stats.mjs.
+const BNS_DEFORESTATION_NOISE_THRESHOLD_HA = 0.5;
+
+function bnsHasRealIssue(props: Record<string, unknown> | null | undefined): boolean {
+  if (NON_DEFORESTATION_ISSUE_KEYS.some((k) => Number(props?.[k] ?? 0) > 0)) return true;
+  return DEF_YEAR_KEYS.some((k) => Number(props?.[k] ?? 0) >= BNS_DEFORESTATION_NOISE_THRESHOLD_HA);
+}
+
+const BNS_MITIGATION_DOWNGRADE: Record<string, string> = { D: "A", E: "B", F: "C" };
+
+/** `normComply`, adjusted for BNS's deforestation-noise threshold (see above). */
+function effectiveComply(
+  props: Record<string, unknown> | null | undefined,
+  group: string | undefined,
+): "yes" | "no" | "" {
+  const raw = normComply(props);
+  if (raw !== "no" || group !== "BNS") return raw;
+  return bnsHasRealIssue(props) ? "no" : "yes";
+}
+
+/** `normMitigation`, adjusted for BNS's deforestation-noise threshold (see above). */
+function effectiveMitigation(
+  props: Record<string, unknown> | null | undefined,
+  group: string | undefined,
+): string {
+  const letter = normMitigation(props);
+  if (group !== "BNS") return letter;
+  const downgrade = BNS_MITIGATION_DOWNGRADE[letter];
+  if (!downgrade) return letter;
+  return bnsHasRealIssue(props) ? letter : downgrade;
+}
+
 export function decoratePlots(fc: Fc | null, mills: MillRecord[]): Fc | null {
   if (!fc) return null;
   return {
@@ -219,9 +311,9 @@ export function decoratePlots(fc: Fc | null, mills: MillRecord[]): Fc | null {
           _trace: mill?.traceability ?? "unknown",
           _mill: mill?.millName ?? "",
           _id: mill?.id ?? "",
-          _comply: normComply(f.properties),
+          _comply: effectiveComply(f.properties, mill?.group),
           _risk: normRisk(f.properties),
-          _mitigation: normMitigation(f.properties),
+          _mitigation: effectiveMitigation(f.properties, mill?.group),
           _location: locationText(f.properties),
           _hectarage: hectarage(f.properties),
         },
@@ -255,11 +347,24 @@ export function decorateMillGeom(fc: Fc | null, mills: MillRecord[]): Fc | null 
  * coordinates are skipped; a separately uploaded "Mill locations" GeoJSON
  * can still cover those (see `mergeMillPoints`).
  */
+/**
+ * Whether a mill's master-list coordinates are usable. 0,0 ("Null Island",
+ * in the Gulf of Guinea) is what an empty coordinate cell becomes in the
+ * source sheet — it put an SJIM mill "in Africa" (ADM feedback 1, point 4) —
+ * so it counts as missing, like a blank.
+ */
+export function hasCoords(m: Pick<MillRecord, "lat" | "lon">): boolean {
+  if (typeof m.lat !== "number" || typeof m.lon !== "number") return false;
+  if (!Number.isFinite(m.lat) || !Number.isFinite(m.lon)) return false;
+  if (m.lat === 0 && m.lon === 0) return false;
+  return Math.abs(m.lat) <= 90 && Math.abs(m.lon) <= 180;
+}
+
 export function millPointsFromMaster(mills: MillRecord[]): Fc {
   return {
     type: "FeatureCollection",
     features: mills
-      .filter((m) => typeof m.lat === "number" && typeof m.lon === "number")
+      .filter(hasCoords)
       .map((m) => ({
         type: "Feature",
         properties: { _trace: m.traceability, _mill: m.millName, _id: m.id, _refinery: m.refinery },

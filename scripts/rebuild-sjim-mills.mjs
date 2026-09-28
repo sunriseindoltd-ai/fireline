@@ -109,7 +109,9 @@ async function main() {
     // Neither Data B nor UML.xlsx carry traceability or port at all, so an
     // unmatched-to-A mill is honestly left "unknown"/blank rather than
     // guessed — same contract classifyTrace("") already returns.
-    const port = aRow ? trimmed(aRow["PORT"]) : "";
+    // Every SJIM mill ships via Panjang (user instruction, 2026-09-24) —
+    // overrides Data A's per-mill PORT, which was blank for 71 of them.
+    const port = "Panjang";
     // Data B's own Parent Name wins whenever it has one — Data A/UML.xlsx
     // only fill in Group Name, which Data B has no equivalent column for.
     const parentCompany = trimmed(r["Mills Parent Name"]);

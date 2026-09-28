@@ -26,14 +26,16 @@ export const Route = createFileRoute("/eudr-summary/")({
         let scopedMillIds = millIds;
         if (scope) {
           const { loadMills } = await import("@/lib/kanopi-data.server");
-          const mills = await loadMills();
+          const mills = await loadMills(session.tenant);
           const allowed = new Set(
             mills.filter((m) => millInScope(m, scope)).map((m) => m.id),
           );
           scopedMillIds = millIds.filter((id) => allowed.has(id));
         }
         const { getEudrSummary } = await import("@/lib/eudr-aggregates.server");
-        const summary = await getEudrSummary(scopedMillIds);
+        // Stats are per tenant, so an id from another client's roster simply
+        // has no entry here and contributes nothing.
+        const summary = await getEudrSummary(session.tenant, scopedMillIds);
         return new Response(JSON.stringify(summary), {
           headers: { "content-type": "application/json; charset=utf-8" },
         });

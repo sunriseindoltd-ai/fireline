@@ -2,77 +2,45 @@
 
 ## Radius
 
-Konsentris: kartu luar lebih besar dari kontrol di dalamnya.
-
 | Token | px | Pakai |
 | --- | --- | --- |
-| `--radius-sm` | 8 | Input, tombol drop, baris rantai |
-| `--radius-md` | 12 | Statistik, drop zone, tombol Sign in |
-| `--radius-lg` | 20 | — |
-| `--radius-xl` | 28 | Kartu login (`padding` 32 → 8+24) |
-| `999px` | pill | Chip, toggle bahasa, Sign out, filter All/Village/Buffer |
+| `--radius-sm` | 8 | Kontrol kecil, baris legend |
+| `--radius-md` | 12 | Input, kartu peta, baris daftar |
+| `--radius-lg` | 18 | Kartu KPI, chart, tabel |
+| `--radius-xl` | 28 | Citra hero, tile bento, kartu langkah |
+| `999px` | pill | Semua tombol, tab, toggle bahasa, status |
 
-## Login
+## Situs publik (Layer 1)
 
-- Latar: `public/login-bg.jpg`, `cover`, `center right`.
-- Kartu putih, tanpa teks “session lasts 12 hours”.
-- Mark 32px + wordmark Plex 600.
-- Tidak menampilkan petunjuk ID/password di UI.
+`src/routes/index.tsx`, `method.tsx`, `about.tsx`, `contact.tsx`; chrome di `src/components/site/site-chrome.tsx`, citra hero di `src/components/site/hero-media.tsx`.
 
-File: `src/routes/login.tsx`, kelas `.login-shell` / `.login-card`.
+- Header putih tipis: mark + PalmTrace · Produk · Cara kerja · Metodologi · Tentang · Kontak · bahasa · "Masuk" (teks) · **Early Access** (pill hitam → `/contact?early=1`).
+- Urutan beranda: hero → bukti → masalah + **showcase produk** (`product-showcase.tsx`) → 3 langkah → bento → untuk siapa (dengan pratinjau) → dibanding cara biasa → FAQ → produk lain Earthline → CTA.
+- Citra: `public/img/field-2020.jpg` / `field-2026.jpg` — Sentinel-2 dengan outline plot asli (satu PKS, hanya plot patuh, tanpa nama/lokasi). Slider `compare-slider.tsx`.
+- Layar showcase: `public/img/showcase/*-{en,id}.jpg`, dibuat oleh `scripts/capture-showcase.mjs` (dev server; nama/angka/ID/koordinat diganti; gagal bila ada kebocoran). Jalankan ulang setiap UI workspace berubah.
+- Metodologi: isi di `src/lib/method-copy.ts` (dari dokumen EL Response, tanpa nama klien/nomor SOP/bobot).
+- Dilarang di publik: angka portofolio, nama grup klien, "AI" sebagai subjek headline.
 
-## Mark
+## Login (Layer 2)
 
-Komponen [`src/components/brand-mark.tsx`](../../src/components/brand-mark.tsx) memuat `/kanopi-mark.svg`.
+Split: citra satelit di kiri (disembunyikan di HP), form di kanan. Tampil/sembunyikan sandi; sandi tidak dikosongkan saat gagal; `?next=` hanya `/app…`.
 
-- Login: 32px
-- Header ledger: 28px
-- Tab: `/favicon.svg`
+## Workspace (Layer 3)
 
-Jangan ganti lagi dengan blob CSS (setengah lingkaran diputar) milik draft.
-
-## Ledger (setelah masuk)
-
-Header cream, wordmark + EarthLine, tick intake (Master / Areas / Plots / Points), EN|ID, Sign out.
-
-Kiri: statistik 3 kolom, daftar rantai, empat drop zone bernomor.
-
-Kanan: peta satellite (MapLibre, Esri imagery) atau empty state serif-free; dock tabel di bawah.
-
-Empty state adalah produk: ledger memang kosong sampai atmin mengunggah master Excel.
-
-## Intake
-
-1. Mill master — `.xlsx` / `.csv` (parser di `src/lib/xlsx-lite.ts`, tanpa paket `xlsx`)
-2. Traceability areas — GeoJSON desa atau buffer 20 km
-3. Plot inventory — GeoJSON, join UML / NodeID
-4. Mill locations — titik, opsional
-
-Kolom master: lihat templat unduhan. `TRACEABILITY LEVEL` (`Village Level` / `Buffer 20KM`) menentukan saringan peta dan chip.
-
-## Chip & filter
-
-- Village → `.chip.ok` (foam + teal)
-- Buffer 20 km → `.chip.warn` (amber)
-- Retired → `.chip.bad`
-- Segmented control All / Village / Buffer 20 km menyaring **tabel dan geometri** sekaligus
+- **Header** (tanpa sidebar): mark · `/` · **pemilih grup** (`scope-switcher.tsx`, bisa dicari, menampilkan jumlah PKS berplot) · tab Ringkasan / Peta & data · Present · bahasa · Keluar.
+- **Portofolio** (`portfolio-view.tsx`): KPI + **sankey** (`portfolio-sankey.tsx`, grup → kilang → ketertelusuran/cakupan; hover menyorot jalur, klik membuka) + tabel grup yang bisa diurutkan.
+- **Ringkasan**: KPI Patuh EUDR dan irisan "Tidak patuh" bisa diklik → kartu "Di mana plot tidak patuh?" → `/app/<grup>/data?mill=…&plots=noncomply`.
+- **Ringkasan**: judul grup, pemilih kilang, tombol ke peta, KPI bertooltip, grid chart. Grup tanpa plot → empty state.
+- **Peta & data**: peta lebar + **panel kanan** 380px.
+  - Tanpa PKS terpilih: daftar PKS (cari, filter ketertelusuran, pemilih kilang; titik hijau = berplot).
+  - PKS terpilih: identitas, KPI ringkas, tombol **Buka tabel plot** (laci bawah di atas peta, bisa ditarik), fakta, unduhan CSV/GeoJSON.
+  - Tombol peta penuh di pojok kanan atas peta.
+- Di ≤860px: header membungkus tab ke baris kedua, panel pindah ke bawah peta, panel Layer mulai tertutup.
 
 ## Peta
 
-`src/components/chain-map.tsx`. MapLibre di-import dinamis (aman SSR). Warna fill/stroke harus selaras [warna.md](./warna.md). Legenda overlay: Village boundary, Buffer 20 km, Plots, Mills.
+`src/components/chain-map.tsx`. Kartu overlay putih semi-transparan. `ResizeObserver` pada kontainer — jangan dihapus (perbaikan bug peta 240px). Esri dibatasi `maxzoom: 17` (lebih dari itu tile abu). Ikon PKS digambar dengan path canvas, bukan emoji.
 
 ## Gerak
 
-Transisi pendek di hover/fokus. Hormati `prefers-reduced-motion` (sudah di `styles.css`). Jangan `transition: all`.
-
-## File kunci
-
-| Apa | Di mana |
-| --- | --- |
-| Token | `src/styles.css` |
-| Salinan EN/ID | `src/lib/copy.ts` |
-| Login | `src/routes/login.tsx` |
-| Workspace | `src/components/workspace.tsx` |
-| Mark | `public/kanopi-mark.svg`, `src/components/brand-mark.tsx` |
-| Favicon | `public/favicon.svg` |
-| Latar login | `public/login-bg.jpg` |
+150–200 ms, hanya opacity/transform. Hormati `prefers-reduced-motion`.

@@ -70,21 +70,50 @@ function emptyStats() {
   };
 }
 
+// Every other forest-category/social overlap flag a plot can carry besides
+// deforestation — mirrors this file's own forestOverlap fields plus the
+// Community_F/Indigenous_F/Social_F columns eudr-summary.tsx reads.
+const NON_DEFORESTATION_ISSUE_KEYS = [
+  "HL", "HP", "HPK", "HPT", "CA", "FL_LAIN", "KSA_KPA", "SM", "TAHURA", "TB", "TN", "TWA",
+  "Community_F", "Indigenous_F", "Social_F",
+];
+// BNS-only: cross-checking BNS's own delivered per-plot deforestation
+// figures found 92.5% of the nonzero Def_21..Def_26 values are under 0.5ha —
+// sub-hectare, almost certainly satellite-resolution noise rather than real
+// land-clearing. Per stakeholder decision, a BNS plot whose *only* issue is
+// deforestation under this threshold (no genuine forest-category/social
+// overlap) is counted as compliant here instead of inheriting the delivered
+// data's flat "any nonzero year disqualifies it" rule. Scoped to the BNS
+// group only — every other group's EUDR_Comply/Risk_Mitigation_Class is
+// counted exactly as delivered. Mirrored in src/lib/ledger-geo.ts
+// (effectiveComply/effectiveMitigation), which does the same for the
+// per-plot map/table/detail-panel display.
+const BNS_DEFORESTATION_NOISE_THRESHOLD_HA = 0.5;
+const BNS_MITIGATION_DOWNGRADE = { D: "A", E: "B", F: "C" };
+
+function bnsHasRealIssue(p) {
+  if (NON_DEFORESTATION_ISSUE_KEYS.some((k) => num(p[k]) > 0)) return true;
+  return DEF_YEARS.some(([col]) => num(p[col]) >= BNS_DEFORESTATION_NOISE_THRESHOLD_HA);
+}
+
 // Matches src/lib/eudr-aggregates.server.ts's getEudrSummary per-feature
-// accumulation exactly.
-function accumulate(stats, p) {
+// accumulation exactly (modulo the BNS-only adjustment above).
+function accumulate(stats, p, isBns) {
   stats.totalPlots += 1;
   const ha = hectarage(p);
   stats.totalAreaHa += ha;
 
-  if (p.EUDR_Comply === "YES") stats.comply.yes += 1;
+  const bnsAdjustedNo = isBns && p.EUDR_Comply === "NO" && !bnsHasRealIssue(p);
+
+  if (p.EUDR_Comply === "YES" || bnsAdjustedNo) stats.comply.yes += 1;
   else if (p.EUDR_Comply === "NO") stats.comply.no += 1;
 
   if (p.Overall_Risk === "Low Risk") stats.risk.low += 1;
   else if (p.Overall_Risk === "Medium Risk") stats.risk.medium += 1;
   else if (p.Overall_Risk === "High Risk") stats.risk.high += 1;
 
-  const mitLetter = String(p.Risk_Mitigation_Class ?? "").trim().charAt(0).toUpperCase();
+  let mitLetter = String(p.Risk_Mitigation_Class ?? "").trim().charAt(0).toUpperCase();
+  if (bnsAdjustedNo && BNS_MITIGATION_DOWNGRADE[mitLetter]) mitLetter = BNS_MITIGATION_DOWNGRADE[mitLetter];
   if (MITIGATION_LETTERS.includes(mitLetter)) {
     stats.mitigation[mitLetter].count += 1;
     stats.mitigation[mitLetter].areaHa += ha;
@@ -105,7 +134,12 @@ function accumulate(stats, p) {
 }
 
 async function main() {
-  const plotsDir = path.join(ROOT, "private-data", "plots");
+  // `--tenant brc` builds another client's stats from its own plot folder
+  // (private-data/tenants/<id>/); without it, ADM's at the root as before.
+  const tIdx = process.argv.indexOf("--tenant");
+  const tenant = tIdx >= 0 ? process.argv[tIdx + 1] : "adm";
+  const tenantDir = tenant === "adm" ? path.join(ROOT, "private-data") : path.join(ROOT, "private-data", "tenants", tenant);
+  const plotsDir = path.join(tenantDir, "plots");
   const files = (await readdir(plotsDir)).filter((f) => f.toLowerCase().endsWith(".geojson"));
   if (files.length === 0) {
     console.error("[prepare-eudr-stats] no plot files found in", plotsDir);
@@ -128,16 +162,17 @@ async function main() {
   const out = {};
   for (const [millId, millFiles] of filesByMillId) {
     const stats = emptyStats();
+    const isBns = millId.includes("__BNS__");
     for (const file of millFiles) {
       const fc = JSON.parse(await readFile(path.join(plotsDir, file), "utf8"));
       for (const feature of fc.features ?? []) {
-        accumulate(stats, feature.properties ?? {});
+        accumulate(stats, feature.properties ?? {}, isBns);
       }
     }
     out[millId] = stats;
   }
 
-  const outPath = path.join(ROOT, "private-data", "eudr-stats.json");
+  const outPath = path.join(tenantDir, "eudr-stats.json");
   const json = JSON.stringify(out);
   await writeFile(outPath, json);
   console.log(

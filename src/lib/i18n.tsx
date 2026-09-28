@@ -1,20 +1,32 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { copy, type Copy, type Lang } from "@/lib/copy";
+import { siteCopy, type SiteCopy } from "@/lib/site-copy";
 
 const KEY = "kanopi.lang";
 
 type Ctx = {
   lang: Lang;
   t: Copy;
+  /** Public-site copy (landing, methodology, about, contact). */
+  s: SiteCopy;
   setLang: (lang: Lang) => void;
 };
 
 const I18nContext = createContext<Ctx | null>(null);
 
+/**
+ * A stored choice wins; otherwise follow the browser — Indonesian browsers
+ * (PIC kebun) get ID, everyone else (buyers) EN, per feedback 2 (Doc 3 §3).
+ */
 function readLang(): Lang {
   try {
     const v = localStorage.getItem(KEY);
     if (v === "id" || v === "en") return v;
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (navigator.language?.toLowerCase().startsWith("id")) return "id";
   } catch {
     /* ignore */
   }
@@ -41,7 +53,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         /* ignore */
       }
     };
-    return { lang, t: copy[lang] as Copy, setLang };
+    return { lang, t: copy[lang], s: siteCopy[lang], setLang };
   }, [lang]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

@@ -1,3 +1,5 @@
+import { tenantPrefix, type Tenant } from "@/lib/tenants";
+
 export type EudrSummary = {
   totalPlots: number;
   totalAreaHa: number;
@@ -20,6 +22,10 @@ export type EudrSummary = {
 export type EudrSummaryResult = EudrSummary & {
   millsWithData: number;
   millsRequested: number;
+  /** Per-mill counts for every requested mill that has stats — what the
+   * "where are the non-compliant plots?" list is built from (ADM feedback 1:
+   * "click EUDR Comply 92% → a location list with non-comply cases"). */
+  mills: { id: string; totalPlots: number; nonComply: number; areaHa: number }[];
 };
 
 const MITIGATION_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
@@ -58,19 +64,26 @@ function emptySummary(): EudrSummary {
 // (FUNCTION_INVOCATION_FAILED on Vercel). Every field below is a plain
 // per-plot count/sum, so precomputing per mill and summing those small
 // numbers here gives byte-identical results for a fraction of the cost.
-const statsLoader = import.meta.glob("../../private-data/eudr-stats.json", {
-  query: "?raw",
-  eager: false,
-  import: "default",
-}) as Record<string, () => Promise<string>>;
-const loadStatsFile = Object.values(statsLoader)[0];
+const statsLoader = import.meta.glob(
+  ["../../private-data/eudr-stats.json", "../../private-data/tenants/*/eudr-stats.json"],
+  { query: "?raw", eager: false, import: "default" },
+) as Record<string, () => Promise<string>>;
 
-let statsCache: Record<string, EudrSummary> | null = null;
-async function millStats(): Promise<Record<string, EudrSummary>> {
-  if (statsCache) return statsCache;
-  const text = loadStatsFile ? await loadStatsFile() : "{}";
-  statsCache = JSON.parse(text) as Record<string, EudrSummary>;
-  return statsCache;
+/** One stats file per tenant: ADM's at the root, the rest under tenants/<id>/. */
+function statsLoaderFor(tenant: Tenant) {
+  const suffix = `/private-data/${tenantPrefix(tenant)}eudr-stats.json`;
+  const key = Object.keys(statsLoader).find((k) => k.replace(/\\/g, "/").endsWith(suffix));
+  return key ? statsLoader[key] : undefined;
+}
+
+const statsCache = new Map<Tenant, Record<string, EudrSummary>>();
+async function millStats(tenant: Tenant): Promise<Record<string, EudrSummary>> {
+  const cached = statsCache.get(tenant);
+  if (cached) return cached;
+  const load = statsLoaderFor(tenant);
+  const stats = JSON.parse(load ? await load() : "{}") as Record<string, EudrSummary>;
+  statsCache.set(tenant, stats);
+  return stats;
 }
 
 function addInto(target: EudrSummary, src: EudrSummary) {
@@ -106,7 +119,7 @@ const CACHE_TTL_MS = 5 * 60_000;
 const cache = new Map<string, { at: number; value: EudrSummaryResult }>();
 
 /** Real EUDR aggregates for the given mills — summed from precomputed per-mill totals. */
-export async function getEudrSummary(millIds: string[]): Promise<EudrSummaryResult> {
+export async function getEudrSummary(tenant: Tenant, millIds: string[]): Promise<EudrSummaryResult> {
   // De-duped defensively — each `id` already uniquely identifies one
   // group/refinery row in mills.json, so callers shouldn't produce repeats,
   // but summing the same id's plots twice would silently double-count them.
@@ -116,23 +129,31 @@ export async function getEudrSummary(millIds: string[]): Promise<EudrSummaryResu
   // join could in principle collide with a different id combination that
   // happens to concatenate the same way; this key is only ever used as an
   // opaque Map key, never split back apart, so unambiguous is all it needs.
-  const cacheKey = JSON.stringify(distinctIds.sort());
+  const cacheKey = JSON.stringify([tenant, ...distinctIds.sort()]);
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
-  if (distinctIds.length === 0) return { ...emptySummary(), millsWithData: 0, millsRequested: 0 };
+  if (distinctIds.length === 0) return { ...emptySummary(), millsWithData: 0, millsRequested: 0, mills: [] };
 
-  const stats = await millStats();
+  const stats = await millStats(tenant);
   const summary = emptySummary();
   let millsWithData = 0;
+  const mills: EudrSummaryResult["mills"] = [];
   for (const millId of distinctIds) {
     const s = stats[millId];
     if (s) {
       addInto(summary, s);
       millsWithData++;
+      mills.push({ id: millId, totalPlots: s.totalPlots, nonComply: s.comply.no, areaHa: s.totalAreaHa });
     }
   }
+  mills.sort((a, b) => b.nonComply - a.nonComply || b.totalPlots - a.totalPlots);
 
-  const result: EudrSummaryResult = { ...summary, millsWithData, millsRequested: distinctIds.length };
+  const result: EudrSummaryResult = { ...summary, millsWithData, millsRequested: distinctIds.length, mills };
   cache.set(cacheKey, { at: Date.now(), value: result });
   return result;
+}
+
+/** Ids of every mill that has plot-level stats — the portfolio's coverage pills. */
+export async function millIdsWithStats(tenant: Tenant): Promise<Set<string>> {
+  return new Set(Object.keys(await millStats(tenant)));
 }

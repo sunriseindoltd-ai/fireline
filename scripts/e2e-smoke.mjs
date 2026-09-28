@@ -48,6 +48,18 @@ function supplierPassword(user) {
   );
 }
 const SUPPLIER = { user: "permata", pass: supplierPassword("permata") };
+// Same rule for the BRC tenant's client logins (artifacts/akun-brc.csv).
+function brcPassword(user) {
+  const envVar = `KANOPI_SMOKE_${user.toUpperCase().replace(/-/g, "_")}_PASSWORD`;
+  if (process.env[envVar]) return process.env[envVar];
+  const csv = readFileSync(path.join(process.cwd(), "artifacts", "akun-brc.csv"), "utf8");
+  const row = csv.split(/\r?\n/).find((line) => line.split(",")[2] === user);
+  if (!row) throw new Error(`No password for BRC account '${user}' — set ${envVar} or add artifacts/akun-brc.csv`);
+  return row.split(",")[3];
+}
+const BRC_CLIENT = { user: "brc-1", pass: brcPassword("brc-1") };
+const BRC_PLOTS_DIR = path.join(process.cwd(), "private-data", "tenants", "brc", "plots");
+const BRC_SPLIT_ID = "PO1000013517__BRC__PT. DOMAS SAWIT INTI PERDANA";
 const BNS_SUPPLIER = { user: "bns", pass: supplierPassword("bns") };
 
 const PERMATA_ID = "PO1000004173__Permata__Permata KIM";
@@ -105,7 +117,7 @@ async function loginAs(page, { user, pass }) {
   await page.click('button[type="submit"]');
   await page.waitForFunction(
     () =>
-      location.pathname === "/" ||
+      location.pathname.startsWith("/app") ||
       (document.querySelector(".login-err")?.textContent ?? "").trim().length > 0,
     { timeout: 15000 },
   );
@@ -133,7 +145,7 @@ async function main() {
   ]) {
     const p = await browser.newPage();
     await loginAs(p, creds);
-    check(`${label} login succeeds`, p.url() === `${BASE}/`, p.url());
+    check(`${label} login succeeds`, p.url() === `${BASE}/app/portfolio`, p.url());
     await p.close();
   }
 
@@ -231,6 +243,65 @@ async function main() {
     `status=${brokenRes.status}`,
   );
   await page.unroute("**/data/plots/**");
+
+  // ---- Tenant isolation (ADM vs BRC) ----
+  const getJson = (p, url, init) =>
+    p.evaluate(async ([u, i]) => {
+      const res = await fetch(u, i);
+      return { status: res.status, body: await res.json().catch(() => null) };
+    }, [url, init]);
+  const summaryOf = (p, ids) =>
+    getJson(p, "/eudr-summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ millIds: ids }) });
+
+  const admMills = await getJson(page, "/data/mills.json");
+  check("ADM roster contains no BRC mills", admMills.status === 200 && !admMills.body.some((m) => m.id.includes("__BRC__")));
+  const admTenantPath = await getJson(page, "/data/tenants/brc/mills.json");
+  check("A literal tenants/ path is never served (ADM admin)", admTenantPath.status === 404, `status=${admTenantPath.status}`);
+  const admBrcPlot = await fetchPlot(page, BRC_SPLIT_ID);
+  check("ADM session cannot read a BRC plot file", admBrcPlot.status === 404, `status=${admBrcPlot.status}`);
+
+  const brcPage = await browser.newPage();
+  await loginAs(brcPage, BRC_CLIENT);
+  check("BRC client login succeeds", brcPage.url() === `${BASE}/app/portfolio`, brcPage.url());
+  const brcMills = await getJson(brcPage, "/data/mills.json");
+  check(
+    "BRC roster is BRC-only (44 mills, no ADM ids)",
+    brcMills.status === 200 && brcMills.body.length === 44 && brcMills.body.every((m) => m.id.includes("__BRC__")),
+    `n=${brcMills.body?.length}`,
+  );
+  const brcSplitDisk = readdirSync(BRC_PLOTS_DIR)
+    .filter((f) => new RegExp(`^${escapeRegex(BRC_SPLIT_ID)}(\\.part\\d+)?\\.geojson$`).test(f))
+    .reduce((n, f) => n + JSON.parse(readFileSync(path.join(BRC_PLOTS_DIR, f), "utf8")).features.length, 0);
+  const brcSplit = await fetchPlot(brcPage, BRC_SPLIT_ID);
+  check(
+    "BRC plot fetch (multi-part) matches its own disk files",
+    brcSplit.status === 200 && brcSplit.body?.features?.length === brcSplitDisk,
+    `server=${brcSplit.body?.features?.length} disk=${brcSplitDisk}`,
+  );
+  const brcAdmPlot = await fetchPlot(brcPage, DOMAS_SPLIT_ID);
+  check("BRC session cannot read an ADM plot file", brcAdmPlot.status === 404, `status=${brcAdmPlot.status}`);
+  const brcTenantPath = await getJson(brcPage, "/data/tenants/brc/mills.json");
+  check("A literal tenants/ path is never served (BRC client)", brcTenantPath.status === 404, `status=${brcTenantPath.status}`);
+  const brcAdmSummary = await summaryOf(brcPage, [ADOLINA_ID, PERMATA_ID]);
+  check("BRC session gets no figures for ADM mill ids", brcAdmSummary.body?.millsWithData === 0, `millsWithData=${brcAdmSummary.body?.millsWithData}`);
+  const brcCoverage = await getJson(brcPage, "/coverage");
+  check(
+    "BRC coverage lists BRC mills only",
+    brcCoverage.status === 200 && brcCoverage.body.millIds.length > 0 && brcCoverage.body.millIds.every((id) => id.includes("__BRC__")),
+    `n=${brcCoverage.body?.millIds?.length}`,
+  );
+  check("BRC client sees no client switcher", (await brcPage.locator(".tenant-switch").count()) === 0);
+  await brcPage.close();
+
+  await page.goto(`${BASE}/app/portfolio`, { waitUntil: "networkidle" });
+  await Promise.all([page.waitForEvent("load"), page.selectOption(".tenant-switch select", "brc")]);
+  await page.waitForLoadState("networkidle");
+  const switched = await getJson(page, "/data/mills.json");
+  check("Admin can switch to BRC", switched.body?.length === 44 && switched.body.every((m) => m.id.includes("__BRC__")), `n=${switched.body?.length}`);
+  await Promise.all([page.waitForEvent("load"), page.selectOption(".tenant-switch select", "adm")]);
+  await page.waitForLoadState("networkidle");
+  const back = await getJson(page, "/data/mills.json");
+  check("Admin can switch back to ADM", back.body?.length === admMills.body.length, `n=${back.body?.length}`);
 
   await page.close();
   await browser.close();

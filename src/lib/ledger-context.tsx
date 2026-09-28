@@ -11,8 +11,6 @@ import type { MillRecord } from "@/lib/ledger";
 type Api = {
   mills: MillRecord[];
   ready: boolean;
-  selectedChain: string | null;
-  setSelectedChain: (id: string | null) => void;
 };
 
 const Ctx = createContext<Api | null>(null);
@@ -20,7 +18,6 @@ const Ctx = createContext<Api | null>(null);
 export function LedgerProvider({ children }: { children: ReactNode }) {
   const [mills, setMills] = useState<MillRecord[]>([]);
   const [ready, setReady] = useState(false);
-  const [selectedChain, setSelectedChain] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -41,8 +38,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Api>(
-    () => ({ mills, ready, selectedChain, setSelectedChain }),
-    [mills, ready, selectedChain],
+    () => ({ mills, ready }),
+    [mills, ready],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

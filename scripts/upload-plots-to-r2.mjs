@@ -19,7 +19,9 @@
  * Requires R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  * in the environment (see .env.local).
  *
- * Usage: node scripts/upload-plots-to-r2.mjs
+ * Usage: node scripts/upload-plots-to-r2.mjs [--tenant <id>] [filter]
+ *   `filter` (optional) uploads only files whose name contains it, e.g.
+ *   `__SUNRISE__` for one group's fresh ingest instead of the whole ~5GB.
  */
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -42,8 +44,17 @@ async function main() {
   const client = new AwsClient({ accessKeyId, secretAccessKey });
   const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
 
-  const plotsDir = path.join(ROOT, "private-data", "plots");
-  const files = (await readdir(plotsDir)).filter((f) => f.toLowerCase().endsWith(".geojson"));
+  // `--tenant brc` uploads another client's plots (private-data/tenants/<id>/
+  // plots → R2 key tenants/<id>/plots/…); without it, ADM's as before.
+  const args = process.argv.slice(2);
+  const tIdx = args.indexOf("--tenant");
+  const tenant = tIdx >= 0 ? args.splice(tIdx, 2)[1] : "adm";
+  const prefix = tenant === "adm" ? "" : `tenants/${tenant}/`;
+  const plotsDir = path.join(ROOT, "private-data", ...prefix.split("/").filter(Boolean), "plots");
+  const only = args[0];
+  const files = (await readdir(plotsDir)).filter(
+    (f) => f.toLowerCase().endsWith(".geojson") && (!only || f.includes(only)),
+  );
   if (files.length === 0) {
     console.error("[upload-plots-to-r2] no plot files found in", plotsDir);
     process.exit(1);
@@ -54,7 +65,7 @@ async function main() {
   for (const [i, file] of files.entries()) {
     const start = Date.now();
     const body = await readFile(path.join(plotsDir, file));
-    const key = `plots/${file}`.split("/").map(encodeURIComponent).join("/");
+    const key = `${prefix}plots/${file}`.split("/").map(encodeURIComponent).join("/");
     const res = await client.fetch(`${endpoint}/${bucket}/${key}`, {
       method: "PUT",
       body,

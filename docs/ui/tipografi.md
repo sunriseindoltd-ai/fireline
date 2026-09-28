@@ -1,40 +1,34 @@
 # Tipografi
 
-Satu keluarga **IBM Plex**: Sans untuk UI, Mono untuk identitas teknis (UML, NodeID). Tidak memakai serif.
-
-## Pasangan
+Redesign 2: **satu keluarga netral, Inter**, untuk display dan UI (paling dekat dengan SF Pro/SamsungOne di referensi), plus **IBM Plex Mono** untuk ID. Plus Jakarta Sans ditinggalkan — itu font yang juga dipakai bvarta, referensi yang dinilai "just ok".
 
 | Peran | Font | Bobot | Token |
 | --- | --- | --- | --- |
-| Isi, label, tombol | IBM Plex Sans | 400 / 500 / 600 | `--font-sans` |
-| Judul, wordmark, angka statistik | IBM Plex Sans | 500 / 600 | `--font-display` (sama keluarga, bukan serif) |
-| UML ID, NodeID, badge hitungan | IBM Plex Mono | 400 / 500 | `--font-mono` |
+| Judul, wordmark, angka KPI | Inter | 600 / 700 | `--font-display` |
+| Isi, label, tombol, tabel | Inter | 400 / 500 / 600 | `--font-sans` |
+| UML ID, Node ID, Plot ID | IBM Plex Mono | 400 / 500 | `--font-mono` |
 
-Dimuat di `src/routes/__root.tsx` dari Google Fonts:
+Dimuat di `src/routes/__root.tsx` dari Google Fonts.
 
-`IBM+Plex+Sans:wght@400;500;600` dan `IBM+Plex+Mono:wght@400;500`.
-
-## Kenapa Plex
-
-- Kohesif dengan Plex Mono yang sudah dipakai untuk kode/ID.
-- Terasa teknis (ledger, UML, EUDR) tanpa kaku seperti font sistem saja.
-- Bukan Fraunces/serif editorial, bukan Space Grotesk/Inter draft lama.
-
-## Skala yang dipakai
+## Skala
 
 | Permukaan | Ukuran | Bobot | Tracking |
 | --- | --- | --- | --- |
-| Wordmark “Kanopi” | 22px | 600 | −0.02em |
-| Judul login / empty state | `clamp(1.8rem … 2.4rem)` | 500 | −0.03em |
-| Angka statistik | 22px | 500 | 0, `tabular-nums` |
-| Isi, hint drop zone | 13–15px | 400 | 0 |
-| Kicker / label form | 11px | 600 | 0.08–0.14em, uppercase |
-| Mono ID | 11.5px | 400 | 0 |
+| Hero publik | `clamp(2.6rem … 5rem)` | 700 | −0.04em |
+| Judul bagian publik | `clamp(2rem … 3.4rem)` | 700 | −0.035em |
+| Isi publik | 16–17px | 400 | −0.005em |
+| Wordmark | 16px | 600 | −0.015em |
+| Angka KPI | 26px (19px ringkas) | 600 | −0.025em, `tabular-nums` |
+| Eyebrow | 13–17px | 600 | 0, huruf biasa (bukan kapital) |
 
-Angka rantai/pabrik/refinery memakai `font-variant-numeric: tabular-nums`.
+## Angka
 
-Jangan naik ke 700/900. Plex di 600 sudah cukup tegas.
+Semua angka lewat `src/lib/format.ts` (`formatCount`, `formatHa`, `formatPct`, `formatLarge`):
+
+- Locale mengikuti bahasa: `id-ID` (1.372.877 · 6,28 juta ha) atau `en-US` (1,372,877 · 6.28 million ha).
+- **Tidak pernah** sufiks "k" pada angka yang sudah dilokalkan.
+- Di bawah sejuta: angka penuh. Mulai sejuta: "juta" / "million" tertulis.
 
 ## Bahasa
 
-Salinan UI ada di `src/lib/copy.ts`. Default `en`. Jangan campur kalimat ID di string `en` atau sebaliknya. Toggle EN | ID menyimpan `localStorage` kunci `kanopi.lang`.
+Salinan workspace di `src/lib/copy.ts`, situs publik di `src/lib/site-copy.ts`. Kamus `id` diketik terhadap kunci `en`, jadi kunci yang hilang = error TypeScript. Register industri: PKS, Kilang / KCP, grup rantai pasok, tingkat desa, "Buffer 10 km" (spasi, huruf kecil). Nama produk: "PalmTrace", byline "by Earthline" / "oleh Earthline". Nama internal tidak pernah muncul di UI.

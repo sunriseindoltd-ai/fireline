@@ -1,28 +1,34 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
-import { LanguageProvider } from "@/lib/i18n";
+import { Link, createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { LanguageProvider, useI18n } from "@/lib/i18n";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Earthline's PalmTrace — Satellite Powered Traceability with AI Analytics";
+// Product name first, firm second (feedback 2, Doc 3 §2) — and never the
+// internal code name.
+const APP_NAME = "PalmTrace by Earthline";
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: APP_NAME },
-      { name: "theme-color", content: "#0F4C4A" },
+      { name: "theme-color", content: "#FFFFFF" },
+      { name: "application-name", content: "PalmTrace" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      { rel: "apple-touch-icon", href: "/brand/apple-touch-icon.png" },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
     ],
   }),
+  notFoundComponent: NotFound,
   component: () => (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -37,3 +43,16 @@ export const Route = createRootRoute({
     </html>
   ),
 });
+
+function NotFound() {
+  const { s } = useI18n();
+  return (
+    <main className="not-found">
+      <h1>{s.notFoundTitle}</h1>
+      <p>{s.notFoundBody}</p>
+      <Link to="/" className="btn-primary">
+        {s.home}
+      </Link>
+    </main>
+  );
+}

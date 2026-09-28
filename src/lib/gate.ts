@@ -1,6 +1,7 @@
 import { createHash, scryptSync, timingSafeEqual } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { getCookie, setCookie } from "@tanstack/react-start/server";
+import { DEFAULT_TENANT, isTenant, type Tenant } from "@/lib/tenants";
 
 export const GATE_COOKIE = "kanopi_gate";
 const MAX_AGE = 60 * 60 * 12;
@@ -150,7 +151,26 @@ function supplierAccount(user: string) {
   return SUPPLIER_ACCOUNTS.find((a) => a.user === user);
 }
 
-function matchesSupplierHash(password: string, account: SupplierAccount) {
+type TenantClientAccount = { user: string; tenant: Exclude<Tenant, "adm">; salt: string; hash: string };
+
+/**
+ * Client logins for every tenant other than ADM (whose own client pairs are
+ * in gateCredentials above). Same rules as SUPPLIER_ACCOUNTS: scrypt hash
+ * only, never the plaintext, since these go to other companies; issue or
+ * rotate one with scripts/hash-gate-password.mjs. Each account is pinned to
+ * its tenant — it can never switch to another one.
+ */
+const TENANT_CLIENT_ACCOUNTS: readonly TenantClientAccount[] = [
+  { user: "brc-1", tenant: "brc", salt: "ef9d74f3ed5fc11e9e359406e7588060", hash: "3f3df0df478eada0610272d7eb50500b5ef2785ccbe39c3279c4d3d3d1ac96b8" },
+  { user: "brc-2", tenant: "brc", salt: "8b85646f05993acfaf5dba1f7b719b06", hash: "19a61c2fa8bb71c647c28d43a6a9ee4e4af4381023a05150493f0081c1221bef" },
+  { user: "brc-3", tenant: "brc", salt: "19f77eb0c9ea53209b5644f0571e68bc", hash: "8726fc32a55ba3f5fda2970e569d142df7474cf8e46924db958d4961e4d2f04c" },
+];
+
+function tenantClientAccount(user: string) {
+  return TENANT_CLIENT_ACCOUNTS.find((a) => a.user === user);
+}
+
+function matchesSupplierHash(password: string, account: { salt: string; hash: string }) {
   const hash = scryptSync(password, Buffer.from(account.salt, "hex"), 32);
   return timingSafeEqual(hash, Buffer.from(account.hash, "hex"));
 }
@@ -184,19 +204,28 @@ export function millInScope(mill: { group?: string; refinery?: string }, scope: 
   );
 }
 
-/** Match submitted credentials against every account of every role; null when none match. */
-export function matchGateCredentials(username: string, password: string): GateRole | null {
+/**
+ * Match submitted credentials against every account of every role; null when
+ * none match. Everything in gateCredentials/SUPPLIER_ACCOUNTS belongs to ADM
+ * (admins start there and may switch — see tenantForSession).
+ */
+export function matchGateCredentials(
+  username: string,
+  password: string,
+): { role: GateRole; tenant: Tenant } | null {
   const user = username.trim();
   const creds = gateCredentials();
   for (const role of Object.keys(creds) as (keyof typeof creds)[]) {
     for (const pair of creds[role]) {
       if (safeEqual(user, pair.user) && safeEqual(password, pair.password)) {
-        return role;
+        return { role, tenant: DEFAULT_TENANT };
       }
     }
   }
   const supplier = supplierAccount(user);
-  if (supplier && matchesSupplierHash(password, supplier)) return "supplier";
+  if (supplier && matchesSupplierHash(password, supplier)) return { role: "supplier", tenant: DEFAULT_TENANT };
+  const tenantClient = tenantClientAccount(user);
+  if (tenantClient && matchesSupplierHash(password, tenantClient)) return { role: "client", tenant: tenantClient.tenant };
   return null;
 }
 
@@ -219,15 +248,30 @@ function cookieValue(source: string | undefined, name: string) {
   }
 }
 
-export async function issueGateToken(username: string, role: GateRole) {
-  return new SignJWT({ sub: username, role })
+export async function issueGateToken(username: string, role: GateRole, tenant: Tenant = DEFAULT_TENANT) {
+  return new SignJWT({ sub: username, role, tenant })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE}s`)
     .sign(secretKey());
 }
 
-export type GateSession = { user: string; role: GateRole };
+export type GateSession = { user: string; role: GateRole; tenant: Tenant };
+
+/**
+ * Which tenant a verified token may act in. Only admins (Earthline) choose —
+ * their token's `tenant` claim, set by gateSwitchTenant. Every other account
+ * is pinned by the account itself, whatever the token claims, so a tampered
+ * or stale claim can never move a client into another client's data. Tokens
+ * from before tenants existed carry no claim and land in ADM, where every
+ * such account lived.
+ */
+function tenantForSession(user: string, role: GateRole, claim: unknown): Tenant | null {
+  const tenantClient = tenantClientAccount(user);
+  if (tenantClient) return role === "client" ? tenantClient.tenant : null;
+  if (role === "admin") return isTenant(claim) ? claim : DEFAULT_TENANT;
+  return DEFAULT_TENANT;
+}
 
 export async function readGateSession(request?: Request): Promise<GateSession | null> {
   let token: string | undefined;
@@ -253,7 +297,9 @@ export async function readGateSession(request?: Request): Promise<GateSession | 
     // a login that no longer exists (e.g. the old shared "supplier" one) is
     // signed out rather than left holding an empty session.
     if (role === "supplier" && !supplierAccount(payload.sub)) return null;
-    return { user: payload.sub, role };
+    const tenant = tenantForSession(payload.sub, role, payload.tenant);
+    if (!tenant) return null;
+    return { user: payload.sub, role, tenant };
   } catch {
     return null;
   }

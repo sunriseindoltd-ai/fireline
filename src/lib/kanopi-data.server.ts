@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { AwsClient } from "aws4fetch";
 import { dataScopeForSession, millInScope, readGateSession, type DataScope } from "@/lib/gate";
+import { tenantPrefix, type Tenant } from "@/lib/tenants";
 
 // Plot files are excluded here and served from Cloudflare R2 instead (see
 // loadPlotRel below) — private-data/plots/ crossed ~1.3GB once DOMAS's plots
@@ -9,7 +10,11 @@ import { dataScopeForSession, millInScope, readGateSession, type DataScope } fro
 // blew past Vercel's build-container memory (OOM, exit 137). Everything else
 // (mills.json, areas/, forest/) is comparatively tiny and stays bundled.
 const bundled = import.meta.glob(
-  ["../../private-data/**/*.{json,geojson}", "!../../private-data/plots/**"],
+  [
+    "../../private-data/**/*.{json,geojson}",
+    "!../../private-data/plots/**",
+    "!../../private-data/tenants/*/plots/**",
+  ],
   {
     query: "?raw",
     eager: false,
@@ -62,8 +67,8 @@ type MillLite = { id: string; umlId?: string; group?: string; refinery?: string 
 // restricted role's scope, so it's just re-read+parsed per request rather
 // than cached — this route already isn't on any hot path (see the 60s
 // cache-control below).
-export async function loadMills(): Promise<MillLite[]> {
-  const text = await loadRel("mills.json");
+export async function loadMills(tenant: Tenant): Promise<MillLite[]> {
+  const text = await loadRel(`${tenantPrefix(tenant)}mills.json`);
   if (!text) return [];
   try {
     const data = JSON.parse(text);
@@ -90,7 +95,7 @@ function slugifyRefinery(name: string) {
  * default rather than served as-is, since a new private-data shape added
  * later shouldn't silently become world-readable to a scoped role.
  */
-async function isAllowedForScope(rel: string, scope: DataScope): Promise<boolean> {
+async function isAllowedForScope(rel: string, scope: DataScope, tenant: Tenant): Promise<boolean> {
   if (rel === "mills.json") return true;
   if (rel.startsWith("forest/")) return true; // a base layer, not mill-specific
   if (rel.startsWith("plots/")) {
@@ -100,14 +105,14 @@ async function isAllowedForScope(rel: string, scope: DataScope): Promise<boolean
     // and a genuinely different plot set), so a bare UML ID can no longer
     // resolve to a single refinery to check scope against.
     const millId = rel.slice("plots/".length).replace(/(\.part\d+)?\.geojson$/i, "");
-    const mill = (await loadMills()).find((m) => m.id === millId);
+    const mill = (await loadMills(tenant)).find((m) => m.id === millId);
     return !!mill && millInScope(mill, scope);
   }
   if (rel.startsWith("areas/")) {
     // Area files are per refinery/KCP, so a group scope resolves to its
     // refineries through mills.json.
     const slug = rel.slice("areas/".length).replace(/\.geojson$/i, "");
-    const mills = await loadMills();
+    const mills = await loadMills(tenant);
     return mills.some(
       (m) => !!m.refinery && slugifyRefinery(m.refinery) === slug && millInScope(m, scope),
     );
@@ -215,12 +220,19 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const rel = safeRel(new URL(request.url).pathname);
-  if (!rel) return new Response("Not found", { status: 404 });
+  // Callers always ask for tenant-relative paths; a literal `tenants/…` path
+  // would read another client's files directly, so it is never served.
+  if (!rel || rel.startsWith("tenants/")) return new Response("Not found", { status: 404 });
 
+  const tenant = session.tenant;
   const scope = dataScopeForSession(session);
-  if (scope && !(await isAllowedForScope(rel, scope))) {
+  if (scope && !(await isAllowedForScope(rel, scope, tenant))) {
     return new Response("Forbidden", { status: 403 });
   }
+  // Where this tenant's copy lives. forest/ is one global base layer shared
+  // by every tenant; everything else (roster, areas, plots, stats) is per
+  // tenant — a tenant without its own copy of a file gets a 404, never ADM's.
+  const stored = rel.startsWith("forest/") ? rel : `${tenantPrefix(tenant)}${rel}`;
 
   // `no-store`, not a short max-age: responses here can now depend on the
   // caller's role (mills.json is filtered per scope), and there's no
@@ -228,7 +240,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   // browser cache serve stale, wrongly-scoped data for up to that long
   // after signing in as a different role in the same browser.
   if (scope && rel === "mills.json") {
-    const mills = await loadMills();
+    const mills = await loadMills(tenant);
     const filtered = mills.filter((m) => millInScope(m, scope));
     return new Response(JSON.stringify(filtered), {
       headers: {
@@ -242,7 +254,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
     rel.startsWith("plots/") && rel.endsWith(".geojson") && !/\.part\d+\.geojson$/i.test(rel);
 
   if (isPlotFile) {
-    const result = await loadPlotFeatureCollection(rel);
+    const result = await loadPlotFeatureCollection(stored);
     if (!result.ok) {
       // 502: this mill's data exists but couldn't be retrieved right now
       // (vs. a plain 404 for "never uploaded") — see PlotFetchResult above.
@@ -255,7 +267,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
     });
   }
 
-  const body = await loadRel(rel);
+  const body = await loadRel(stored);
   if (body == null) return new Response("Not found", { status: 404 });
   return new Response(body, {
     headers: {

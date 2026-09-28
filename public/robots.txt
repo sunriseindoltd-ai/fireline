@@ -1,0 +1,13 @@
+# PalmTrace — only the public product pages are for crawlers.
+User-agent: *
+Allow: /$
+Allow: /method
+Allow: /about
+Allow: /contact
+Disallow: /app
+Disallow: /login
+Disallow: /data/
+Disallow: /coverage
+Disallow: /eudr-summary
+Disallow: /_serverFn
+Disallow: /__grok/

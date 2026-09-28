@@ -1,4 +1,7 @@
 {
-  "title": "Earthline's PalmTrace — Satellite Powered Traceability with AI Analytics",
-  "color": "0F4C4A"
+  "title": "PalmTrace by Earthline",
+  "description": "Palm supply-chain due diligence against the EUDR 2020 cutoff — every plot behind every mill.",
+  "card": "custom",
+  "image": "/og.png",
+  "color": "FFFFFF"
 }
