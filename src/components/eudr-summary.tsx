@@ -19,6 +19,7 @@ import { fetchWithRetry } from "@/lib/fetch-retry";
 import { fill, formatCount, formatDate, formatHa, formatPct } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { EudrSummaryResult } from "@/lib/eudr-aggregates.server";
+import type { PlotComplyFilter } from "@/lib/app-search";
 import { mitigationText } from "@/lib/ledger-geo";
 
 type Props = {
@@ -40,10 +41,10 @@ type Props = {
    * mills they cover). */
   hideCoverageNotice?: boolean;
   onOpenMap?: () => void;
-  /** Mill id → display name, for the non-compliance list. */
+  /** Mill id → display name, for the compliance list. */
   millNames?: Map<string, string>;
-  /** Opens a mill's plots filtered to non-compliant ones. */
-  onOpenNonComply?: (millId: string) => void;
+  /** Opens a mill's plots filtered to compliant or non-compliant ones. */
+  onOpenPlots?: (millId: string, plots: PlotComplyFilter) => void;
 };
 
 function WarningIcon() {
@@ -159,9 +160,10 @@ export function EudrSummaryView({
   hideCoverageNotice,
   onOpenMap,
   millNames,
-  onOpenNonComply,
+  onOpenPlots,
 }: Props) {
   const [activePie, setActivePie] = useState<{ chart: string; index: number } | null>(null);
+  const [listTab, setListTab] = useState<PlotComplyFilter | null>(null);
   const { t, lang } = useI18n();
   const [summary, setSummary] = useState<EudrSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -311,13 +313,15 @@ export function EudrSummaryView({
   const typeData = Object.entries(summary.plotType).filter(([, v]) => v.count > 0);
   const typeTotalArea = typeData.reduce((s, [, v]) => s + v.areaHa, 0);
 
-  // "Where are the non-compliant plots?" — ADM feedback 1's idea: clicking
-  // the compliance figure should lead to the cases behind it.
-  const nonComplyMills = summary.mills.filter((m) => m.nonComply > 0);
-  const canListNonComply = variant === "chain" && !!onOpenNonComply && nonComplyMills.length > 0;
-  function scrollToNonComply() {
-    document.getElementById("noncomply-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // ADM feedback 1 and 3: clicking the compliant share leads to the compliant
+  // plots, the non-compliant share to the non-compliant ones.
+  const canList = variant === "chain" && !!onOpenPlots && summary.mills.length > 0;
+  const shownTab: PlotComplyFilter = listTab ?? (summary.comply.yes > 0 ? "comply" : "noncomply");
+  function openList(which: PlotComplyFilter) {
+    setListTab(which);
+    document.getElementById("comply-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+  const sliceFilter: PlotComplyFilter[] = ["comply", "noncomply"];
 
   const kpiCard = (
     <div className={`kpi-row ${layout === "compact" ? "compact" : "summary-kpis"}`}>
@@ -336,8 +340,14 @@ export function EudrSummaryView({
         label={t.eudrComplyKpi}
         hint={fill(t.eudrComplyHint, { n: countF(summary.comply.yes), total: countF(summary.totalPlots) })}
         sub={`${countF(summary.comply.yes)} ${t.plotsLabel}`}
-        onClick={canListNonComply ? scrollToNonComply : undefined}
-        action={t.seeNonComply}
+        actions={
+          canList
+            ? [
+                { label: t.seeComply, onClick: () => openList("comply") },
+                { label: t.seeNonComply, onClick: () => openList("noncomply") },
+              ]
+            : undefined
+        }
       />
       <KpiTile tone="danger" value={haF(totalDefo)} label={t.defoPost2020Kpi} hint={t.defoPost2020Hint} sub="2021–" />
     </div>
@@ -362,9 +372,9 @@ export function EudrSummaryView({
             onMouseEnter={(_: unknown, index: number) => setActivePie({ chart: "comply", index })}
             onMouseLeave={() => setActivePie(null)}
             onClick={(_: unknown, index: number) => {
-              if (index === 1 && canListNonComply) scrollToNonComply();
+              if (canList) openList(sliceFilter[index]);
             }}
-            style={{ cursor: canListNonComply ? "pointer" : undefined }}
+            style={{ cursor: canList ? "pointer" : undefined }}
           >
             {complyData.map((_, i) => (
               <Cell key={i} fill={COMPLY_COLORS[i]} />
@@ -376,8 +386,17 @@ export function EudrSummaryView({
       <ul className="chart-legend">
         {complyData.map((d, i) => (
           <li key={d.name}>
-            <i style={{ background: COMPLY_COLORS[i] }} />
-            {d.name} <b>{countF(d.value)}</b>
+            {canList ? (
+              <button type="button" className="legend-link" onClick={() => openList(sliceFilter[i])}>
+                <i style={{ background: COMPLY_COLORS[i] }} />
+                {d.name} <b>{countF(d.value)}</b>
+              </button>
+            ) : (
+              <>
+                <i style={{ background: COMPLY_COLORS[i] }} />
+                {d.name} <b>{countF(d.value)}</b>
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -535,11 +554,14 @@ export function EudrSummaryView({
         <>
           {kpiCard}
           <div className="chart-grid">{chartCards}</div>
-          {canListNonComply ? (
-            <NonComplyList
-              mills={nonComplyMills}
+          {canList ? (
+            <ComplyList
+              mills={summary.mills}
               names={millNames}
-              onOpen={onOpenNonComply!}
+              tab={shownTab}
+              onTab={setListTab}
+              totals={summary.comply}
+              onOpen={onOpenPlots!}
             />
           ) : null}
         </>
@@ -549,37 +571,67 @@ export function EudrSummaryView({
   );
 }
 
-function NonComplyList({
-  mills,
+function ComplyList({
+  mills: allMills,
   names,
+  tab,
+  onTab,
+  totals,
   onOpen,
 }: {
   mills: EudrSummaryResult["mills"];
   names?: Map<string, string>;
-  onOpen: (millId: string) => void;
+  tab: PlotComplyFilter;
+  onTab: (tab: PlotComplyFilter) => void;
+  totals: { yes: number; no: number };
+  onOpen: (millId: string, plots: PlotComplyFilter) => void;
 }) {
   const { t, lang } = useI18n();
   const [showAll, setShowAll] = useState(false);
+  const countOf = (m: EudrSummaryResult["mills"][number]) => (tab === "comply" ? m.comply : m.nonComply);
+  const mills = allMills.filter((m) => countOf(m) > 0).sort((a, b) => countOf(b) - countOf(a) || b.totalPlots - a.totalPlots);
   const shown = showAll ? mills : mills.slice(0, 8);
-  const max = Math.max(...mills.map((m) => m.nonComply), 1);
+  const max = Math.max(...mills.map(countOf), 1);
+  const tabs: { id: PlotComplyFilter; label: string; n: number }[] = [
+    { id: "comply", label: t.complyTabYes, n: totals.yes },
+    { id: "noncomply", label: t.complyTabNo, n: totals.no },
+  ];
   return (
-    <section className="chart-card noncomply-card" id="noncomply-list">
+    <section className="chart-card noncomply-card" id="comply-list">
       <header className="noncomply-head">
         <div>
-          <h3>{t.nonComplyListTitle}</h3>
-          <p className="chart-note">{t.nonComplyListIntro}</p>
+          <h3>{t.complyListTitle}</h3>
+          <p className="chart-note">{tab === "comply" ? t.complyListIntro : t.nonComplyListIntro}</p>
+        </div>
+        <div className="seg" role="tablist" aria-label={t.complyListTitle}>
+          {tabs.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              role="tab"
+              className={tab === x.id ? "on" : ""}
+              aria-selected={tab === x.id}
+              disabled={x.n === 0}
+              onClick={() => {
+                onTab(x.id);
+                setShowAll(false);
+              }}
+            >
+              {x.label} · {formatCount(x.n, lang)}
+            </button>
+          ))}
         </div>
       </header>
       <ol className="noncomply-list">
         {shown.map((m) => (
           <li key={m.id}>
-            <button type="button" onClick={() => onOpen(m.id)}>
+            <button type="button" onClick={() => onOpen(m.id, tab)}>
               <span className="nc-name">{names?.get(m.id) ?? m.id}</span>
-              <span className="nc-bar" aria-hidden="true">
-                <i style={{ width: `${(m.nonComply / max) * 100}%` }} />
+              <span className={`nc-bar ${tab === "comply" ? "yes" : ""}`} aria-hidden="true">
+                <i style={{ width: `${(countOf(m) / max) * 100}%` }} />
               </span>
               <span className="nc-count tabular-nums">
-                {fill(t.nonComplyOf, { n: formatCount(m.nonComply, lang), total: formatCount(m.totalPlots, lang) })}
+                {fill(t.nonComplyOf, { n: formatCount(countOf(m), lang), total: formatCount(m.totalPlots, lang) })}
               </span>
               <span className="nc-open">{t.openOnMap} ›</span>
             </button>

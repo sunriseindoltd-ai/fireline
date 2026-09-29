@@ -225,8 +225,12 @@ export function groupChains(mills: MillRecord[]): Chain[] {
  * same on its card, in the dropdown and in the breadcrumb (feedback 2,
  * B-07). The raw name stays the identity; the URL uses groupSlug.
  */
+const GROUP_DISPLAY_NAMES: Record<string, string> = {
+  BRC: "Bakrie Renewable Chemicals",
+};
+
 export function groupLabel(name: string) {
-  return name.toUpperCase();
+  return GROUP_DISPLAY_NAMES[name.toUpperCase()] ?? name.toUpperCase();
 }
 
 export function groupSlug(name: string) {

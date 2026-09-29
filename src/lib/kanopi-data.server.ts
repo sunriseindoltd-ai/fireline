@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { AwsClient } from "aws4fetch";
 import { dataScopeForSession, millInScope, readGateSession, type DataScope } from "@/lib/gate";
-import { tenantPrefix, type Tenant } from "@/lib/tenants";
+import { isSoyTenant, tenantPrefix, type Tenant } from "@/lib/tenants";
 
 // Plot files are excluded here and served from Cloudflare R2 instead (see
 // loadPlotRel below) — private-data/plots/ crossed ~1.3GB once DOMAS's plots
@@ -14,6 +14,8 @@ const bundled = import.meta.glob(
     "../../private-data/**/*.{json,geojson}",
     "!../../private-data/plots/**",
     "!../../private-data/tenants/*/plots/**",
+    // The soy tenant's field files (~20 MB per plant) live in its own R2 bucket.
+    "!../../private-data/tenants/*/fields/**",
   ],
   {
     query: "?raw",
@@ -120,22 +122,30 @@ async function isAllowedForScope(rel: string, scope: DataScope, tenant: Tenant):
   return false;
 }
 
-// Configured once at module load — R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
-// R2_SECRET_ACCESS_KEY/R2_BUCKET are set as env vars on the Vercel project
+type R2Store = { client: AwsClient; endpoint: string; bucket: string };
+
+// Configured once at module load from `<prefix>_ACCOUNT_ID/_ACCESS_KEY_ID/
+// _SECRET_ACCESS_KEY/_BUCKET`, set as env vars on the Vercel project
 // (production/preview/development); local dev typically has none of them,
 // which is what makes loadPlotRel fall back to disk below.
-const r2 = (() => {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET;
+function r2FromEnv(prefix: string): R2Store | null {
+  const accountId = process.env[`${prefix}_ACCOUNT_ID`];
+  const accessKeyId = process.env[`${prefix}_ACCESS_KEY_ID`];
+  const secretAccessKey = process.env[`${prefix}_SECRET_ACCESS_KEY`];
+  const bucket = process.env[`${prefix}_BUCKET`];
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket) return null;
   return {
     client: new AwsClient({ accessKeyId, secretAccessKey }),
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     bucket,
   };
-})();
+}
+
+// Palm tenants' plot files (bucket kanopi-plots).
+const r2 = r2FromEnv("R2");
+// The soy tenant's field files: a bucket on a separate Cloudflare account, so
+// its data never shares storage (or credentials) with the palm clients'.
+const r2Soy = r2FromEnv("R2_ADM_SOY");
 
 // Distinguishes "this mill genuinely has no plot file" (a normal state —
 // most mills across most chains have no data uploaded yet) from "the fetch
@@ -159,14 +169,14 @@ type PlotFetchResult = { ok: true; text: string } | { ok: false; reason: "not-fo
  * API needs a SigV4-signed request (aws4fetch's AwsClient), not a plain
  * fetch — the bucket has no public URL.
  */
-async function loadPlotRel(rel: string): Promise<PlotFetchResult> {
-  if (!r2) {
+async function loadPlotRel(rel: string, store: R2Store | null = r2, r2Rel: string = rel): Promise<PlotFetchResult> {
+  if (!store) {
     const text = await loadRel(rel);
     return text == null ? { ok: false, reason: "not-found" } : { ok: true, text };
   }
   try {
-    const key = rel.split("/").map(encodeURIComponent).join("/");
-    const res = await r2.client.fetch(`${r2.endpoint}/${r2.bucket}/${key}`);
+    const key = r2Rel.split("/").map(encodeURIComponent).join("/");
+    const res = await store.client.fetch(`${store.endpoint}/${store.bucket}/${key}`);
     if (res.ok) return { ok: true, text: await res.text() };
     if (res.status === 404) return { ok: false, reason: "not-found" };
     console.error(
@@ -183,6 +193,38 @@ async function loadPlotRel(rel: string): Promise<PlotFetchResult> {
 }
 
 /**
+ * Large binary files (the SOP PDFs, ~7.6 MB) are past Vercel's function
+ * response limit, so in production the caller — after its own session check —
+ * redirects to a short-lived presigned R2 URL instead of proxying the bytes.
+ * `null` when R2 isn't configured (local dev): read it off disk with
+ * readPrivateFile instead.
+ */
+export async function presignPrivateGet(
+  rel: string,
+  opts: { expiresSec: number; contentType: string; disposition: string },
+): Promise<string | null> {
+  if (!r2) return null;
+  const key = rel.split("/").map(encodeURIComponent).join("/");
+  const url = new URL(`${r2.endpoint}/${r2.bucket}/${key}`);
+  url.searchParams.set("X-Amz-Expires", String(opts.expiresSec));
+  url.searchParams.set("response-content-type", opts.contentType);
+  url.searchParams.set("response-content-disposition", opts.disposition);
+  const signed = await r2.client.sign(url.toString(), { method: "GET", aws: { signQuery: true } });
+  return signed.url;
+}
+
+export async function readPrivateFile(rel: string): Promise<Buffer | null> {
+  try {
+    const root = path.resolve(process.cwd(), "private-data");
+    const abs = path.resolve(root, rel);
+    if (!abs.startsWith(root + path.sep)) return null;
+    return await readFile(abs);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A mill's plot file can arrive split into `<id>.geojson`, `<id>.part2.geojson`,
  * `<id>.part3.geojson`, … (scripts/prepare-plots.mjs keeps each part under the
  * per-mill upload size limit) — merged back into one FeatureCollection here so
@@ -193,14 +235,19 @@ async function loadPlotRel(rel: string): Promise<PlotFetchResult> {
  * "error" fetching a part is propagated rather than silently returning a
  * truncated merge.
  */
-async function loadPlotFeatureCollection(rel: string): Promise<PlotFetchResult> {
-  const base = await loadPlotRel(rel);
+async function loadPlotFeatureCollection(
+  rel: string,
+  store: R2Store | null = r2,
+  r2Rel: string = rel,
+): Promise<PlotFetchResult> {
+  const base = await loadPlotRel(rel, store, r2Rel);
   if (!base.ok) return base;
 
   const withoutExt = rel.slice(0, -".geojson".length);
+  const r2WithoutExt = r2Rel.slice(0, -".geojson".length);
   const parts: unknown[] = [];
   for (let n = 2; ; n++) {
-    const part = await loadPlotRel(`${withoutExt}.part${n}.geojson`);
+    const part = await loadPlotRel(`${withoutExt}.part${n}.geojson`, store, `${r2WithoutExt}.part${n}.geojson`);
     if (!part.ok) {
       if (part.reason === "error") return part;
       break;
@@ -247,6 +294,22 @@ export async function serveKanopiData(request: Request): Promise<Response> {
         "content-type": "application/json; charset=utf-8",
         "cache-control": "private, no-store",
       },
+    });
+  }
+
+  // A soy plant's fields: `fields/<plant>.geojson` (+ .partN), only for the
+  // soy tenant. On disk under the tenant's folder; in R2 at the same relative
+  // path inside the soy bucket (a bucket of its own, so no tenant prefix).
+  if (rel.startsWith("fields/")) {
+    if (!isSoyTenant(tenant) || !rel.endsWith(".geojson") || /\.part\d+\.geojson$/i.test(rel)) {
+      return new Response("Not found", { status: 404 });
+    }
+    const result = await loadPlotFeatureCollection(stored, r2Soy, rel);
+    if (!result.ok) {
+      return new Response("Upstream storage error", { status: result.reason === "not-found" ? 404 : 502 });
+    }
+    return new Response(result.text, {
+      headers: { "content-type": mimeFor(rel), "cache-control": "private, no-store" },
     });
   }
 

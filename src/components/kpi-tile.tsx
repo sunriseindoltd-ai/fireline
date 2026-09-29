@@ -13,6 +13,7 @@ export function KpiTile({
   tone,
   onClick,
   action,
+  actions,
 }: {
   value: ReactNode;
   label: string;
@@ -23,6 +24,9 @@ export function KpiTile({
   onClick?: () => void;
   /** Short call to action shown under the figure when `onClick` is set. */
   action?: string;
+  /** Several links under the figure; use instead of `onClick` when the tile
+   * leads to more than one place. */
+  actions?: { label: string; onClick: () => void }[];
 }) {
   return (
     <div
@@ -52,6 +56,15 @@ export function KpiTile({
       </span>
       {sub ? <span className="kpi-sub">{sub}</span> : null}
       {onClick && action ? <span className="kpi-action">{action} ›</span> : null}
+      {!onClick && actions?.length ? (
+        <span className="kpi-actions">
+          {actions.map((a) => (
+            <button key={a.label} type="button" className="kpi-action" onClick={a.onClick}>
+              {a.label} ›
+            </button>
+          ))}
+        </span>
+      ) : null}
       {hint ? (
         <span className="kpi-hint" role="tooltip">
           {hint}

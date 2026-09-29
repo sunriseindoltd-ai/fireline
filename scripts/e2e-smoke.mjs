@@ -52,10 +52,13 @@ const SUPPLIER = { user: "permata", pass: supplierPassword("permata") };
 function brcPassword(user) {
   const envVar = `KANOPI_SMOKE_${user.toUpperCase().replace(/-/g, "_")}_PASSWORD`;
   if (process.env[envVar]) return process.env[envVar];
+  // url;role;username;password;tenant — saved with ";" (Excel, ID locale);
+  // "," accepted too.
   const csv = readFileSync(path.join(process.cwd(), "artifacts", "akun-brc.csv"), "utf8");
-  const row = csv.split(/\r?\n/).find((line) => line.split(",")[2] === user);
+  const cells = (line) => line.split(/[;,]/);
+  const row = csv.split(/\r?\n/).find((line) => cells(line)[2] === user);
   if (!row) throw new Error(`No password for BRC account '${user}' — set ${envVar} or add artifacts/akun-brc.csv`);
-  return row.split(",")[3];
+  return cells(row)[3];
 }
 const BRC_CLIENT = { user: "brc-1", pass: brcPassword("brc-1") };
 const BRC_PLOTS_DIR = path.join(process.cwd(), "private-data", "tenants", "brc", "plots");

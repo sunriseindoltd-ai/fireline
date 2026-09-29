@@ -1,7 +1,7 @@
 import { BrandMark } from "@/components/brand-mark";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import type { GroupSearch } from "@/lib/app-search";
+import type { GroupSearch, PlotComplyFilter } from "@/lib/app-search";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { fill, formatCount, formatHa } from "@/lib/format";
 import { gateLogout, gateSwitchTenant } from "@/lib/gate-actions";
@@ -45,6 +45,9 @@ import { LangToggle } from "@/components/lang-toggle";
 import { PortfolioView, type ChainCoverage } from "@/components/portfolio-view";
 import { ScopeSwitcher } from "@/components/scope-switcher";
 import { EudrSummaryView } from "@/components/eudr-summary";
+import { DocumentsView, MonitoringView, PriceView } from "@/components/chain-extras";
+import { monitoringFor } from "@/lib/monitoring";
+import { PRICE_GROUP } from "@/lib/market";
 import type { Copy } from "@/lib/copy";
 
 function WarningTriangleIcon() {
@@ -226,12 +229,20 @@ function typeLabel(raw: string, t: Copy): string {
   return raw;
 }
 
+type Tab = "summary" | "data" | "docs" | "monitoring" | "price";
+const TAB_PATHS: readonly Exclude<Tab, "summary">[] = ["data", "docs", "monitoring", "price"];
+
+function tabFromPath(pathname: string): Tab {
+  const last = pathname.replace(/\/+$/, "").split("/").pop() ?? "";
+  return (TAB_PATHS as readonly string[]).includes(last) ? (last as Tab) : "summary";
+}
+
 type View = {
   groupSlug: string | null;
-  tab: "summary" | "data";
+  tab: Tab;
   refinery: string | null;
   mill: string | null;
-  plots: "noncomply" | null;
+  plots: PlotComplyFilter | null;
 };
 
 export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) {
@@ -248,7 +259,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
   // lands on the same view, and the browser's Back button means something.
   const view: View = {
     groupSlug: params.group ?? null,
-    tab: location.pathname.replace(/\/+$/, "").endsWith("/data") ? "data" : "summary",
+    tab: tabFromPath(location.pathname),
     refinery: search.refinery ?? null,
     mill: search.mill ?? null,
     plots: search.plots ?? null,
@@ -261,7 +272,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
     // The non-compliance filter only ever applies to the navigation that
     // asked for it, never to whatever the user does next.
     const v = { ...view, plots: null, ...next };
-    const base = v.groupSlug ? `/app/${encodeURIComponent(v.groupSlug)}${v.tab === "data" ? "/data" : ""}` : "/app/portfolio";
+    const base = v.groupSlug ? `/app/${encodeURIComponent(v.groupSlug)}${v.tab === "summary" ? "" : `/${v.tab}`}` : "/app/portfolio";
     const qs = new URLSearchParams();
     if (v.groupSlug && v.refinery) qs.set("refinery", v.refinery);
     if (v.groupSlug && v.mill) qs.set("mill", v.mill);
@@ -366,10 +377,14 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
     [present, coveredIds, allChains, coverage],
   );
   const chain = allChains.find((c) => groupSlug(c.name) === view.groupSlug) ?? null;
+  const hasPrice = (c: Chain | null) => tenant === "adm" && c?.name === PRICE_GROUP;
+  // /price on any other chain (an old link, a group switch) shows the summary.
+  const tab: Tab = viewTab === "price" && !hasPrice(chain) ? "summary" : viewTab;
 
   function selectScope(chainId: string | null) {
     const target = chainId ? allChains.find((c) => c.id === chainId) : null;
-    go({ groupSlug: target ? groupSlug(target.name) : null, refinery: null, mill: null, tab: target ? viewTab : "summary" });
+    const nextTab = !target ? "summary" : tab === "price" && !hasPrice(target) ? "summary" : tab;
+    go({ groupSlug: target ? groupSlug(target.name) : null, refinery: null, mill: null, tab: nextTab });
   }
 
   // Mills in the current refinery/trace scope — the map always shows all of
@@ -435,12 +450,11 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
     };
   }, [selectedMill?.umlId, selectedMill?.id, plotRetryNonce]);
 
-  // ?plots=noncomply (from the summary's "where are the non-compliant plots?"
-  // list): once this mill's plots are in, narrow them to non-compliant and
-  // open the table.
+  // ?plots=comply|noncomply (from the summary's compliance list): once this
+  // mill's plots are in, narrow them accordingly and open the table.
   useEffect(() => {
-    if (view.plots !== "noncomply" || !serverPlots) return;
-    setPlotFilters({ ...EMPTY_PLOT_FILTERS, comply: new Set(["no"]) });
+    if (!view.plots || !serverPlots) return;
+    setPlotFilters({ ...EMPTY_PLOT_FILTERS, comply: new Set([view.plots === "comply" ? "yes" : "no"]) });
     setPlotDrawerOpen(true);
   }, [view.plots, serverPlots]);
 
@@ -600,12 +614,25 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
         <ScopeSwitcher chains={chains} coverage={coverage} currentId={chain?.id ?? null} onSelect={selectScope} />
         {chain ? (
           <nav className="app-tabs" aria-label={chainLabel}>
-            <button type="button" className={viewTab === "summary" ? "on" : ""} aria-current={viewTab === "summary" ? "page" : undefined} onClick={() => go({ tab: "summary" })}>
-              {t.summaryTab}
-            </button>
-            <button type="button" className={viewTab === "data" ? "on" : ""} aria-current={viewTab === "data" ? "page" : undefined} onClick={() => go({ tab: "data" })}>
-              {t.dataTab}
-            </button>
+            {(
+              [
+                ["summary", t.summaryTab],
+                ["data", t.dataTab],
+                ["monitoring", t.monitoringTab],
+                ["docs", t.docsTab],
+                ...(hasPrice(chain) ? ([["price", t.priceTab]] as const) : []),
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={tab === key ? "on" : ""}
+                aria-current={tab === key ? "page" : undefined}
+                onClick={() => go({ tab: key })}
+              >
+                {label}
+              </button>
+            ))}
           </nav>
         ) : null}
         <div className="app-actions">
@@ -659,7 +686,13 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
               if (target) go({ groupSlug: groupSlug(target.name), refinery, mill: null, tab: "summary" });
             }}
           />
-        ) : viewTab === "summary" ? (
+        ) : tab === "docs" ? (
+          <DocumentsView canDownload={canDownload} />
+        ) : tab === "monitoring" ? (
+          <MonitoringView chainLabel={chainLabel} entry={monitoringFor(tenant, chain.name)} />
+        ) : tab === "price" ? (
+          <PriceView />
+        ) : tab === "summary" ? (
           <div className="page">
             <header className="summary-head">
               <div>
@@ -683,7 +716,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
               variant="chain"
               hideCoverageNotice={present}
               onOpenMap={() => go({ tab: "data" })}
-              onOpenNonComply={(millId) => go({ tab: "data", mill: millId, plots: "noncomply" })}
+              onOpenPlots={(millId, plots) => go({ tab: "data", mill: millId, plots })}
             />
           </div>
         ) : (

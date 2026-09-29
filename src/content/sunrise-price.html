@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="theme-color" content="#f5f5f7">
+<meta name="description" content="Dashboard harga TBS kelapa sawit 22 provinsi: Plasma vs Swadaya, acuan CPO dunia (Rp/kg), analisis harga wajar, dan proyeksi harga.">
+<title>Palm Oil Price · PalmTrace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1d1d1f; --muted:#6e6e73; --faint:#86868b;
+    --bg:#f5f5f7; --surface:#ffffff; --line:#d2d2d7; --line-2:#e8e8ed;
+    --green:#3e5c4e; --green-deep:#2f4a3e; --green-tint:#eef3f0;
+    --up:#2f6b4b; --down:#9e3f35; --amber:#7a5716; --amber-tint:#f7f0e2;
+    --f:"Inter","SF Pro Text","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-weight:400;line-height:1.55;font-size:15px;-webkit-font-smoothing:antialiased}
+  .tnum,.v,.n,td.n,th.n,.kpi .v{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 22px}
+  h1,h2,h3{font-weight:500;letter-spacing:-.015em}
+  a{color:var(--green)}
+
+  .topbar{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+  .topbar .wrap{display:flex;align-items:center;gap:16px;height:58px}
+  .brand{display:flex;align-items:center;gap:9px}
+  .brand b{font-weight:500;font-size:.98rem;letter-spacing:-.01em}
+  .brand .tag{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  .grow{flex:1}
+  .lnk{background:none;border:0;font:inherit;font-size:.82rem;font-weight:500;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:7px 4px}
+  .lnk:hover{color:var(--green)} .lnk svg{opacity:.75}
+  button:focus-visible,.chip:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+  .hero{padding:34px 0 8px}
+  .eyebrow{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--green);font-weight:500}
+  .hero h1{margin:9px 0 6px;font-size:clamp(1.5rem,3.2vw,2rem);line-height:1.15;max-width:20ch;font-weight:500}
+  .hero p{margin:0;color:var(--muted);max-width:64ch;font-size:.94rem}
+  .period{display:inline-flex;align-items:center;gap:7px;margin-top:14px;color:var(--muted);font-size:.82rem}
+  .period .d{width:6px;height:6px;border-radius:50%;background:var(--up)}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:24px}
+  .kpi{background:var(--surface);padding:16px 18px}
+  .kpi .l{font-size:.72rem;color:var(--muted);font-weight:500}
+  .kpi .v{font-size:1.6rem;font-weight:300;letter-spacing:-.02em;margin-top:6px;line-height:1}
+  .kpi .v small{font-size:.82rem;color:var(--faint);font-weight:400;margin-right:1px}
+  .kpi .v .u{font-size:.66rem;color:var(--faint);font-weight:400;margin-left:4px}
+  .kpi .d{margin-top:7px;font-size:.77rem;font-weight:500}
+  .kpi .d.up{color:var(--up)} .kpi .d.down{color:var(--down)} .kpi .d.warn{color:var(--amber)} .kpi .d.flat{color:var(--faint);font-weight:400}
+  .kpi .d em{color:var(--faint);font-weight:400;font-style:normal}
+
+  section{padding:32px 0}
+  .sh{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}
+  .sh h2{margin:0;font-size:1.1rem;font-weight:500}
+  .sh .rule{flex:1;height:1px;background:var(--line)}
+  .sh .note{font-size:.76rem;color:var(--muted)}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+
+  /* Map */
+  .map-layout{display:grid;grid-template-columns:1fr 232px;gap:20px;align-items:start}
+  .map-card{padding:16px 18px 18px;position:relative}
+  .map-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex-wrap:wrap}
+  .toggle button{background:none;border:0;font:inherit;font-size:.74rem;font-weight:500;color:var(--muted);padding:5px 10px;cursor:pointer}
+  .toggle button+button{border-left:1px solid var(--line)}
+  .toggle button[aria-pressed="true"]{background:var(--green-tint);color:var(--green-deep)}
+  .mapwrap{position:relative;width:100%}
+  svg.map{width:100%;height:auto;display:block}
+  svg.map path{stroke:#fff;stroke-width:.6;transition:opacity .12s}
+  svg.map path.hasdata{cursor:pointer} svg.map path.hasdata:hover{opacity:.78}
+  .maptip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;border-radius:8px;padding:8px 11px;font-size:.76rem;line-height:1.45;opacity:0;transform:translateY(3px);transition:.1s;z-index:5;min-width:150px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+  .maptip b.h{font-weight:500;display:block;margin-bottom:4px;font-size:.82rem}
+  .maptip .r{display:flex;justify-content:space-between;gap:14px}
+  .maptip .r span{color:#B9C2BB} .maptip .r b{font-weight:500;font-variant-numeric:tabular-nums}
+  .maptip .r .up{color:#9fd3b4} .maptip .r .down{color:#f0b3a8} .maptip .r .am{color:#F2C879}
+  .legend-card{padding:16px 18px}
+  .legend-card h3{margin:0 0 3px;font-size:.86rem;font-weight:500}
+  .legend-card .s{font-size:.74rem;color:var(--muted);margin:0 0 14px}
+  .scale{display:flex;flex-direction:column;gap:2px}
+  .scale .row{display:flex;align-items:center;gap:9px;font-size:.76rem;color:var(--muted);font-variant-numeric:tabular-nums}
+  .scale .sw{width:22px;height:12px;border-radius:3px;flex:none}
+  .scale .nd{margin-top:8px}
+  .maplead{margin-top:14px;padding-top:13px;border-top:1px solid var(--line-2)}
+  .maplead .big{font-size:1.1rem;font-weight:400;font-variant-numeric:tabular-nums}
+  .maplead .lo{font-size:.76rem;color:var(--muted)}
+
+  /* CPO */
+  .cpo{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .cpo .c{padding:15px 16px}
+  .cpo .t{font-size:.72rem;font-weight:500;color:var(--green)}
+  .cpo .src{float:right;font-size:.68rem;color:var(--faint)}
+  .cpo .p{font-size:1.3rem;font-weight:300;letter-spacing:-.01em;margin-top:9px;font-variant-numeric:tabular-nums}
+  .cpo .p small{font-size:.72rem;color:var(--faint)}
+  .cpo .nat{font-size:.73rem;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+  .cpo .chg{font-size:.74rem;font-weight:500;margin-top:6px}
+  .cpo .chg.up{color:var(--up)} .cpo .chg.down{color:var(--down)}
+  .cpo .fairc{background:linear-gradient(180deg,#F7F1E1,#FBF6EA)}
+  .cpo .fairc .p{color:var(--amber)}
+  .cpo .sub{font-size:.73rem;color:var(--muted);margin-top:5px}
+  .kurs{margin-top:12px;font-size:.75rem;color:var(--muted)}
+  .kurs b{font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink)}
+
+  /* Fair-price analysis */
+  .fair-layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+  .fair-hero{padding:18px 20px}
+  .fair-hero .lbl{font-size:.72rem;color:var(--muted);font-weight:500}
+  .fair-hero .big{font-size:2.2rem;font-weight:300;color:var(--amber);letter-spacing:-.02em;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+  .fair-hero .sub{font-size:.82rem;color:var(--muted)}
+  .fair-hero .formula{margin-top:14px;padding:11px 13px;background:var(--amber-tint);border-radius:8px;font-size:.76rem;color:#7A5610;line-height:1.5}
+  .fair-hero .formula b{font-weight:500}
+  .fair-bars{padding:14px 16px}
+  .fair-bars .cap{font-size:.76rem;color:var(--muted);margin-bottom:10px}
+  .fbrow{display:grid;grid-template-columns:118px 1fr 66px;gap:10px;align-items:center;padding:5px 0;font-size:.82rem}
+  .fbrow .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fbrow .tr{height:8px;background:var(--line-2);border-radius:5px;position:relative;overflow:hidden}
+  .fbrow .fl{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:linear-gradient(90deg,#E0A93B,#C0492F)}
+  .fbrow .pc{text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:var(--down)}
+
+  /* Board + side */
+  .board-layout{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start}
+  .board{overflow:hidden}
+  .tools{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:13px 15px;border-bottom:1px solid var(--line)}
+  .search{flex:1;min-width:150px;display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 11px}
+  .search input{border:0;background:none;font:inherit;font-size:.85rem;width:100%;outline:none;color:var(--ink)}
+  .search svg{color:var(--faint);flex:none}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);font:inherit;font-size:.74rem;font-weight:500;padding:5px 10px;border-radius:99px;cursor:pointer;transition:.12s}
+  .chip[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff}
+  table{width:100%;border-collapse:collapse}
+  thead th{font-size:.66rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:left;padding:11px 13px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+  thead th.n{text-align:right}
+  thead th.sortable{cursor:pointer;user-select:none}
+  thead th.sortable:hover{color:var(--green)}
+  thead th .arw{color:var(--green);font-size:.6rem;margin-left:1px}
+  tbody td{padding:0 13px;border-bottom:1px solid var(--line-2);height:44px;vertical-align:middle;font-size:.88rem}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--bg)}
+  .rank{color:var(--faint);font-variant-numeric:tabular-nums;font-size:.8rem;width:24px}
+  .rank.top{color:var(--green);font-weight:500}
+  .prov{font-weight:400;white-space:nowrap}
+  .prov .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .n{text-align:right;font-variant-numeric:tabular-nums}
+  .n.strong{font-weight:500}
+  .muted{color:var(--muted)}
+  .delta{text-align:right;font-variant-numeric:tabular-nums;font-size:.82rem;font-weight:500;white-space:nowrap}
+  .delta.up{color:var(--up)} .delta.down{color:var(--down)} .delta.flat{color:var(--faint);font-weight:400}
+  .gap{color:var(--down)} .proj .pp{font-size:.7rem;color:var(--faint)}
+  .na{color:var(--faint);font-size:.8rem}
+
+  .side{display:flex;flex-direction:column;gap:16px}
+  .panel{padding:15px 16px}
+  .panel h3{margin:0 0 2px;font-size:.84rem;font-weight:500}
+  .panel .ps{font-size:.72rem;color:var(--muted);margin:0 0 12px}
+  .spark{width:100%;height:66px;display:block}
+  .lg{display:flex;gap:13px;margin-top:8px;font-size:.71rem;color:var(--muted);flex-wrap:wrap}
+  .lg .sw{display:inline-block;width:10px;height:2px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .mv-grid{display:grid;grid-template-columns:1fr;gap:4px}
+  .mv-h{font-size:.71rem;font-weight:500;margin:6px 0 2px}
+  .mv-h.up{color:var(--up)} .mv-h.down{color:var(--down)}
+  .movers{list-style:none;margin:0;padding:0}
+  .movers li{display:flex;justify-content:space-between;font-size:.81rem;padding:4px 0}
+  .movers .m{font-variant-numeric:tabular-nums;font-weight:500}
+  .movers .m.up{color:var(--up)} .movers .m.down{color:var(--down)}
+  .rb{margin:9px 0}
+  .rb .t{display:flex;justify-content:space-between;font-size:.73rem;margin-bottom:5px}
+  .rb .t b{font-weight:500;font-variant-numeric:tabular-nums}
+  .rb .tr{height:6px;border-radius:4px;background:var(--line-2);position:relative;overflow:hidden}
+  .rb .fl{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--green)}
+  .rb .fl.o{opacity:.5}
+
+  .lbanner{font-size:.82rem;color:var(--amber);background:var(--amber-tint);border-radius:8px;padding:9px 12px;margin-bottom:12px;line-height:1.5}
+  .ltab{width:100%;border-collapse:collapse}
+  .ltab th{font-size:.66rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .ltab th.n{text-align:right}
+  .ltab td{padding:10px 12px;border-bottom:1px solid var(--line-2);font-size:.9rem;vertical-align:middle}
+  .ltab tr:last-child td{border-bottom:0}
+  .ltab .pnm{font-weight:500;white-space:nowrap}
+  .ltab .per{font-size:.76rem;color:var(--muted);white-space:nowrap}
+  .ltab .pl{text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+  .ltab .dl{text-align:right;font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+  .ltab .dl.up{color:var(--up)} .ltab .dl.flat{color:var(--faint);font-weight:400}
+  .ltab .nt{font-size:.78rem;color:var(--muted)}
+  .commod-wrap{margin-top:20px}
+  .commod-h{font-size:.78rem;color:var(--muted);font-weight:500;margin-bottom:10px}
+  .commod{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .ccard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .ccard.na{background:var(--bg);border-style:dashed}
+  .ccard .cl{font-size:.76rem;font-weight:500;color:var(--green)}
+  .ccard .cl .s2{color:var(--faint);font-weight:400}
+  .ccard .cnow{font-size:.73rem;color:var(--muted);margin-top:9px}
+  .ccard .cproj{font-size:1.4rem;font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:2px}
+  .ccard .cmeta{display:flex;gap:8px;align-items:baseline;margin-top:6px;font-size:.8rem;font-variant-numeric:tabular-nums}
+  .ccard .cchg{font-weight:500} .ccard .cchg.up{color:var(--up)} .ccard .cchg.down{color:var(--down)}
+  .ccard .cband{color:var(--faint);font-size:.74rem}
+  .ccard .cacc{font-size:.7rem;color:var(--faint);margin-top:8px}
+  .ccard.na .cproj{color:var(--faint);font-weight:400;font-size:1.05rem}
+  .fc-highlight{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+  .hcard{background:var(--green);color:#EAF2ED;border-radius:12px;padding:16px 18px;position:relative;overflow:hidden}
+  .hcard.sub{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+  .hcard .star{position:absolute;top:12px;right:14px;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;font-weight:500;opacity:.7}
+  .hcard .hl-lbl{font-size:.74rem;font-weight:500;opacity:.9}
+  .hcard.sub .hl-lbl{color:var(--muted);opacity:1}
+  .hcard .hl-now{font-size:.76rem;margin-top:9px;opacity:.8}
+  .hcard.sub .hl-now{color:var(--muted);opacity:1}
+  .hcard .hl-proj{font-size:1.7rem;font-weight:300;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+  .hcard .hl-meta{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:.8rem;font-variant-numeric:tabular-nums}
+  .hcard .hl-chg{font-weight:500}
+  .hcard .hl-chg.up{color:#9fd3b4} .hcard.sub .hl-chg.up{color:var(--up)}
+  .hcard .hl-chg.down{color:#f0b3a8} .hcard.sub .hl-chg.down{color:var(--down)}
+  .hcard .hl-band{opacity:.75;font-size:.75rem}
+  tbody tr.hl{background:var(--green-tint)!important}
+  tbody tr.hl td.prov{font-weight:500}
+  tbody tr.hl td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+  .fc-layout{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch}
+  .fc-chart{padding:16px 18px}
+  .fc-chart .cap{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:8px}
+  .fc-chart .cap .h{font-size:.86rem;font-weight:500}
+  .fc-chart .cap .sub{font-size:.73rem;color:var(--muted)}
+  svg.fchart{width:100%;height:210px;display:block}
+  .fc-note{padding:16px 18px;font-size:.82rem;color:var(--muted);line-height:1.6}
+  .fc-note h3{margin:0 0 8px;font-size:.86rem;color:var(--ink);font-weight:500}
+  .fc-note .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line-2)}
+  .fc-note .stat:last-of-type{border-bottom:0}
+  .fc-note .stat b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+  .fc-note .warn{margin-top:12px;padding:10px 12px;background:var(--green-tint);border-radius:8px;color:var(--green-deep);font-size:.76rem}
+  .bt{width:100%;border-collapse:collapse;margin-top:10px}
+  .bt th{font-size:.64rem;text-transform:uppercase;letter-spacing:.02em;color:var(--faint);font-weight:500;text-align:right;padding:4px 6px;border-bottom:1px solid var(--line-2)}
+  .bt th:first-child{text-align:left}
+  .bt td{font-size:.76rem;text-align:right;padding:4px 6px;border-bottom:1px solid var(--line-2);font-variant-numeric:tabular-nums;color:var(--ink)}
+  .bt td:first-child{text-align:left;color:var(--muted)}
+  .bt tr:last-child td{border-bottom:0}
+  .bt .e.up{color:var(--up)} .bt .e.down{color:var(--down)}
+
+  footer{border-top:1px solid var(--line);background:var(--surface);padding:26px 0 46px;margin-top:16px}
+  footer .wrap{font-size:.78rem;color:var(--muted)}
+  footer h4{margin:0 0 7px;color:var(--ink);font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;font-weight:500}
+  footer .disc{margin-top:13px;padding-top:13px;border-top:1px solid var(--line-2);max-width:84ch}
+  .print-only{display:none}
+
+  @media (max-width:920px){
+    .map-layout,.board-layout,.fair-layout,.fc-layout{grid-template-columns:1fr}
+    .cpo{grid-template-columns:repeat(2,1fr)}
+    .side{flex-direction:row;flex-wrap:wrap}.panel{flex:1;min-width:230px}
+  }
+  @media (max-width:600px){
+    .kpis{grid-template-columns:1fr 1fr}.cpo{grid-template-columns:1fr}
+    .brand .tag{display:none}.col-hide{display:none}.side{flex-direction:column}
+    .fbrow{grid-template-columns:96px 1fr 54px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media print{
+    @page{size:A4;margin:12mm}
+    html,body{background:#fff;font-size:9.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .topbar,.tools,.lnk,.toggle,.maptip,#q,.chips{display:none!important}
+    .print-only{display:block}
+    .wrap{max-width:none;padding:0}
+    .hero{padding:0}
+    section{padding:7px 0!important;break-inside:auto}
+    .sh{margin-bottom:8px}
+    .card{border:1px solid #dcdcd6;break-inside:avoid}
+    .kpi,.cpo .c,.panel,.fbrow,.fc-chart,.map-card,.legend-card,.fair-hero,.fair-bars,.fc-note{break-inside:avoid}
+    .kpis{grid-template-columns:repeat(4,1fr)}
+    .cpo{grid-template-columns:repeat(4,1fr);gap:8px}
+    .map-layout{grid-template-columns:1fr 200px;gap:10px}
+    .fair-layout{grid-template-columns:300px 1fr;gap:10px}
+    .fc-layout{grid-template-columns:1.3fr 1fr;gap:10px}
+    .board-layout{grid-template-columns:1fr;gap:10px}
+    .board{break-inside:auto}
+    #tbl thead{display:table-header-group}
+    #tbl tbody tr{break-inside:avoid}
+    tbody td{height:auto;padding-top:5px;padding-bottom:5px}
+    .side{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+    details[open] .bt{display:table}
+    .col-hide{display:table-cell!important}
+    a{color:#000}
+  }
+
+  .drivers{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .dcard{padding:15px 16px}
+  .dcard .t{font-size:.72rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+  .dcard .eff{font-size:.88rem;font-weight:500;margin-top:6px}
+  .dcard p{font-size:.78rem;color:var(--muted);margin:8px 0 0;line-height:1.5}
+  .srcpill{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:4px 10px}
+  .viewnav{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-shrink:0}
+  .viewnav button{background:none;border:0;font:inherit;font-size:.78rem;font-weight:500;color:var(--muted);padding:8px 14px;min-height:40px;cursor:pointer}
+  .viewnav button+button{border-left:1px solid var(--line)}
+  .viewnav button[aria-pressed="true"]{background:var(--green);color:#fff}
+  .tren-link{background:none;border:0;font:inherit;color:var(--green);cursor:pointer;font-size:.76rem;font-weight:500;padding:0}
+  .tren-link:hover{text-decoration:underline}
+  .thesis{background:var(--green-tint);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:22px;max-width:78ch}
+  .thesis .kicker{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--green);font-weight:500}
+  .thesis p{margin:8px 0 0;font-size:1.02rem;line-height:1.5;color:var(--ink)}
+  .snapg{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .tren-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .tren-grid h3{margin:0;font-size:.92rem;font-weight:500}
+  .tspark{width:100%;height:72px;display:block;margin:8px 0 4px}
+  .extra-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+  .extra-v{font-size:1.15rem;font-weight:300;letter-spacing:-.01em;margin-top:6px;font-variant-numeric:tabular-nums}
+  .caveat{font-size:.78rem;color:var(--muted);margin:12px 0 0;line-height:1.5}
+  .impl{margin:0;padding:0 0 0 18px;max-width:78ch}
+  .impl li{margin:0 0 10px;color:var(--ink);font-size:.9rem;line-height:1.5}
+  .tren-body section{padding:28px 0}
+  [hidden]{display:none!important}
+  @media (max-width:920px){.drivers{grid-template-columns:repeat(2,1fr)}.snapg,.tren-grid,.extra-row{grid-template-columns:1fr 1fr}}
+  @media (max-width:600px){.drivers{grid-template-columns:1fr}.snapg,.tren-grid,.extra-row{grid-template-columns:1fr}.viewnav button{padding:8px 10px;font-size:.72rem}}
+
+
+  .topbar{display:none!important}
+  body{font-size:14.5px}
+  .kpis,.snapg{border-radius:18px}
+  .card,.ccard,.hcard{border-radius:18px}
+  .cpo .fairc{background:var(--surface)}
+  .fbrow .fl{background:linear-gradient(90deg,#d2a95b,#c9695e)}
+  .hcard{background:#1d1d1f;color:#f5f5f7}
+  footer{background:transparent}
+</style>
+</head>
+<body>
+
+<header class="topbar"><div class="wrap">
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 21V11" stroke="#3e5c4e" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M12 11C12 11 8 4 2.5 5.2 2.5 5.2 5 11 12 11Z" fill="#9dbba9"/>
+      <path d="M12 11C12 11 16 4 21.5 5.2 21.5 5.2 19 11 12 11Z" fill="#6b8f7b"/>
+      <path d="M12 12C12 12 7.5 7 3.5 9.5 3.5 9.5 7 13.5 12 12Z" fill="#3e5c4e"/>
+      <path d="M12 12C12 12 16.5 7 20.5 9.5 20.5 9.5 17 13.5 12 12Z" fill="#3e5c4e"/>
+    </svg>
+    <div><b>Sunrise Palm Oil Price</b> <span class="tag">TBS &amp; CPO</span></div>
+  </div>
+  <div class="grow"></div>
+  <button class="lnk" id="printBtn" title="Cetak / simpan PDF">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Cetak
+  </button>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <div class="eyebrow">Pantauan Harga Petani · 22 Provinsi</div>
+  <h1>Harga TBS &amp; CPO Kelapa Sawit Indonesia</h1>
+  <p>Harga Tandan Buah Segar petani — Plasma (mitra) &amp; Swadaya (mandiri) — menurut penetapan Disbun (rangkuman Disbun), acuan CPO dunia dalam Rp/kg, analisis harga wajar, dan proyeksi.</p>
+  <div class="period"><span class="d"></span><span>Ranking Sep-II · 7–13 September 2026 · diperbarui 14 September 2026</span></div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="l">TBS Plasma Nasional</div>
+      <div class="v"><small>Rp</small><span id="kPl">3.592</span><span class="u">/kg</span></div>
+      <div class="d up" id="kPlD">↑ +0,3% <em>vs 31 Agustus–6 September 2026</em></div>
+    </div>
+    <div class="kpi">
+      <div class="l">TBS Swadaya Nasional</div>
+      <div class="v"><small>Rp</small><span id="kSw">3.065</span><span class="u">/kg</span></div>
+      <div class="d down" id="kSwD"></div>
+    </div>
+    <div class="kpi">
+      <div class="l">Indeks &ldquo;K&rdquo; rata-rata</div>
+      <div class="v"><span id="kK">90</span><span class="u">%</span></div>
+      <div class="d flat"><em>Faktor bagi hasil TBS ↔ CPO</em></div>
+    </div>
+    <div class="kpi">
+      <div class="l">Plasma vs Harga Wajar Dunia</div>
+      <div class="v" style="color:var(--amber)"><span id="kFair">-32,5</span><span class="u">%</span></div>
+      <div class="d warn"><em>di bawah nilai wajar CPO dunia</em></div>
+    </div>
+  </div>
+</div></div>
+
+<main class="wrap">
+
+  <section id="latest">
+    <div class="sh"><h2>Snapshot Terbaru per Provinsi</h2><div class="rule"></div>
+      <div class="note">Penetapan Disbun terbaru · s/d 7–13 September 2026</div></div>
+    <div class="card" style="padding:14px 16px">
+      <div class="lbanner">Ranking 22 provinsi di bawah = periode <b>10–16 Agu 2026</b> (rilis konsolidasi terbaru Disbun). Data lengkap 22 provinsi.</div>
+      <div style="overflow-x:auto"><table class="ltab" id="ltab">
+        <thead><tr><th>Provinsi</th><th>Periode</th><th class="n">Plasma</th><th class="n">Δ vs periode lalu</th><th>Catatan pasar</th></tr></thead>
+        <tbody id="ltb"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="peta">
+    <div class="sh"><h2>Peta Harga per Provinsi</h2><div class="rule"></div>
+      <div class="note" id="mapNote">Ketuk metrik untuk ganti pewarnaan</div></div>
+    <div class="map-layout">
+      <div class="card map-card">
+        <div class="map-top">
+          <div class="note" style="color:var(--muted);font-size:.78rem" id="mapTitle">TBS Plasma · Rp/kg</div>
+          <div class="toggle" role="group" aria-label="Metrik peta">
+            <button data-metric="pl" aria-pressed="true">Plasma</button>
+            <button data-metric="sw" aria-pressed="false">Swadaya</button>
+            <button data-metric="gap" aria-pressed="false">Selisih P/S</button>
+            <button data-metric="fc" aria-pressed="false">Proyeksi</button>
+          </div>
+        </div>
+        <div class="mapwrap">
+          <svg class="map" id="mapSvg" viewBox="0 0 1000 367" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Peta harga TBS per provinsi"></svg>
+          <div class="maptip" id="mapTip"></div>
+        </div>
+      </div>
+      <div class="card legend-card">
+        <h3>Skala</h3>
+        <p class="s" id="scaleSub">TBS Plasma Rp/kg</p>
+        <div class="scale" id="scaleList"></div>
+        <div class="scale nd"><div class="row"><span class="sw" style="background:#e8e8ed"></span>Tanpa data / luar cakupan</div></div>
+        <div class="maplead"><div class="big" id="leadVal">—</div><div class="lo" id="leadLo"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cpo-dunia">
+    <div class="sh"><h2>Acuan Harga CPO Dunia</h2><div class="rule"></div>
+      <button type="button" class="note tren-link" data-goto="tren">Baca analisis tren →</button></div>
+    <div class="cpo">
+      <div class="card c">
+        <span class="t">CPO Indonesia</span><span class="src">KPBN</span>
+        <div class="p"><small>Rp</small> 15.700 <small>/kg</small></div>
+        <div class="nat">KPBN Dumai, 11 Sep 2026 · Rp 15.708/kg (CTI, vs 6 Sep Rp 16.025)</div>
+        <div class="chg up">▲ +0,6% pekan ini</div>
+      </div>
+      <div class="card c">
+        <span class="t">CPO Malaysia</span><span class="src">Bursa (BMD)</span>
+        <div class="p"><small>Rp</small> 19.765 <small>/kg</small></div>
+        <div class="nat">≈ RM 4.528/ton · kurs Rp 4.365/RM</div>
+        <div class="chg down">▼ −0,3% pekan ini</div>
+      </div>
+      <div class="card c">
+        <span class="t">CPO Rotterdam</span><span class="src">CIF Eropa</span>
+        <div class="p"><small>Rp</small> 29.043 <small>/kg</small></div>
+        <div class="nat">CIF Rotterdam · kurs Rp 17.850/US$</div>
+        <div class="chg up">▲ +0,1% pekan ini</div>
+      </div>
+      <div class="card c fairc">
+        <span class="t" style="color:var(--amber)">Harga Wajar TBS</span><span class="src">dari CPO dunia</span>
+        <div class="p"><small>Rp</small> <span id="fairNat">5.489</span> <small>/kg</small></div>
+        <div class="sub">Rotterdam × 21% × K. TBS plasma nasional (Rp 3.556) <b style="color:var(--amber)">−34,4%</b> di bawah ini.</div>
+      </div>
+    </div>
+    <div class="kurs">Kurs snapshot periode: <b>Rp 17.850/US$</b> · <b>Rp 4.365/RM</b>. Harga TBS petani mengikuti CPO dunia (jeda beberapa pekan) × rendemen ~21% dikurangi biaya. <span class="muted">Nilai native bisa disambungkan ke kurs live.</span></div>
+  </section>
+
+  <section id="wajar">
+    <div class="sh"><h2>Analisis Harga Wajar</h2><div class="rule"></div>
+      <div class="note">Posisi tawar petani vs nilai CPO dunia</div></div>
+    <div class="fair-layout">
+      <div class="card fair-hero">
+        <div class="lbl">Rata-rata plasma nasional di bawah harga wajar dunia</div>
+        <div class="big" id="wgapBig">−34,4%</div>
+        <div class="sub">TBS plasma Rp 3.556/kg vs harga wajar ≈ Rp <span id="fairNat2">5.489</span>/kg (berdasarkan CPO Rotterdam).</div>
+        <div class="formula"><b>Harga wajar</b> = CPO Rotterdam (Rp/kg) × rendemen <b>21%</b> × Indeks <b>K</b> provinsi.<br>Selisih ini menggambarkan ruang penguatan posisi tawar petani, bukan target harga penetapan.</div>
+      </div>
+      <div class="card fair-bars">
+        <div class="cap">Provinsi dengan posisi tawar paling lemah (plasma paling jauh di bawah harga wajar dunia)</div>
+        <div id="fairBars"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ranking">
+    <div class="sh"><h2>Ranking &amp; Selisih per Provinsi</h2><div class="rule"></div>
+      <div class="note" id="boardNote">Plasma vs Swadaya · Δ vs periode lalu</div></div>
+    <div class="board-layout">
+      <div class="card board">
+        <div class="tools">
+          <label class="search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="search" id="q" placeholder="Cari provinsi…" aria-label="Cari provinsi">
+          </label>
+          <div class="chips" id="chips" role="group" aria-label="Filter pulau">
+            <button class="chip" data-isl="all" aria-pressed="true">Semua</button>
+            <button class="chip" data-isl="Sumatera" aria-pressed="false">Sumatera</button>
+            <button class="chip" data-isl="Kalimantan" aria-pressed="false">Kalimantan</button>
+            <button class="chip" data-isl="Sulawesi" aria-pressed="false">Sulawesi</button>
+            <button class="chip" data-isl="Papua" aria-pressed="false">Papua</button>
+            <button class="chip" data-isl="Jawa" aria-pressed="false">Jawa</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto"><table id="tbl">
+          <thead><tr>
+            <th style="width:24px">#</th>
+            <th class="sortable" data-sort="name">Provinsi</th>
+            <th class="sortable n" data-sort="pl">Plasma <span class="arw" data-for="pl">▾</span></th>
+            <th class="sortable n" data-sort="sw">Swadaya <span class="arw" data-for="sw"></span></th>
+            <th class="sortable n" data-sort="gap">Selisih P/S <span class="arw" data-for="gap"></span></th>
+            <th class="sortable n" data-sort="d">Δ pekan <span class="arw" data-for="d"></span></th>
+            <th class="sortable n col-hide" data-sort="proj">Proyeksi <span class="arw" data-for="proj"></span></th>
+            <th class="sortable n col-hide" data-sort="k">K <span class="arw" data-for="k"></span></th>
+          </tr></thead>
+          <tbody id="tb"></tbody>
+        </table></div>
+      </div>
+
+      <aside class="side">
+        <div class="card panel">
+          <h3>Pergerakan pekan ini</h3><p class="ps">Perubahan plasma vs pekan lalu</p>
+          <div class="mv-h up">▲ Naik tertinggi</div>
+          <ul class="movers" id="moversUp"></ul>
+          <div class="mv-h down">▼ Turun terdalam</div>
+          <ul class="movers" id="moversDown"></ul>
+        </div>
+        <div class="card panel">
+          <h3>Tren Nasional 2026</h3><p class="ps">Periodik · Rp/kg</p>
+          <svg class="spark" id="natSpark" viewBox="0 0 300 66" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="lg"><span><span class="sw" style="background:var(--green)"></span>TBS</span>
+            <span><span class="sw" style="background:#d2a95b"></span>CPO</span>
+            <span style="margin-left:auto" id="natTxt"></span></div>
+        </div>
+        <div class="card panel">
+          <h3>Tender CPO KPBN — Sep II</h3><p class="ps">Harian · Rp/kg</p>
+          <svg class="spark" id="kpbnSpark" viewBox="0 0 300 66" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="lg"><span id="kpbnTxt"></span></div>
+        </div>
+        <div class="card panel">
+          <h3>Kisaran di PKS</h3><p class="ps">Rp/kg</p>
+          <div class="rb"><div class="t"><span>Plasma/mitra</span><b>3.071–4.079</b></div><div class="tr"><div class="fl" style="left:34%;right:0"></div></div></div>
+          <div class="rb"><div class="t"><span>Swadaya</span><b>1.650–3.490</b></div><div class="tr"><div class="fl o" style="left:6%;right:14%"></div></div></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="prediksi">
+    <div class="sh"><h2>Prediksi Harga 4 Pekan ke Depan</h2><div class="rule"></div>
+      <div class="note">Model: CPO-linked catch-up + B50 + ENSO + musim + FX</div></div>
+    <div class="drivers">
+    <div class="card dcard">
+      <div class="t" style="color:var(--up)">Pendukung</div>
+      <div class="eff" style="color:var(--up)">B50 biodiesel Indonesia</div>
+      <div style="font-size:.74rem;font-weight:500;margin-top:4px">+0,3% / pekan</div>
+      <p>Mandat B50 menuju implementasi penuh Oktober 2026 menahan lantai CPO di dalam negeri. Tender Franco Dumai 11 September CTI Rp 15.708 lebih lemah dari awal September, tetapi permintaan biodiesel tetap menjadi penahan penurunan.</p>
+    </div>
+    <div class="card dcard">
+      <div class="t" style="color:var(--up)">Pendukung</div>
+      <div class="eff" style="color:var(--up)">Risiko El Niño Q4</div>
+      <div style="font-size:.74rem;font-weight:500;margin-top:4px">+0,1% / pekan</div>
+      <p>Premi cuaca sudah tercermin pada kurva BMD 2027. Dampak fisik terhadap FFB tertahan 3–6 bulan; untuk empat pekan ke depan ini bersifat sentimen, bukan kekeringan aktual.</p>
+    </div>
+    <div class="card dcard">
+      <div class="t" style="color:var(--down)">Penahan</div>
+      <div class="eff" style="color:var(--down)">Pass-through Disbun tertahan</div>
+      <div style="font-size:.74rem;font-weight:500;margin-top:4px">−0,3% / pekan</div>
+      <p>Disbun masih menangkap pita KPBN Rp 16.000 (Sumut Rp 4.079, Riau Rp 3.994), sementara tender fisik sudah di Rp 15.708. Risiko koreksi TBS 1–2 pekan ke depan jika Dumai tidak kembali ke atas Rp 16.000.</p>
+    </div>
+    <div class="card dcard">
+      <div class="t" style="color:var(--down)">Penahan</div>
+      <div class="eff" style="color:var(--down)">Puncak produksi Sep–Okt</div>
+      <div style="font-size:.74rem;font-weight:500;margin-top:4px">−0,2% / pekan</div>
+      <p>Musim panen puncak menambah pasokan TBS. Bersama stok Malaysia 2,82 juta ton (+7,5% MoM) dan ekspor 1–10 Sep yang turun 17%, empat pekan ke depan cenderung sideways-lemah, bukan kelanjutan rally.</p>
+    </div>
+    </div>
+    <div class="fc-highlight" id="fcHi"></div>
+    <div class="fc-layout">
+      <div class="card fc-chart">
+        <div class="cap"><span class="h">TBS Nasional — riwayat &amp; proyeksi</span>
+          <span class="sub">Rp/kg · pita ≈80% interval</span></div>
+        <svg class="fchart" id="fchart" viewBox="0 0 640 210" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+      <div class="card fc-note">
+        <h3>Ringkasan model</h3>
+        <div class="stat"><span>TBS proyeksi ~4 pekan</span><b id="fTbs">—</b></div>
+        <div class="stat"><span>Perubahan vs kini</span><b id="fChg">—</b></div>
+        <div class="stat"><span>CPO proyeksi ~4 pekan</span><b id="fCpo">—</b></div>
+        <div class="stat"><span>Rentang (±) TBS</span><b id="fBand">—</b></div>
+        <div class="stat"><span>Akurasi 1-langkah · backtest</span><b id="fMae">—</b></div>
+        <div class="warn" id="fWarn"></div>
+        <details id="btWrap" style="margin-top:10px">
+          <summary style="font-size:.78rem;color:var(--green);cursor:pointer;font-weight:500">Rincian akurasi · 8 periode terakhir</summary>
+          <table class="bt"><thead><tr><th>Periode</th><th>Prediksi</th><th>Aktual</th><th>Selisih</th></tr></thead><tbody id="btBody"></tbody></table>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:6px">Prediksi 1-langkah-ke-depan (fit s/d periode sebelumnya) vs harga aktual. Metode: ensemble Theta + terhubung-CPO.</div>
+        </details>
+      </div>
+    </div>
+    <div class="commod-wrap">
+      <div class="commod-h">Proyeksi komoditas turunan · ~4 pekan (nasional, Rp/kg)</div>
+      <div class="commod" id="commod"></div>
+    </div>
+  </section>
+</main>
+<div id="view-tren" hidden>
+<div class="tren">
+  <div class="hero"><div class="wrap">
+    <h1>Analisis tren harga CPO</h1>
+    <p>Tiga acuan harga yang perlu dibedakan: tender KPBN, CPO mill Disbun, dan BMD. Ketiganya tidak dapat disamakan dalam penilaian harga petani.</p>
+    <div class="period"><span class="d"></span><span>Snapshot 7–13 September · pasar 7–11 September</span></div>
+    <div class="thesis">
+      <div class="kicker">Ringkasan</div>
+      <p>CPO pecah di bawah Rp 16.000. Tender KPBN Franco Dumai 11 September CTI Rp 15.708 (−2,0% vs 6 Sep), BMD kontrak November RM 4.814. Disbun masih menangkap pita lama: Sumut Rp 4.079, Riau hampir Rp 4.000. Empat pekan ke depan adalah fase koreksi tertahan, bukan awal kenaikan baru. Prospek yang lebih konstruktif tetap di Q4 2026–2027 melalui B50 dan lag El Niño.</p>
+    </div>
+  </div></div>
+
+  <div class="wrap tren-body">
+    <section>
+      <div class="sh"><h2>Snapshot — tiga pasar</h2><div class="rule"></div><div class="note">Per 14 September 2026</div></div>
+      <div class="snapg">
+            <div class="kpi">
+              <div class="l">KPBN Franco Dumai</div>
+              <div class="v" style="font-size:1.25rem">Rp 15.708</div>
+              <div class="d down">−2,0% WoW</div>
+              <div class="d flat"><em>11 Sep CTI · vs 6 Sep Rp 16.025</em></div>
+            </div>
+            <div class="kpi">
+              <div class="l">CPO mill nasional</div>
+              <div class="v" style="font-size:1.25rem">Rp 15.358</div>
+              <div class="d up">+Rp 66</div>
+              <div class="d flat"><em>Rata-rata PKS 22 provinsi (ranking Sep-II) — bukan KPBN</em></div>
+            </div>
+            <div class="kpi">
+              <div class="l">TBS plasma</div>
+              <div class="v" style="font-size:1.25rem">Rp 3.592</div>
+              <div class="d up">+Rp 10 · +0,28%</div>
+              <div class="d flat"><em>Ranking Sep-II · vs Sep-I Rp 3.582</em></div>
+            </div>
+            <div class="kpi">
+              <div class="l">TBS swadaya</div>
+              <div class="v" style="font-size:1.25rem">Rp 3.065</div>
+              <div class="d up">+Rp 19</div>
+              <div class="d flat"><em>Gap vs plasma −Rp 527 (−14,7%)</em></div>
+            </div>
+            <div class="kpi">
+              <div class="l">BMD 3rd-month (Nov)</div>
+              <div class="v" style="font-size:1.25rem">RM 4.814</div>
+              <div class="d down">−2,3% pekan</div>
+              <div class="d flat"><em>Penutupan 11 Sep · −RM 71 hari itu</em></div>
+            </div>
+            <div class="kpi">
+              <div class="l">Rotterdam CIF</div>
+              <div class="v" style="font-size:1.25rem">US$ 1.595</div>
+              <div class="d down">−1,5%</div>
+              <div class="d flat"><em>CIF Rotterdam Rp 28.160 · 10 Sep −US$ 5</em></div>
+            </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sh"><h2>Delapan minggu: pemulihan, kemudian konsolidasi di Rp 16.000</h2><div class="rule"></div></div>
+      <div class="tren-grid">
+        <div class="card panel">
+          <h3>KPBN mingguan</h3>
+          <p class="ps">Franco Dumai · Rp/kg</p>
+          <svg class="tspark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M8.0 64L8.0 53.4L58.7 64.0L109.3 53.4L160.0 8.0L210.7 42.1L261.3 16.5L312.0 52.5L312.0 64Z" fill="#3e5c4e" opacity=".08"/>
+      <path d="M8.0 53.4 L58.7 64.0 L109.3 53.4 L160.0 8.0 L210.7 42.1 L261.3 16.5 L312.0 52.5" fill="none" stroke="#3e5c4e" stroke-width="1.9"/>
+      <text x="8" y="71" font-size="8" fill="#86868b" text-anchor="start">2 Agu</text><text x="58.666666666666664" y="71" font-size="8" fill="#86868b" text-anchor="middle">9 Agu</text><text x="109.33333333333333" y="71" font-size="8" fill="#86868b" text-anchor="middle">16 Agu</text><text x="160" y="71" font-size="8" fill="#86868b" text-anchor="middle">23 Agu</text><text x="210.66666666666666" y="71" font-size="8" fill="#86868b" text-anchor="middle">30 Agu</text><text x="261.33333333333337" y="71" font-size="8" fill="#86868b" text-anchor="middle">6 Sep</text><text x="312" y="71" font-size="8" fill="#86868b" text-anchor="end">13 Sep</text>
+    </svg>
+          <div class="lg">Puncak 23 Agustus Rp 16.100 belum terlewati. 11 September Rp 15.708 keluar dari pita 16.000.</div>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <h3 style="margin:0 0 8px;font-size:.92rem">Harian Dumai · 7–11 September</h3>
+          <table class="ltab">
+            <thead><tr><th>Tanggal</th><th class="n">Franco Dumai</th><th>Pembeli</th></tr></thead>
+            <tbody>
+<tr>
+                      <td class="per">7 Sep</td>
+                      <td class="pl">Rp 16.038</td>
+                      <td class="nt">—</td>
+                    </tr>
+<tr>
+                      <td class="per">8 Sep</td>
+                      <td class="pl">Rp 15.957</td>
+                      <td class="nt">WD · SPC</td>
+                    </tr>
+<tr>
+                      <td class="per">9 Sep</td>
+                      <td class="pl">Rp 15.900</td>
+                      <td class="nt">—</td>
+                    </tr>
+<tr>
+                      <td class="per">10 Sep</td>
+                      <td class="pl">Rp 15.666</td>
+                      <td class="nt">WD</td>
+                    </tr>
+<tr>
+                      <td class="per">11 Sep</td>
+                      <td class="pl">Rp 15.708</td>
+                      <td class="nt">CTI</td>
+                    </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sh"><h2>CPO mill vs BMD</h2><div class="rule"></div><div class="note">Mill = yang masuk rumus Disbun</div></div>
+      <div class="tren-grid">
+        <div class="card panel">
+          <h3>CPO mill nasional</h3>
+          <p class="ps">Rata-rata PKS · Rp/kg</p>
+          <svg class="tspark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M8.0 64L8.0 64.0L58.7 9.0L109.3 8.0L160.0 12.5L210.7 9.9L261.3 9.6L312.0 8.0L312.0 64Z" fill="#3e5c4e" opacity=".08"/>
+      <path d="M8.0 64.0 L58.7 9.0 L109.3 8.0 L160.0 12.5 L210.7 9.9 L261.3 9.6 L312.0 8.0" fill="none" stroke="#3e5c4e" stroke-width="1.9"/>
+      <text x="8" y="71" font-size="8" fill="#86868b" text-anchor="start">Jun-I</text><text x="58.666666666666664" y="71" font-size="8" fill="#86868b" text-anchor="middle">Jul-IV</text><text x="109.33333333333333" y="71" font-size="8" fill="#86868b" text-anchor="middle">Agu-II</text><text x="160" y="71" font-size="8" fill="#86868b" text-anchor="middle">Agu-III</text><text x="210.66666666666666" y="71" font-size="8" fill="#86868b" text-anchor="middle">Agu-IV</text><text x="261.33333333333337" y="71" font-size="8" fill="#86868b" text-anchor="middle">Sep-I</text><text x="312" y="71" font-size="8" fill="#86868b" text-anchor="end">Sep-II</text>
+    </svg>
+          <div class="lg">Harga mill bertahan di pita Rp 15.100–15.400 selama sembilan minggu. Puncak KPBN 23 Agustus (Rp 16.100) belum terlewati; 11 September Rp 15.708 keluar dari pita 16.000. Mill ranking Sep-II Rp 15.358 masih di bawah KPBN Rp 15.708; koreksi fisik belum penuh.</div>
+        </div>
+        <div class="card panel">
+          <h3>BMD kontrak acuan</h3>
+          <p class="ps">RM/ton · 3rd-month</p>
+          <svg class="tspark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M8.0 64L8.0 8.0L58.7 32.4L109.3 19.0L160.0 19.5L210.7 22.0L261.3 44.5L312.0 64.0L312.0 64Z" fill="#3e5c4e" opacity=".08"/>
+      <path d="M8.0 8.0 L58.7 32.4 L109.3 19.0 L160.0 19.5 L210.7 22.0 L261.3 44.5 L312.0 64.0" fill="none" stroke="#3e5c4e" stroke-width="1.9"/>
+      <text x="8" y="71" font-size="8" fill="#86868b" text-anchor="start">21 Agu</text><text x="58.666666666666664" y="71" font-size="8" fill="#86868b" text-anchor="middle">4 Sep</text><text x="109.33333333333333" y="71" font-size="8" fill="#86868b" text-anchor="middle">7 Sep</text><text x="160" y="71" font-size="8" fill="#86868b" text-anchor="middle">8 Sep</text><text x="210.66666666666666" y="71" font-size="8" fill="#86868b" text-anchor="middle">9 Sep</text><text x="261.33333333333337" y="71" font-size="8" fill="#86868b" text-anchor="middle">10 Sep</text><text x="312" y="71" font-size="8" fill="#86868b" text-anchor="end">11 Sep</text>
+    </svg>
+          <div class="lg">Kurva masih contango, tetapi kontrak November jatuh RM 71 pada 11 Sep ke RM 4.814. Stok Malaysia Agustus 2,82 juta ton (+7,5% MoM); ekspor 1–10 Sep 357.194 ton (−17,5%).</div>
+        </div>
+      </div>
+      <div class="extra-row">
+            <div class="card panel">
+              <h3>ICDX CPOTR</h3>
+              <p class="ps">premi ~Rp 900 vs KPBN 15.708</p>
+              <div class="extra-v">Rp 16.625</div>
+            </div>
+            <div class="card panel">
+              <h3>HR Kemendag Sep</h3>
+              <p class="ps">+1,10% · BK US$ 148 · PE 12,5%</p>
+              <div class="extra-v">US$ 1.007,51</div>
+            </div>
+            <div class="card panel">
+              <h3>Indeks K nasional</h3>
+              <p class="ps">bagi hasil TBS ↔ CPO</p>
+              <div class="extra-v">90%</div>
+            </div>
+            <div class="card panel">
+              <h3>Plasma vs wajar Rotterdam</h3>
+              <p class="ps">fair ≈ Rp 5.322 vs realisasi 3.592</p>
+              <div class="extra-v">−32,5%</div>
+            </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sh"><h2>Faktor pendorong 4 pekan</h2><div class="rule"></div></div>
+      <div class="drivers">
+            <div class="card dcard">
+              <div class="t" style="color:var(--up)">Pendukung</div>
+              <div class="eff" style="color:var(--up)">B50 biodiesel Indonesia</div>
+              <div style="font-size:.74rem;font-weight:500;margin-top:4px">+0,3% / pekan</div>
+              <p>Mandat B50 menuju implementasi penuh Oktober 2026 menahan lantai CPO di dalam negeri. Tender Franco Dumai 11 September CTI Rp 15.708 lebih lemah dari awal September, tetapi permintaan biodiesel tetap menjadi penahan penurunan.</p>
+            </div>
+            <div class="card dcard">
+              <div class="t" style="color:var(--up)">Pendukung</div>
+              <div class="eff" style="color:var(--up)">Risiko El Niño Q4</div>
+              <div style="font-size:.74rem;font-weight:500;margin-top:4px">+0,1% / pekan</div>
+              <p>Premi cuaca sudah tercermin pada kurva BMD 2027. Dampak fisik terhadap FFB tertahan 3–6 bulan; untuk empat pekan ke depan ini bersifat sentimen, bukan kekeringan aktual.</p>
+            </div>
+            <div class="card dcard">
+              <div class="t" style="color:var(--down)">Penahan</div>
+              <div class="eff" style="color:var(--down)">Pass-through Disbun tertahan</div>
+              <div style="font-size:.74rem;font-weight:500;margin-top:4px">−0,3% / pekan</div>
+              <p>Disbun masih menangkap pita KPBN Rp 16.000 (Sumut Rp 4.079, Riau Rp 3.994), sementara tender fisik sudah di Rp 15.708. Risiko koreksi TBS 1–2 pekan ke depan jika Dumai tidak kembali ke atas Rp 16.000.</p>
+            </div>
+            <div class="card dcard">
+              <div class="t" style="color:var(--down)">Penahan</div>
+              <div class="eff" style="color:var(--down)">Puncak produksi Sep–Okt</div>
+              <div style="font-size:.74rem;font-weight:500;margin-top:4px">−0,2% / pekan</div>
+              <p>Musim panen puncak menambah pasokan TBS. Bersama stok Malaysia 2,82 juta ton (+7,5% MoM) dan ekspor 1–10 Sep yang turun 17%, empat pekan ke depan cenderung sideways-lemah, bukan kelanjutan rally.</p>
+            </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sh"><h2>Outlook: dua horizon yang perlu dibedakan</h2><div class="rule"></div></div>
+      <div class="tren-grid">
+        <div class="card" style="padding:16px 18px">
+          <h3 style="margin:0 0 4px;font-size:.95rem">A. Empat pekan ke depan — konsolidasi</h3>
+          <p class="ps" style="margin-bottom:10px">Pita kerja KPBN Rp 15.400–16.000</p>
+          <table class="ltab">
+            <thead><tr><th></th><th class="n">Kini</th><th class="n">~4 pekan</th><th class="n">Pita ±</th></tr></thead>
+            <tbody>
+<tr>
+                      <td class="pnm">KPBN</td>
+                      <td class="pl">15.708</td>
+                      <td class="pl">15.800</td>
+                      <td class="nt" style="text-align:right">1.200</td>
+                    </tr>
+<tr>
+                      <td class="pnm">CPO mill</td>
+                      <td class="pl">15.358</td>
+                      <td class="pl">15.470</td>
+                      <td class="nt" style="text-align:right">1.550</td>
+                    </tr>
+<tr>
+                      <td class="pnm">TBS plasma</td>
+                      <td class="pl">3.592</td>
+                      <td class="pl">3.620 <span class="nt"> (+0,8%)</span></td>
+                      <td class="nt" style="text-align:right">325</td>
+                    </tr>
+            </tbody>
+          </table>
+          <p class="caveat">Validasi model (8 periode Jun-IV–Sep-I, prediksi satu pekan ke depan vs realisasi plasma): MAE Rp 40/kg, MAPE 1,1%. Angka tersebut mengukur ketepatan prediksi satu pekan, bukan horizon empat pekan. Proyeksi Rp 3.620 merupakan skenario, bukan target penetapan.</p>
+        </div>
+        <div class="card" style="padding:16px 18px">
+          <h3 style="margin:0 0 4px;font-size:.95rem">B. Q4 2026 – 2027 — prospek konstruktif</h3>
+          <p class="ps" style="margin-bottom:10px">RM 5.200 pada akhir 2026 merupakan skenario agresif, bukan skenario dasar</p>
+          <table class="ltab">
+            <thead><tr><th>Sumber</th><th>Horizon</th><th>Angka</th><th>Sikap</th></tr></thead>
+            <tbody>
+<tr>
+                      <td class="pnm">PASPI (Tungkot, 31 Agu)</td>
+                      <td class="per">2027</td>
+                      <td class="pl">US$ 1.650–1.720/t</td>
+                      <td class="nt">Base institusional RI</td>
+                    </tr>
+<tr>
+                      <td class="pnm">Ibrahim / Kompas 5 Sep</td>
+                      <td class="per">EOY 2026</td>
+                      <td class="pl">RM 5.200</td>
+                      <td class="nt">Agresif; di atas konsensus</td>
+                    </tr>
+<tr>
+                      <td class="pnm">BMI (20 Agu)</td>
+                      <td class="per">2026 avg / Q4</td>
+                      <td class="pl">RM 4.453 / 4.582</td>
+                      <td class="nt">Konsensus riset</td>
+                    </tr>
+<tr>
+                      <td class="pnm">Kenanga</td>
+                      <td class="per">2026–27E avg</td>
+                      <td class="pl">RM 4.350–4.400</td>
+                      <td class="nt">Lebih hati-hati</td>
+                    </tr>
+<tr>
+                      <td class="pnm">GAPKI (Eddy, 31 Agu)</td>
+                      <td class="per">2026</td>
+                      <td class="pl">Stok 2,5–2,9 juta t</td>
+                      <td class="nt">Tidak ketat tahun ini</td>
+                    </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sh"><h2>Implikasi</h2><div class="rule"></div></div>
+      <ol class="impl">
+            <li>Disbun masih naik mengikuti pita KPBN Rp 16.000, sementara tender fisik sudah Rp 15.708. Ranking 7–13 September memakai penetapan Disbun yang sudah keluar (7 provinsi baru) dan carry-forward Sep-I untuk sisanya. Rilis konsolidasi 22-provinsi belum terbit.</li>
+            <li>Stok Malaysia Agustus 2,82 juta ton dan ekspor awal September yang lemah menekan BMD. Mandat B50 menahan lantai, tetapi bukan alasan untuk mengasumsikan rebound cepat ke Rp 16.200.</li>
+            <li>Spread yang perlu dipantau: ICDX Rp 16.625 vs KPBN Rp 15.708; KPBN vs mill sekitar Rp 350; plasma vs harga wajar Rotterdam −32,5% (struktural, pajak ekspor dan B50).</li>
+            <li>Risiko penurunan: puncak produksi, stok Malaysia 2,82 juta ton, soyoil lemah, dan Dumai yang gagal bertahan di Rp 16.000. Risiko kenaikan: B50 Oktober dan tender Dumai kembali beruntun di atas Rp 16.000.</li>
+      </ol>
+    </section>
+  </div>
+</div>
+</div>
+
+
+<footer><div class="wrap">
+  <h4>Sumber &amp; metode</h4>
+  <p>Harga per provinsi (Plasma &amp; Swadaya, Indeks K, selisih P/S): rangkuman penetapan Disbun, periode 7–13 September 2026. Acuan CPO: KPBN (Indonesia), Bursa Malaysia (MPOB/BMD), CIF Rotterdam, ICDX — dikonversi Rp/kg dengan kurs snapshot periode. Sumber utama:  / Disbun. Riwayat &amp; proyeksi nasional: data periodik 2026, <em>ensemble</em> CPO-linked catch-up + overlay B50, ENSO, musim, FX.</p>
+  <p class="disc">Catatan: &ldquo;Harga wajar&rdquo; = CPO Rotterdam (Rp/kg) × rendemen 21% × Indeks K provinsi — ilustrasi posisi tawar, bukan target penetapan. Proyeksi per provinsi diturunkan dari faktor pertumbuhan nasional × harga terkini (spread antar-daerah dianggap tetap). Harga penetapan berlaku bagi petani bermitra/plasma di tingkat pabrik; swadaya umumnya lebih rendah. Purwarupa pemantauan pasar, bukan acuan transaksi resmi.</p>
+</div></footer>
+
+<script>
+const MAP    = {"viewBox":"0 0 1000 367","provinces":[{"g":"IRIAN JAYA TIMUR","n":"Papua","d":"M932.7,161.2 933.0,161.1 935.8,163.4 938.5,164.1 940.6,165.3 943.7,166.4 948.0,167.3 949.1,167.7 950.9,169.2 951.7,170.3 953.4,171.4 954.1,171.2 956.2,171.6 957.0,172.1 959.1,172.9 962.3,174.8 964.3,175.4 965.8,176.1 967.9,177.5 970.3,178.5 971.7,179.4 974.1,180.4 976.0,180.3 979.4,180.0 980.0,179.3 981.4,179.9 982.9,181.2 983.6,181.0 984.6,181.8 985.9,182.0 986.2,180.8 989.0,181.8 991.4,181.8 994.0,183.0 993.8,184.3 993.1,185.1 993.3,185.8 994.9,185.8 995.1,185.3 998.0,185.7 1000.0,185.2 1000.0,197.6 1000.0,212.2 1000.0,223.1 1000.0,237.7 1000.0,250.4 1000.0,266.4 999.3,266.4 998.9,267.5 999.0,268.6 998.4,269.5 998.5,271.1 998.0,272.1 997.2,272.9 996.8,275.2 997.8,275.9 997.2,276.7 998.2,277.5 998.1,278.4 1000.0,279.0 1000.0,292.9 1000.0,308.6 1000.0,319.6 1000.0,328.0 997.3,327.1 996.1,326.1 995.2,324.7 991.5,321.4 989.6,318.7 988.9,317.0 986.3,314.8 985.7,313.7 984.6,313.3 982.0,311.0 979.0,308.9 977.6,307.6 976.9,306.3 976.1,305.8 974.3,305.5 971.7,305.6 969.0,306.2 967.4,307.2 963.9,307.5 962.5,306.9 961.3,305.1 957.8,306.1 956.0,307.5 954.9,309.0 953.6,307.6 952.8,306.2 953.2,305.0 954.2,305.0 954.8,304.3 954.2,303.6 954.7,301.2 956.7,300.2 956.7,298.0 957.6,296.4 957.9,295.2 959.0,294.2 958.4,293.1 957.1,292.6 955.8,292.8 955.1,291.9 954.3,289.3 953.1,288.2 951.3,287.1 949.5,286.5 949.4,285.7 950.9,285.9 954.3,285.7 957.3,286.7 960.4,286.5 961.0,285.8 961.8,285.9 962.5,286.4 963.0,286.2 964.0,286.6 965.8,286.4 965.6,285.6 964.8,285.8 964.1,285.0 964.8,283.8 963.9,282.3 963.3,282.4 961.5,281.7 961.2,281.0 959.5,280.5 956.9,278.6 955.4,277.7 954.6,276.6 953.6,277.0 952.5,276.5 952.5,274.8 951.9,274.2 949.6,272.9 946.1,269.3 943.8,267.3 942.9,264.2 943.2,263.4 942.1,261.5 940.7,258.2 940.2,257.9 940.3,256.5 942.2,256.2 943.6,255.5 944.2,254.3 944.7,254.5 945.0,254.2 945.0,253.4 945.5,252.9 945.8,253.7 946.7,254.5 946.9,254.6 947.1,254.6 947.4,254.3 948.1,254.3 948.3,254.0 948.1,253.4 948.6,252.6 949.7,252.0 950.8,251.9 951.1,253.0 952.8,253.2 953.8,252.2 954.5,252.0 955.1,252.3 955.5,252.6 955.9,252.7 955.8,253.2 956.6,254.4 956.1,255.5 956.6,256.4 957.9,257.1 956.8,256.5 956.2,255.6 956.6,254.9 956.6,254.2 956.3,253.5 955.8,253.2 955.9,252.8 955.8,252.6 955.5,252.6 955.1,252.2 954.7,251.9 953.7,252.1 952.8,253.1 951.2,253.0 951.1,252.1 950.7,251.8 949.6,252.0 948.6,252.5 948.0,253.2 948.0,253.6 948.2,254.0 947.4,254.2 946.9,254.5 946.6,254.3 946.4,254.1 945.9,253.7 945.7,252.9 945.3,252.9 944.8,253.7 944.9,254.3 944.5,254.4 943.8,253.5 945.4,252.2 946.8,252.0 947.2,252.0 948.2,251.8 949.0,251.1 947.9,251.0 945.1,250.5 943.8,251.9 943.2,252.1 940.0,252.2 939.8,251.1 940.2,250.0 940.1,249.0 940.0,248.1 939.8,247.5 939.3,247.6 938.7,248.1 938.6,247.4 938.0,247.3 937.4,248.2 937.3,249.3 936.4,249.3 935.6,248.6 935.9,247.5 935.2,247.3 934.3,246.2 935.4,245.9 935.7,245.7 935.8,244.9 936.3,243.9 937.7,243.6 937.8,243.1 937.6,242.1 938.2,241.8 938.4,241.7 938.6,241.5 938.6,241.0 937.9,240.8 936.6,240.9 936.3,241.7 935.4,241.9 935.7,242.8 931.9,244.7 931.8,244.4 931.6,244.2 931.2,243.9 928.8,245.5 929.1,244.5 927.5,242.8 924.6,241.4 926.1,240.8 925.8,239.4 926.3,238.3 926.3,238.2 926.6,237.7 928.1,235.1 929.1,233.0 930.2,230.0 930.4,228.8 928.8,226.4 928.5,224.5 929.1,222.1 929.9,219.7 926.8,219.6 925.1,219.7 922.6,219.6 920.5,219.7 912.3,219.5 912.7,216.7 913.7,212.9 914.1,209.2 914.5,206.8 916.0,201.1 916.3,197.8 917.5,197.8 918.8,197.3 920.3,195.8 921.9,195.2 924.2,195.2 925.1,194.3 926.2,194.3 927.4,194.9 929.8,195.3 932.5,194.9 939.6,194.5 941.0,193.0 943.7,192.4 944.4,191.0 944.1,188.9 942.0,185.3 939.0,182.6 938.3,181.3 937.1,180.3 936.2,179.1 935.1,179.0 933.5,177.2 933.1,176.0 931.5,174.6 931.0,173.7 931.3,171.3 932.3,169.2 931.8,167.1 932.1,166.1 931.7,164.8 932.7,161.2Z M998.7,280.8 997.7,279.7 995.8,279.2 994.5,280.1 994.0,280.8 994.8,281.5 994.3,282.4 995.7,282.5 996.3,281.1 997.1,282.6 996.0,283.6 996.0,285.1 996.3,285.5 997.5,285.1 997.7,284.4 999.0,282.8 998.7,280.8Z M946.8,309.3 945.1,310.2 944.7,310.8 940.9,311.8 935.6,311.8 931.9,311.6 927.8,312.4 926.8,311.9 928.0,308.1 929.0,305.8 929.9,304.5 930.3,302.9 931.5,300.5 932.6,298.5 933.8,297.4 934.0,296.7 935.6,294.6 937.8,292.8 939.6,291.7 942.8,290.5 949.1,289.4 951.3,289.6 953.4,290.9 954.7,293.1 955.4,293.5 958.1,293.8 957.3,295.0 957.1,296.4 956.4,297.3 956.1,298.4 956.3,299.5 955.7,300.3 954.7,300.6 953.9,301.5 954.2,303.0 953.9,303.9 952.5,304.8 951.9,306.1 949.3,306.4 948.8,307.6 946.8,309.3Z M957.4,285.9 955.9,285.2 954.1,284.8 953.3,284.9 951.1,284.0 948.5,281.9 947.4,281.3 946.6,280.1 947.1,279.3 948.2,278.8 950.2,279.3 951.9,278.1 954.3,277.9 956.0,278.5 958.9,280.5 960.5,280.8 961.5,281.7 963.2,282.5 963.8,282.4 964.6,283.9 963.8,284.9 964.8,286.1 962.5,286.2 962.0,284.7 961.0,284.6 960.0,285.8 957.4,285.9Z M947.2,309.6 949.0,308.1 949.3,306.9 950.9,306.7 952.3,306.1 952.9,307.0 953.0,308.7 954.6,309.8 954.4,311.5 950.7,311.6 949.2,311.1 948.1,311.2 946.5,310.5 947.2,309.6Z M939.8,255.6 938.4,255.2 938.1,254.0 940.6,252.7 944.2,251.9 945.2,250.6 948.5,251.2 948.0,251.9 945.6,252.0 942.9,253.1 943.4,255.5 940.9,256.0 939.8,255.6Z M935.9,253.0 935.5,250.9 935.9,249.9 937.5,249.3 937.5,248.4 938.2,247.4 938.6,248.1 939.1,248.2 939.6,247.5 940.0,248.3 940.0,249.5 939.4,252.2 938.5,253.4 936.6,253.6 935.9,253.0Z M937.5,242.2 937.7,243.5 936.3,243.7 935.6,244.9 935.6,245.6 934.2,245.7 934.2,246.4 935.4,248.2 934.8,248.5 933.5,247.6 931.7,245.5 933.4,244.1 934.2,244.2 935.0,243.3 936.0,242.8 936.6,241.0 938.0,240.8 938.5,241.0 938.4,241.7 937.6,241.9 937.5,242.2Z"},{"g":"NUSATENGGARA BARAT","n":null,"d":"M489.7,314.3 489.9,315.4 492.1,315.6 492.4,316.1 492.3,317.4 492.9,318.8 493.5,319.1 494.9,318.5 497.1,319.4 498.8,317.7 500.7,317.4 502.0,317.9 503.5,317.5 503.5,316.1 499.9,313.9 499.5,313.1 497.3,313.4 494.1,311.2 491.1,308.4 491.7,306.8 492.9,306.0 494.1,306.0 496.2,305.0 496.7,305.4 497.9,305.2 499.7,305.7 500.9,306.3 500.9,307.6 501.7,309.1 502.5,309.5 503.0,310.7 504.6,311.3 506.1,310.5 506.1,309.9 508.4,308.5 512.1,309.5 513.1,310.9 513.1,312.7 512.4,314.0 513.4,314.0 513.2,312.1 513.9,310.6 515.4,309.4 517.4,309.4 519.9,310.0 519.6,311.4 520.9,313.0 521.0,314.3 520.1,314.7 520.0,315.6 520.6,317.2 521.5,317.4 523.2,317.1 523.2,318.5 522.7,319.6 520.2,319.2 519.1,319.5 517.7,318.0 516.9,319.0 515.6,318.5 514.2,318.4 513.9,319.8 516.2,320.0 517.8,319.9 518.6,320.9 517.7,321.6 515.8,321.5 514.5,320.5 512.4,320.7 509.4,322.2 507.3,322.6 505.9,321.6 505.9,320.0 506.9,319.0 506.9,317.3 505.4,318.2 504.7,319.1 503.7,319.6 502.1,321.5 500.3,322.5 499.4,321.6 497.7,322.0 497.2,322.8 495.4,323.4 492.9,323.6 490.8,323.4 488.9,324.7 485.0,326.2 483.3,326.3 480.5,325.5 479.9,325.7 479.0,327.0 476.4,327.5 475.1,326.4 473.5,326.5 471.5,326.0 470.1,324.6 470.2,322.3 470.9,322.0 471.7,320.5 470.9,319.4 470.6,318.0 471.3,316.3 472.3,315.0 474.6,314.6 475.9,314.0 478.1,312.3 478.7,311.3 481.2,312.0 484.5,313.6 485.7,312.0 486.4,312.3 488.4,312.1 489.7,312.9 489.7,314.3Z M462.6,324.1 462.4,323.1 460.9,323.0 459.7,323.3 458.4,323.2 458.0,322.1 454.7,322.9 452.9,321.4 450.6,320.7 450.3,319.5 451.0,318.9 452.3,320.1 454.3,319.2 455.7,319.0 456.3,317.7 456.2,314.7 455.6,314.1 455.5,313.0 456.1,312.1 457.1,311.8 460.4,308.7 462.3,307.9 464.0,308.1 467.4,309.4 468.4,309.6 469.8,310.9 469.6,313.0 468.7,313.9 468.7,315.4 467.8,316.5 465.9,319.9 465.3,320.3 466.6,322.7 464.6,323.3 464.1,322.9 464.6,321.2 463.6,321.3 462.8,322.1 463.0,323.8 462.6,324.1Z"},{"g":"GORONTALO","n":"Gorontalo","d":"M589.3,105.6 590.1,106.5 592.2,106.3 593.4,106.6 595.4,106.0 596.0,106.8 598.1,107.6 599.5,107.7 600.3,108.8 600.9,108.8 603.7,110.6 605.4,109.6 605.9,108.5 605.9,107.3 606.8,107.3 607.6,108.0 608.9,108.5 609.6,108.1 610.2,109.1 612.3,110.1 612.6,112.0 615.1,114.0 617.8,114.5 618.5,115.9 618.4,118.6 617.2,121.2 616.1,121.6 614.5,121.7 612.9,121.3 611.4,119.8 610.6,119.6 609.7,118.2 608.6,117.3 607.0,117.8 604.7,117.8 603.5,117.6 600.7,118.0 597.2,117.6 596.9,117.3 594.4,117.4 594.1,117.1 591.3,118.0 590.2,117.8 589.1,118.1 588.2,117.7 586.4,117.9 584.1,118.7 582.5,118.6 581.1,119.4 579.0,117.0 575.9,116.7 575.0,116.4 574.9,117.5 573.2,118.2 572.5,117.8 570.9,118.0 571.1,115.9 568.8,115.4 567.0,113.3 568.3,112.9 569.0,111.3 569.8,110.4 571.8,109.4 574.3,109.8 576.9,109.1 578.0,108.4 579.8,108.2 581.5,107.4 582.6,107.2 583.6,107.7 584.5,108.9 585.1,107.9 585.7,107.7 586.7,106.6 589.3,105.6Z"},{"g":"SULAWESI TENGGARA","n":"Sulawesi Tenggara","d":"M563.0,190.4 565.1,189.1 566.3,191.3 567.0,193.3 567.9,193.5 568.9,195.2 570.2,195.4 571.1,194.4 574.0,193.8 575.8,192.1 577.5,191.4 578.7,189.9 579.2,188.7 579.9,187.8 580.8,187.6 581.2,188.8 582.4,189.1 583.0,189.7 583.9,192.5 585.2,193.1 587.2,193.1 588.0,194.3 589.4,194.7 589.3,196.0 590.5,197.0 591.2,197.0 591.6,198.2 591.4,199.5 592.0,199.9 591.5,200.7 591.6,201.8 593.3,202.3 593.7,202.8 593.3,204.1 592.4,203.2 592.2,202.3 591.2,202.0 590.4,202.7 591.8,204.3 591.2,206.0 589.5,206.3 589.5,207.2 590.6,208.5 591.9,209.1 593.2,210.4 593.9,210.1 595.0,210.3 595.3,211.4 596.4,212.6 596.4,213.2 599.9,213.6 598.4,215.3 599.7,216.0 599.2,218.6 600.6,219.3 602.5,219.3 603.6,218.6 602.0,217.1 603.6,217.1 604.7,218.5 605.0,220.1 604.5,222.3 604.9,224.1 603.5,225.5 602.1,224.7 600.1,222.9 599.7,223.5 600.5,224.6 601.9,225.6 601.5,226.9 600.1,226.3 598.6,224.6 598.0,224.4 596.2,225.6 594.4,225.2 593.2,225.9 590.8,226.5 590.1,226.2 589.0,227.1 587.0,227.5 585.7,230.0 585.7,231.5 586.2,232.6 587.6,233.6 586.9,234.2 585.0,235.4 583.1,235.2 581.2,234.4 581.0,234.0 579.2,234.0 577.8,234.4 577.6,233.4 575.6,233.0 573.3,230.7 573.4,228.6 574.4,225.3 574.4,223.1 574.8,221.9 575.7,221.2 576.6,218.8 576.4,217.0 574.3,216.1 570.7,215.4 569.8,213.4 568.3,211.9 567.3,212.1 564.7,209.3 563.8,209.0 561.4,206.7 560.7,205.5 560.3,203.6 561.8,201.4 562.3,201.2 562.6,199.8 563.7,199.3 564.5,198.0 564.6,195.5 565.2,192.3 564.9,191.6 563.0,190.4Z M606.5,239.4 606.5,240.2 605.8,241.2 606.2,241.9 607.7,240.6 608.9,241.4 610.3,243.0 610.9,243.0 611.7,244.3 610.0,246.3 607.3,247.3 606.4,246.3 605.3,247.2 604.6,247.3 603.7,248.3 604.8,249.0 604.8,250.0 603.0,252.0 602.6,252.9 601.4,251.6 599.6,252.7 598.8,252.5 597.8,250.1 597.5,248.2 599.3,246.9 598.7,246.5 599.3,245.5 599.4,244.8 600.1,244.7 601.2,242.9 602.5,242.9 602.8,242.0 601.3,241.4 602.4,240.0 602.7,238.5 602.0,237.8 602.9,237.2 603.4,235.3 602.8,234.7 603.9,232.9 603.3,230.7 603.8,228.7 605.1,225.9 607.9,223.9 608.8,225.9 610.0,226.4 611.4,229.0 611.6,231.6 611.4,232.9 610.8,234.1 610.3,231.9 609.3,231.4 607.9,233.3 606.9,233.9 607.1,236.2 606.4,236.6 606.1,237.7 606.5,239.4Z M592.0,241.8 592.2,240.0 593.5,239.5 593.4,236.4 592.9,235.9 592.2,234.1 593.4,232.0 595.0,232.0 596.9,231.2 598.2,229.8 599.8,229.1 601.1,229.8 600.9,230.9 601.5,233.1 601.1,234.0 601.8,235.2 601.2,236.7 600.0,238.4 599.1,239.0 598.0,241.7 599.1,243.3 599.2,245.4 598.3,245.4 598.1,246.2 597.1,247.2 596.4,246.5 597.0,244.8 596.6,244.0 595.7,244.1 596.0,245.2 595.3,246.4 593.1,246.1 591.2,246.1 591.1,244.4 592.1,242.8 592.0,241.8Z M580.9,243.0 581.0,242.1 581.8,240.7 582.1,239.3 583.7,239.9 584.0,239.0 584.9,239.7 585.0,241.0 585.8,240.8 586.5,241.7 586.3,243.3 586.1,247.6 585.8,247.9 584.0,248.0 584.0,247.4 582.5,246.0 580.9,243.8 580.9,243.0Z M607.1,215.8 607.7,215.4 608.9,216.3 610.2,216.0 611.7,216.3 612.6,217.3 612.6,218.3 610.3,221.1 609.6,221.5 608.6,221.3 606.9,220.2 605.8,218.0 606.6,217.2 607.1,215.8Z"},{"g":"DAERAH ISTIMEWA YOGYAKARTA","n":null,"d":"M323.5,300.7 324.1,300.9 324.6,299.1 326.1,297.6 326.3,295.5 328.9,295.5 328.8,296.3 331.5,294.4 332.9,293.1 334.1,297.6 335.1,298.8 336.1,298.9 337.6,298.5 339.0,298.7 339.6,299.4 340.4,299.3 340.0,301.0 339.8,303.9 340.5,305.8 340.4,306.6 341.5,307.6 338.0,307.2 336.0,306.3 332.8,305.3 331.5,304.7 330.8,303.8 328.0,302.9 325.8,301.6 323.5,300.7Z"},{"g":"JAWA TENGAH","n":null,"d":"M297.7,275.8 298.2,277.0 300.3,277.8 302.0,276.4 303.9,278.1 307.6,278.6 309.6,278.3 311.1,277.8 312.9,276.6 313.9,277.8 316.8,278.3 319.5,279.4 323.1,279.7 326.2,278.9 326.7,278.2 328.0,278.3 328.1,279.1 329.4,279.4 331.1,280.5 332.8,280.2 333.7,279.6 335.6,277.1 336.2,275.6 337.1,274.4 338.3,271.1 338.2,270.4 339.1,269.3 341.6,268.5 343.3,268.4 345.8,268.7 346.2,270.5 347.0,272.5 348.0,273.8 349.6,274.5 351.3,274.4 352.8,274.8 355.1,274.0 355.8,273.0 357.3,273.5 360.2,276.0 359.4,276.6 359.2,277.6 358.5,277.8 358.3,279.3 357.4,280.3 358.4,280.7 358.7,282.8 357.7,285.8 356.9,285.9 354.8,287.5 354.6,289.1 352.6,289.1 349.8,287.8 350.3,286.8 348.2,287.1 347.9,288.1 347.9,289.8 347.5,290.4 348.4,293.7 349.2,294.6 349.0,296.9 350.1,297.7 351.2,297.6 351.2,298.5 351.9,300.0 350.9,301.7 350.1,302.1 349.0,301.4 348.1,301.9 348.0,303.6 347.4,304.7 346.6,304.3 345.7,305.0 344.1,304.6 343.1,305.9 343.0,307.8 341.5,307.6 340.4,306.6 340.5,305.8 339.8,303.9 340.0,301.0 340.4,299.3 339.6,299.4 339.0,298.7 337.6,298.5 336.1,298.9 335.1,298.8 334.1,297.6 332.9,293.1 331.5,294.4 328.8,296.3 328.9,295.5 326.3,295.5 326.1,297.6 324.6,299.1 324.1,300.9 323.5,300.7 321.0,299.8 316.4,298.7 311.7,297.9 310.6,298.2 309.7,297.2 307.4,296.7 303.7,296.3 302.4,296.6 301.2,297.6 300.6,297.0 299.9,297.1 299.9,296.9 299.6,296.8 299.1,296.9 298.7,296.5 298.4,294.7 297.6,294.5 297.1,296.1 295.7,294.7 296.0,293.2 295.4,292.0 295.2,290.6 294.0,288.8 292.7,289.0 291.8,288.7 291.7,287.7 292.3,286.6 291.7,285.1 293.3,284.4 294.8,284.7 295.4,283.9 296.5,283.7 297.0,281.5 296.2,281.0 296.3,279.1 297.5,277.6 297.7,275.8Z"},{"g":"PROBANTEN","n":"Banten","d":"M251.6,261.5 251.0,261.6 250.9,263.3 251.6,263.6 252.8,266.4 252.6,267.4 249.0,267.4 247.5,266.8 246.8,267.3 246.1,266.4 245.3,267.4 245.9,268.7 244.7,269.4 244.7,271.1 245.3,272.3 245.3,274.7 247.1,276.2 245.4,277.4 245.2,278.4 244.4,279.3 244.5,280.9 244.2,281.3 241.6,280.8 241.0,279.9 239.1,279.2 237.9,278.6 237.2,277.7 235.6,277.3 234.0,277.3 231.0,278.1 229.0,277.8 227.3,278.0 226.0,278.5 224.4,278.4 222.2,277.3 220.6,277.0 219.9,277.9 219.3,277.5 218.8,275.9 219.8,276.2 222.2,273.8 222.6,274.6 222.5,275.6 224.3,277.6 225.2,276.1 225.1,275.4 227.1,273.7 227.7,272.3 227.5,271.8 228.2,270.2 229.6,271.2 230.9,270.8 231.8,269.8 232.1,268.9 231.9,267.6 232.1,265.0 233.3,261.1 235.4,259.5 236.4,257.1 237.5,257.0 238.4,258.0 238.1,259.2 239.5,260.2 240.7,259.9 241.2,258.7 242.3,258.4 244.4,259.3 244.5,259.9 246.2,260.7 247.6,259.8 248.3,260.3 249.7,259.8 250.8,259.9 251.6,261.5Z"},{"g":"JAWA TIMUR","n":null,"d":"M360.2,276.0 363.2,277.0 365.6,276.2 366.3,276.2 367.5,278.3 368.2,279.0 370.6,279.2 372.1,278.6 375.9,278.4 378.2,279.3 378.8,278.1 380.0,279.0 380.2,281.0 381.1,282.3 380.5,284.1 381.5,285.0 381.6,286.3 382.7,285.7 384.0,286.0 385.1,288.1 384.9,289.0 385.0,291.6 384.7,292.0 385.6,293.4 385.3,294.2 386.6,295.0 388.6,295.7 389.8,295.8 391.1,297.2 392.1,297.7 393.3,297.5 394.8,298.5 396.1,298.3 399.2,296.6 401.3,296.9 403.3,297.5 404.1,296.9 405.8,297.4 407.0,296.3 409.0,296.6 411.2,294.6 412.0,295.3 412.6,296.6 413.5,297.0 415.1,297.1 415.8,296.7 416.8,297.7 418.6,297.8 420.3,298.9 420.6,300.8 419.6,301.5 419.8,304.6 419.2,305.9 417.9,312.4 418.7,314.9 420.2,317.1 420.7,316.7 421.7,317.4 423.0,317.7 423.7,318.8 423.4,319.6 422.1,320.3 419.6,319.6 418.2,319.5 418.7,318.5 418.4,317.6 417.5,316.9 415.5,316.4 415.3,317.3 412.5,316.7 411.5,317.2 411.0,316.2 409.9,316.5 409.3,315.5 408.5,315.9 406.4,315.1 406.0,313.9 404.7,314.7 402.8,314.0 402.2,312.9 400.2,312.6 398.0,311.5 397.2,311.9 396.7,310.9 394.9,309.7 394.0,309.4 390.3,309.4 388.1,310.3 387.3,311.6 386.0,312.2 383.9,311.7 383.1,312.4 381.5,313.0 378.9,312.0 376.5,311.9 375.0,311.4 374.1,310.5 372.7,310.8 370.0,310.2 367.6,310.2 366.2,309.4 364.6,309.8 362.0,308.8 361.8,309.6 360.5,309.7 360.5,310.3 359.7,311.4 358.7,310.3 356.3,310.6 354.0,309.3 350.6,308.6 349.2,309.3 347.6,308.8 345.6,308.7 343.0,307.8 343.1,305.9 344.1,304.6 345.7,305.0 346.6,304.3 347.4,304.7 348.0,303.6 348.1,301.9 349.0,301.4 350.1,302.1 350.9,301.7 351.9,300.0 351.2,298.5 351.2,297.6 350.1,297.7 349.0,296.9 349.2,294.6 348.4,293.7 347.5,290.4 347.9,289.8 347.9,288.1 348.2,287.1 350.3,286.8 349.8,287.8 352.6,289.1 354.6,289.1 354.8,287.5 356.9,285.9 357.7,285.8 358.7,282.8 358.4,280.7 357.4,280.3 358.3,279.3 358.5,277.8 359.2,277.6 359.4,276.6 360.2,276.0Z M402.6,278.9 406.1,278.8 408.6,278.4 410.4,278.8 412.4,279.8 413.2,280.9 411.3,281.6 410.2,281.6 409.3,282.6 407.9,282.9 408.0,284.3 403.5,283.8 401.9,284.1 401.2,284.9 400.7,286.5 395.9,286.1 390.7,286.4 387.9,285.7 385.8,285.0 384.4,284.8 382.6,285.2 381.9,284.7 382.3,283.6 381.6,283.0 381.8,282.1 382.7,282.2 384.1,281.0 385.3,279.2 389.6,278.8 391.3,279.0 397.9,278.9 399.6,279.1 402.6,278.9Z M443.3,280.2 442.1,279.6 440.7,279.4 440.9,281.1 439.4,281.2 436.6,279.9 437.5,278.9 437.9,277.6 441.0,277.7 442.0,278.0 444.5,279.3 444.0,280.5 443.3,280.2Z"},{"g":"MALUKU UTARA","n":null,"d":"M710.5,110.6 711.8,110.9 712.7,110.8 714.7,109.0 714.5,107.5 715.7,104.7 716.7,104.1 718.1,103.8 719.8,103.9 720.6,102.4 720.1,101.4 718.6,101.4 718.2,100.7 719.1,100.0 719.7,98.7 721.5,97.4 723.6,96.5 724.0,95.9 726.3,94.7 727.2,95.1 728.2,94.3 730.7,93.7 731.9,94.1 731.0,95.9 731.2,96.8 732.2,97.9 732.4,99.4 731.6,100.2 731.8,101.1 731.2,102.3 731.1,105.0 729.3,105.7 727.9,107.2 727.2,107.2 724.6,108.5 723.5,108.5 722.3,109.5 723.1,110.5 720.7,110.9 721.0,111.9 721.8,112.3 723.0,114.0 725.9,114.7 728.6,116.0 731.3,116.4 730.8,117.6 731.2,118.3 730.9,121.0 733.6,121.6 734.7,122.7 729.3,121.5 728.4,121.5 727.1,120.7 726.5,119.8 724.6,119.6 723.0,119.9 720.9,119.5 719.2,118.3 718.7,118.5 717.0,117.9 715.6,117.9 714.3,118.4 714.2,119.9 713.4,121.7 714.4,122.4 714.5,125.6 713.7,126.7 713.7,128.2 715.0,130.8 715.9,134.3 718.3,139.5 720.2,142.0 721.0,143.7 722.8,145.1 724.3,146.9 723.8,147.8 722.5,147.6 721.2,146.9 722.1,146.3 721.4,145.3 717.5,144.1 716.3,142.9 714.8,139.3 713.2,136.4 710.7,135.4 709.3,134.2 708.7,133.0 709.6,130.2 709.6,128.2 710.0,127.0 709.4,126.1 709.6,124.1 710.3,121.5 709.9,120.8 707.9,120.5 706.9,119.3 706.6,117.2 705.8,116.4 706.3,113.6 706.2,112.5 707.5,111.8 708.3,110.2 706.6,109.4 705.4,109.7 705.1,108.1 705.5,107.6 704.6,105.3 703.5,105.9 703.0,104.9 703.7,103.3 703.1,102.4 703.2,101.6 705.6,97.3 706.0,96.0 705.8,93.9 706.9,91.6 706.5,91.2 707.0,89.9 707.6,89.6 709.6,86.1 711.3,84.8 712.6,82.7 714.7,81.1 717.3,80.3 717.6,80.9 716.5,82.5 715.2,83.7 714.9,85.0 712.9,86.4 712.7,88.8 713.5,89.3 714.6,89.0 716.0,89.9 716.6,91.1 716.0,92.0 716.0,93.2 716.9,93.7 716.8,96.3 716.0,98.6 716.1,99.3 715.7,100.5 714.7,101.4 713.8,103.3 712.5,103.3 711.0,105.1 708.6,106.1 708.0,107.2 708.6,108.7 709.6,109.2 710.5,110.6Z M649.3,170.6 648.3,170.5 647.7,169.8 645.8,170.3 643.5,171.6 641.7,172.2 640.5,172.3 638.7,172.8 637.6,172.7 637.2,170.9 636.3,169.6 636.4,168.0 637.0,166.3 636.8,165.8 637.5,164.7 639.2,164.7 640.3,164.1 642.8,164.3 646.3,165.3 647.8,165.2 648.4,165.8 649.7,165.6 652.4,166.9 653.6,165.3 655.1,166.2 657.1,166.3 657.7,167.4 657.5,169.8 655.8,169.4 654.3,169.4 653.0,169.9 652.0,169.6 651.1,170.6 649.3,170.6Z M705.3,166.1 703.2,164.7 702.9,163.7 703.3,162.6 703.3,160.8 704.3,159.8 705.5,159.4 706.9,158.3 709.8,157.6 711.6,158.4 711.8,159.3 712.8,159.8 714.0,159.7 714.9,160.1 717.9,162.9 718.9,162.6 719.8,163.7 719.6,165.1 718.3,165.8 717.0,165.9 713.7,165.1 712.2,165.5 709.7,165.3 708.4,166.2 705.3,166.1Z M722.3,84.7 722.9,82.9 721.8,82.0 721.7,79.2 721.1,78.0 722.3,76.9 722.7,75.0 724.1,73.6 725.2,73.1 726.2,71.7 727.6,72.0 728.5,70.5 730.0,72.8 731.3,74.2 731.4,75.4 730.5,76.5 730.5,77.8 729.9,79.9 727.8,83.1 726.4,83.5 724.9,83.5 722.8,83.9 722.3,84.7Z M702.2,141.1 700.6,138.7 702.1,135.5 703.3,136.2 704.2,137.5 704.8,135.9 706.1,135.2 707.7,136.4 709.4,138.5 708.9,139.6 707.5,141.0 707.4,141.9 708.4,142.0 708.5,143.3 709.3,143.9 710.0,143.4 711.8,143.2 713.3,144.2 714.1,145.4 713.3,146.4 711.7,147.1 709.5,146.9 708.7,145.6 708.6,144.7 706.7,145.2 704.7,146.3 703.9,144.6 704.7,142.7 704.2,142.1 702.2,141.1Z M672.5,170.3 670.9,170.9 669.1,169.9 667.9,170.6 663.5,170.6 662.4,171.0 660.5,170.9 660.3,169.8 657.9,168.5 658.8,167.3 660.1,168.0 661.2,167.4 661.4,168.2 662.7,167.9 666.0,168.4 667.1,167.9 669.8,168.0 670.7,167.6 675.6,168.1 677.1,168.0 678.7,168.1 679.8,168.7 678.2,169.5 677.3,169.2 675.9,169.8 674.8,169.5 672.5,170.3Z M672.5,181.9 671.6,180.3 671.6,179.2 669.9,176.8 670.1,175.9 669.4,174.0 669.8,172.7 670.6,171.6 672.1,172.4 672.4,173.2 671.7,174.8 671.7,176.1 672.6,177.9 674.0,181.3 673.4,182.4 672.5,181.9Z M700.1,137.6 699.8,139.2 699.0,139.7 697.5,139.9 696.9,139.7 696.8,136.6 697.3,135.5 696.8,134.8 697.5,134.1 699.5,133.8 700.1,134.6 699.8,135.2 700.5,136.6 700.1,137.6Z"},{"g":"MALUKU","n":null,"d":"M778.0,204.3 777.4,204.9 779.0,206.8 778.1,208.2 777.8,209.3 778.0,211.2 777.9,213.1 776.5,212.1 773.2,211.3 772.3,209.8 770.0,209.1 768.7,207.6 767.4,207.4 766.2,206.6 762.4,205.4 762.2,205.0 760.1,204.4 759.1,203.1 759.0,202.1 758.2,201.3 757.2,201.3 755.4,200.9 752.8,200.9 749.9,200.6 748.8,200.7 750.3,202.9 749.6,204.1 747.0,203.0 744.1,202.9 741.8,202.3 739.7,201.3 737.1,201.7 736.2,201.2 737.2,200.1 737.2,198.8 735.6,198.3 734.3,199.3 733.2,199.6 730.7,202.2 730.7,203.4 729.0,203.3 727.3,203.9 726.0,203.9 724.8,203.2 724.6,202.6 723.3,201.1 722.3,198.8 720.5,198.5 719.6,197.6 720.4,196.7 720.3,195.4 719.3,195.5 718.0,196.7 717.3,199.4 717.2,201.4 716.3,202.2 715.6,202.3 714.8,204.5 715.0,205.4 714.2,205.7 713.7,204.5 714.7,202.0 714.2,200.3 713.6,199.8 713.2,198.0 713.9,197.3 715.5,196.1 716.0,195.4 718.3,195.4 718.0,194.2 718.7,193.9 718.5,192.9 719.7,191.0 721.3,190.7 722.1,191.0 723.9,190.8 724.9,191.1 725.6,190.6 727.2,190.3 728.0,190.6 729.9,190.7 730.4,190.4 731.7,190.9 732.5,190.7 733.6,191.0 736.9,190.4 738.6,189.4 739.4,189.8 739.8,192.5 740.8,193.1 741.8,192.3 742.7,192.3 745.5,190.7 746.2,189.2 748.2,189.1 751.9,190.1 752.5,190.0 755.0,191.0 755.4,191.9 756.4,191.5 756.9,192.3 760.0,193.8 761.2,194.0 763.3,193.6 764.4,194.0 765.6,193.3 767.3,193.3 769.2,194.6 770.5,196.2 771.2,196.2 772.8,197.3 773.7,200.3 773.5,200.9 774.3,202.9 777.3,203.0 778.0,204.3Z M672.5,200.7 672.9,197.9 674.7,196.6 675.3,197.6 677.4,198.1 677.4,197.1 679.0,196.1 680.0,196.3 681.3,195.8 682.6,195.9 685.6,195.5 687.2,195.6 687.9,195.3 689.7,195.3 691.7,196.3 692.7,197.1 693.9,197.0 695.4,197.8 696.6,198.9 696.0,199.7 695.0,199.8 695.3,201.2 695.9,202.2 697.0,202.4 697.8,201.3 698.3,201.8 699.9,202.2 699.7,203.9 699.8,206.9 699.1,208.4 698.4,208.7 697.1,208.4 695.3,209.0 693.4,210.4 692.0,211.2 691.3,211.1 688.9,212.4 687.4,212.7 687.1,212.4 684.6,211.2 683.9,211.3 678.7,208.5 677.6,207.6 676.8,207.7 676.1,206.7 676.0,205.9 673.5,203.8 673.4,202.8 672.6,201.9 672.5,200.7Z M784.9,297.4 784.0,296.7 785.3,295.9 785.7,294.2 786.5,292.9 786.8,291.7 788.4,290.5 789.1,291.0 789.6,289.4 791.2,288.4 792.1,286.4 793.2,286.4 793.0,284.8 794.4,284.0 795.8,283.8 795.9,285.2 797.3,284.9 797.8,286.1 795.9,286.3 795.5,286.8 795.6,288.0 796.4,289.2 796.0,293.3 795.2,295.5 794.4,295.7 793.7,297.1 792.2,297.3 792.2,298.3 789.8,300.1 788.9,301.8 789.1,302.9 788.3,303.6 787.6,302.3 786.7,303.3 785.8,302.9 784.0,303.0 784.3,301.2 783.6,300.6 783.6,299.7 784.9,298.8 784.1,298.4 784.9,297.4Z M668.2,303.2 668.6,301.0 668.2,300.1 669.6,299.1 669.4,298.1 670.1,297.9 671.3,295.8 672.2,295.7 673.2,296.5 676.6,297.2 678.0,296.3 679.7,296.5 681.0,295.2 681.8,295.2 683.2,294.2 684.4,293.8 686.6,293.7 686.6,294.6 687.6,295.0 688.4,295.9 690.4,295.8 691.0,297.4 690.4,297.8 688.3,297.6 685.6,299.0 684.7,299.3 683.9,300.2 683.3,302.1 682.7,302.7 681.9,301.8 680.5,301.8 679.8,301.4 676.4,301.6 675.8,301.0 673.8,300.8 671.3,301.3 669.6,302.6 668.2,303.2Z M856.6,274.4 855.1,276.7 854.3,278.4 853.2,278.8 851.6,279.7 850.9,279.4 850.2,278.2 848.7,277.7 848.3,276.5 848.8,275.1 849.1,273.4 849.4,270.2 850.2,269.7 849.7,268.6 850.1,267.1 849.9,265.2 849.3,263.3 850.2,263.2 850.9,264.2 851.9,264.3 854.0,266.2 853.7,267.4 854.7,268.2 855.5,268.4 856.0,268.3 856.4,268.7 856.7,269.4 857.2,269.1 857.8,271.1 857.8,272.2 858.7,272.7 857.7,274.1 856.6,274.4Z M853.3,260.7 854.3,260.1 855.0,260.4 855.5,260.0 856.4,260.1 856.7,259.9 856.8,259.7 857.3,259.2 858.9,257.8 859.7,258.2 861.5,258.4 861.8,259.2 863.6,260.7 864.2,261.6 863.8,262.6 863.9,263.5 863.0,266.2 862.2,267.0 861.1,267.3 859.1,267.2 858.2,266.1 857.2,265.4 855.8,265.1 855.6,264.4 854.5,264.2 854.0,263.3 853.4,262.7 853.3,260.7Z M863.7,256.3 864.0,257.2 862.7,259.1 860.9,257.8 859.9,258.1 858.9,257.8 857.5,258.6 856.6,260.0 856.3,260.1 855.4,259.9 854.9,260.3 854.1,259.5 854.5,258.5 853.7,257.3 854.4,256.5 855.3,256.3 855.2,254.5 852.9,254.3 851.8,253.5 852.4,252.4 854.7,253.6 854.9,252.8 856.3,251.7 857.1,249.8 858.7,250.0 858.9,251.6 859.1,252.0 859.5,252.0 859.8,252.5 860.2,253.1 860.7,253.6 861.1,253.4 861.5,254.0 862.4,255.4 863.7,256.3Z M722.0,207.4 722.5,209.1 721.7,209.8 720.2,210.3 718.8,210.3 719.4,208.4 716.4,210.2 715.9,210.9 714.7,210.7 714.1,209.5 714.2,208.8 716.5,206.8 719.8,206.7 720.7,205.4 722.3,204.6 723.5,205.0 722.9,206.2 723.7,207.0 723.5,207.8 722.0,207.4Z M755.2,304.3 754.4,304.5 753.3,304.2 750.6,301.1 750.7,299.7 751.3,299.1 752.8,298.7 756.4,299.8 756.8,301.5 755.4,303.5 755.2,304.3Z M823.5,254.9 824.0,254.5 824.2,252.5 825.5,251.7 825.7,250.4 826.3,248.9 826.5,247.5 827.9,243.7 829.2,244.0 828.0,249.8 827.3,251.1 825.8,252.2 824.6,253.8 824.3,255.4 824.5,256.4 823.2,258.4 822.6,257.3 823.5,254.9Z M781.7,225.5 783.3,225.7 785.1,225.4 786.7,225.8 789.2,225.0 790.2,224.1 791.6,224.0 792.4,224.9 791.6,226.8 789.7,227.4 787.6,227.6 786.6,226.9 783.5,226.2 781.4,227.1 780.7,226.2 781.7,225.5Z M818.7,254.1 817.8,253.1 817.6,251.5 818.6,250.8 819.7,252.4 820.5,254.4 821.2,254.8 821.4,256.2 820.7,258.2 819.4,258.3 818.2,257.4 818.7,255.3 818.7,254.1Z M853.2,263.3 853.9,263.3 854.6,264.5 855.2,264.5 855.8,265.2 856.4,265.7 854.8,267.0 854.0,265.6 853.4,265.7 852.2,263.9 851.1,263.9 850.9,263.1 849.7,261.9 849.9,260.4 851.4,260.4 852.2,259.9 852.5,261.2 852.3,262.2 853.2,263.3Z M856.0,266.2 857.3,265.6 858.1,266.1 859.1,267.5 860.2,268.0 860.5,269.0 859.7,269.9 859.1,271.3 858.5,271.2 857.9,269.5 857.1,269.0 856.8,269.1 856.1,268.2 855.6,268.3 855.1,267.4 856.0,266.2Z M783.6,307.0 781.5,308.2 779.3,308.4 779.4,309.5 777.1,310.7 776.6,310.1 777.9,308.6 780.1,307.4 779.8,306.4 781.2,306.1 781.7,305.2 782.4,304.8 783.4,305.6 785.4,305.7 784.8,306.7 783.6,307.0Z"},{"g":"KALIMANTAN SELATAN","n":"Kalimantan Selatan","d":"M448.7,157.1 448.8,157.2 448.4,158.3 446.6,161.1 446.1,161.9 446.3,163.5 447.0,164.1 446.9,165.7 447.5,166.7 448.2,167.9 448.3,169.2 447.8,171.3 447.9,173.2 450.1,173.7 449.7,175.0 449.5,176.8 450.1,177.6 450.0,178.2 450.7,180.6 451.7,180.3 451.8,179.4 453.9,178.9 458.3,179.1 459.7,179.0 461.2,179.6 465.0,180.4 466.3,181.1 465.3,184.4 464.6,183.3 463.5,182.9 462.6,183.5 460.8,183.8 461.6,184.5 462.8,184.9 462.2,186.6 462.0,188.8 462.3,189.7 462.2,191.3 460.1,194.0 458.8,194.0 458.7,192.6 457.6,191.8 456.5,192.2 457.0,194.3 458.0,195.3 458.8,195.7 458.8,196.8 457.9,197.9 458.0,199.5 456.1,200.1 454.9,201.8 454.4,203.4 454.5,204.5 454.0,205.5 454.1,206.4 453.5,207.3 450.7,207.7 448.1,209.9 446.7,210.2 441.1,212.6 433.6,215.6 425.3,219.8 424.3,219.1 424.5,216.6 423.9,213.4 423.8,210.5 424.1,209.5 423.9,207.9 422.7,206.1 421.7,205.8 421.1,205.0 420.2,204.9 418.2,203.9 418.4,202.4 418.1,201.6 418.9,199.8 420.4,198.6 419.9,197.8 422.5,195.4 421.4,194.3 422.5,192.8 422.9,191.0 424.0,191.4 423.6,189.9 425.0,189.6 425.2,188.4 427.2,187.9 427.7,187.0 428.1,184.8 429.9,183.1 430.6,182.1 432.1,181.2 433.3,179.8 437.8,176.7 438.7,177.0 438.9,175.3 439.4,173.7 441.2,173.4 440.5,172.3 441.1,171.1 439.7,168.9 439.4,167.9 440.0,164.1 441.4,159.5 444.5,158.9 447.0,157.6 448.7,157.1Z M461.0,213.7 460.0,213.9 458.8,215.4 457.3,216.6 456.3,217.1 455.1,216.4 455.9,214.2 455.6,213.7 456.0,212.2 454.3,208.9 454.4,207.4 455.0,206.7 455.2,204.2 455.7,203.5 456.8,200.6 458.2,199.8 459.7,198.6 460.3,198.8 459.7,202.2 460.9,203.8 461.0,205.0 460.1,205.4 460.9,206.9 460.8,209.5 461.6,209.9 460.2,211.9 461.0,213.7Z"},{"g":"KALIMANTAN BARAT","n":"Kalimantan Barat","d":"M415.0,97.7 413.9,98.2 413.5,101.9 413.6,102.0 413.1,103.1 412.3,103.0 411.6,103.7 410.3,103.4 409.2,105.2 408.1,105.7 408.8,106.9 408.7,107.0 407.9,108.2 407.9,109.1 408.9,110.0 408.1,111.3 408.3,112.1 407.1,113.1 407.1,113.9 404.8,116.5 403.4,117.4 403.0,118.8 401.5,119.6 399.9,121.4 398.3,122.6 395.7,122.5 394.6,123.2 395.8,124.5 397.6,125.4 398.0,128.2 396.0,132.5 393.5,135.8 394.4,136.9 394.5,137.9 393.7,138.8 391.6,138.3 390.0,139.3 389.4,139.1 386.3,140.1 385.5,140.8 383.3,140.8 382.8,142.1 381.9,142.7 380.7,142.7 379.9,143.4 378.6,143.7 376.7,143.3 373.5,144.4 372.2,142.3 371.2,141.9 369.2,143.5 367.7,143.8 366.9,144.3 366.9,145.5 365.9,146.3 364.8,145.4 364.8,147.4 363.2,148.4 361.1,148.6 360.7,149.1 358.7,149.9 358.7,151.0 357.5,151.9 357.1,152.8 357.5,153.4 357.3,154.9 355.8,155.1 355.7,156.4 354.2,155.7 352.6,156.5 350.8,158.7 349.7,159.3 349.2,161.0 348.5,160.5 347.5,160.9 347.7,162.2 346.7,162.5 345.9,162.0 344.6,162.0 343.9,162.9 343.1,163.0 341.9,164.1 341.9,164.9 343.2,165.9 344.5,164.9 345.1,165.4 345.4,166.9 344.4,168.0 344.4,169.2 345.0,169.9 344.6,171.1 346.0,171.2 346.9,172.3 346.1,173.6 346.7,175.5 345.8,177.5 346.5,178.6 347.3,181.6 347.3,182.7 348.0,185.5 347.6,186.4 348.6,186.8 348.7,187.6 348.1,188.5 346.4,189.3 345.3,189.5 344.3,190.8 342.6,191.2 340.6,192.0 339.5,192.9 339.0,194.1 337.6,194.8 337.0,193.7 336.6,191.4 335.6,190.5 334.7,190.6 332.1,191.9 329.7,193.9 328.9,193.3 328.0,191.5 328.6,190.7 328.7,188.8 327.9,188.3 328.2,187.4 327.7,186.3 326.6,186.0 327.4,183.6 327.0,182.1 326.4,181.2 326.2,179.1 325.1,177.5 324.9,176.1 325.5,175.1 325.7,173.9 325.3,171.8 324.3,170.5 323.2,170.1 321.1,168.5 321.8,167.3 322.8,166.5 323.8,164.9 323.9,161.9 324.6,160.4 324.7,158.4 324.4,157.5 323.0,156.2 322.4,156.3 321.3,154.5 322.1,152.9 319.9,152.2 318.3,151.2 318.0,150.1 317.3,149.8 315.6,150.3 315.4,149.9 314.7,149.6 314.1,148.1 310.8,147.1 310.2,148.8 307.9,148.1 306.6,146.1 306.7,142.9 308.4,143.9 310.0,143.9 311.5,144.9 313.0,144.6 315.2,146.0 315.2,144.8 314.4,143.9 316.1,143.6 315.9,143.3 314.1,143.4 314.2,142.9 314.0,142.6 312.6,142.4 312.1,142.0 311.8,141.8 310.5,142.2 309.6,141.0 307.1,141.6 305.8,140.6 304.9,141.1 304.2,140.4 303.8,139.3 303.5,136.3 303.8,135.8 303.3,134.5 304.0,134.1 304.4,133.6 305.6,133.3 305.3,132.6 305.5,131.5 305.2,129.7 304.8,129.3 305.2,126.7 304.4,125.5 303.9,123.8 302.9,122.7 300.6,121.5 299.4,121.4 300.0,120.1 299.8,118.3 299.3,118.0 299.7,116.0 299.4,113.9 298.5,112.8 298.6,111.4 297.8,110.4 299.4,109.4 300.4,108.3 300.8,106.5 300.5,105.3 299.4,103.2 300.2,103.0 301.2,100.5 302.0,99.5 302.5,98.1 302.3,96.8 302.7,95.2 304.2,93.8 306.1,92.8 307.0,92.1 307.7,90.2 308.8,88.4 309.0,87.4 308.6,86.3 309.1,85.9 310.7,85.8 311.5,85.2 314.3,84.7 313.9,86.1 313.1,86.6 313.5,87.9 314.5,88.9 315.7,89.1 316.2,89.8 315.9,90.6 315.7,92.8 318.7,95.6 319.5,97.3 321.8,97.4 322.4,98.1 322.6,99.8 324.2,100.8 325.5,102.3 327.3,102.7 327.7,103.9 328.5,104.2 329.2,105.5 329.3,106.6 332.0,106.9 332.1,107.6 333.7,109.2 335.7,109.7 338.8,108.6 339.9,108.1 340.9,108.5 343.1,107.5 345.9,106.6 347.4,106.0 351.8,105.9 352.8,105.8 354.0,106.1 355.6,106.1 357.1,105.7 359.2,106.3 359.9,105.9 361.0,106.3 361.7,106.1 363.8,106.5 364.5,105.1 366.0,103.8 369.7,103.5 370.3,102.1 370.7,99.9 371.4,99.1 371.7,98.0 371.1,97.6 371.7,96.6 372.9,96.3 373.9,95.5 376.2,95.1 377.4,94.0 381.1,94.1 381.6,94.4 383.7,94.3 385.2,94.8 386.1,93.8 387.0,94.1 388.8,94.1 390.1,94.8 389.4,96.2 388.3,96.7 388.2,97.7 391.2,97.3 392.5,98.3 394.4,98.0 395.7,98.3 397.9,100.4 400.3,99.5 401.4,100.0 402.3,101.7 403.1,101.8 404.0,100.9 406.0,100.2 406.8,99.3 406.7,98.4 407.8,98.0 410.1,96.7 411.0,96.9 412.5,96.5 413.6,96.5 415.0,97.7Z M316.6,150.3 317.9,150.4 318.2,152.9 318.4,153.4 315.7,155.1 313.2,156.2 312.3,157.0 310.4,156.5 311.2,152.3 311.2,151.0 312.0,149.7 313.5,150.3 314.2,149.9 315.3,150.0 315.4,150.5 316.1,150.7 316.6,150.3Z"},{"g":"SULAWESI SELATAN","n":"Sulawesi Selatan","d":"M531.7,147.2 532.1,150.8 532.9,153.9 532.2,156.2 530.7,156.3 530.7,157.0 529.1,157.6 529.5,158.9 530.6,158.9 531.0,159.8 533.7,159.1 534.9,160.3 534.1,161.1 534.3,162.2 535.7,163.5 536.6,165.4 536.3,167.0 538.6,167.1 539.4,167.7 539.5,168.5 538.7,169.8 538.2,171.4 537.5,172.4 538.0,173.2 539.1,173.1 540.7,172.1 541.4,171.3 543.7,171.4 544.1,172.3 545.5,172.7 547.3,172.6 548.7,173.3 549.3,172.1 549.9,169.7 550.3,169.7 551.8,171.3 552.0,172.1 554.5,175.1 556.9,176.8 557.8,177.1 559.5,176.6 562.3,177.3 566.7,179.3 568.3,179.8 570.0,180.1 571.9,181.1 574.5,182.9 575.8,183.0 577.3,183.8 578.6,184.1 579.6,185.4 580.8,187.6 579.9,187.8 579.2,188.7 578.7,189.9 577.5,191.4 575.8,192.1 574.0,193.8 571.1,194.4 570.2,195.4 568.9,195.2 567.9,193.5 567.0,193.3 566.3,191.3 565.1,189.1 563.0,190.4 565.1,188.4 565.0,187.5 564.1,187.4 560.9,186.2 559.9,186.4 559.1,185.6 556.2,186.2 554.7,186.9 551.4,190.1 550.3,190.5 547.9,191.9 547.6,192.4 545.7,193.2 547.2,195.7 547.2,197.5 549.8,198.3 550.2,200.2 550.4,203.3 549.8,204.9 550.7,206.5 550.6,208.6 551.2,210.2 549.3,212.6 548.9,213.6 549.1,216.8 548.7,217.9 549.6,219.5 549.3,220.5 549.3,222.4 549.9,223.2 548.9,225.1 550.1,226.3 549.6,227.1 550.0,229.0 551.1,230.3 550.1,231.3 549.7,232.7 549.8,234.2 548.7,234.3 547.9,235.1 547.8,236.1 548.0,237.9 547.2,241.0 549.0,244.8 550.0,245.3 550.7,247.6 551.3,251.1 550.6,251.3 549.3,250.2 548.9,249.2 548.0,249.0 547.4,249.5 546.0,249.7 544.4,250.6 543.1,250.7 539.8,249.8 539.1,250.7 537.8,251.7 538.1,252.1 536.6,253.1 534.8,253.1 533.5,252.5 533.7,251.5 532.3,251.2 530.3,250.0 529.2,250.8 528.7,249.7 529.0,249.1 527.5,246.9 527.4,245.3 528.0,242.7 528.0,241.3 528.5,240.4 529.5,239.9 530.1,238.9 530.0,237.7 531.1,236.0 530.6,234.5 530.4,232.0 532.6,228.4 532.3,227.5 532.7,226.2 532.7,224.9 533.3,223.9 533.6,222.5 533.0,221.8 533.5,219.4 533.1,219.1 533.4,215.8 531.5,213.9 530.4,210.8 529.6,209.7 529.5,208.7 530.5,207.2 530.7,205.7 529.6,204.4 528.2,203.7 526.0,203.3 525.6,203.9 523.9,204.8 521.3,204.9 520.1,205.2 518.0,206.3 516.9,204.3 516.2,202.2 516.5,200.6 515.9,198.9 515.9,197.6 514.7,196.2 515.9,195.9 516.6,194.7 516.3,193.7 517.2,191.6 516.6,190.8 515.5,190.6 514.5,191.0 514.4,189.1 514.9,188.3 514.8,187.1 515.7,185.6 516.9,186.9 518.8,186.1 520.4,184.7 520.6,183.2 522.4,182.6 522.8,180.6 522.4,179.1 523.0,177.4 522.9,176.6 523.8,175.5 524.3,172.1 525.9,171.1 526.9,171.3 527.4,169.9 527.4,168.3 526.8,168.1 526.2,165.7 525.8,165.3 526.8,162.8 525.9,160.2 526.1,158.6 526.9,157.9 526.2,156.3 527.1,154.0 529.2,152.5 529.8,151.6 531.1,148.3 531.7,147.2Z M553.3,259.5 553.6,260.9 552.6,264.6 552.8,266.9 551.9,268.4 551.4,268.0 551.6,265.8 550.8,265.5 550.9,263.3 551.3,261.7 551.0,261.3 550.8,258.8 551.2,255.5 551.5,254.8 552.6,256.1 552.8,257.8 553.3,259.5Z"},{"g":"DKI JAKARTA","n":null,"d":"M251.6,261.5 252.1,261.8 254.6,262.1 255.0,261.7 257.1,261.5 257.1,263.6 256.5,265.1 255.7,265.3 256.0,266.5 255.8,267.5 252.8,266.4 251.6,263.6 250.9,263.3 251.0,261.6 251.6,261.5Z"},{"g":"JAWA BARAT","n":null,"d":"M244.5,280.9 244.4,279.3 245.2,278.4 245.4,277.4 247.1,276.2 245.3,274.7 245.3,272.3 244.7,271.1 244.7,269.4 245.9,268.7 245.3,267.4 246.1,266.4 246.8,267.3 247.5,266.8 249.0,267.4 252.6,267.4 252.8,266.4 255.8,267.5 256.0,266.5 255.7,265.3 256.5,265.1 257.1,263.6 257.1,261.5 258.1,261.2 257.9,259.4 258.5,257.6 260.0,258.0 260.8,259.0 261.9,259.2 264.3,258.6 266.2,259.9 267.9,262.6 269.3,263.3 271.3,263.7 272.0,264.8 273.5,264.6 275.7,263.4 277.2,264.7 278.2,265.0 281.8,266.8 283.0,266.8 283.8,266.1 283.8,265.2 286.1,264.9 287.4,265.5 287.6,266.7 288.9,268.6 290.1,269.6 291.3,270.1 291.3,272.1 291.7,274.3 292.1,275.6 292.8,276.3 294.3,276.3 294.5,277.1 296.2,277.3 297.7,275.8 297.5,277.6 296.3,279.1 296.2,281.0 297.0,281.5 296.5,283.7 295.4,283.9 294.8,284.7 293.3,284.4 291.7,285.1 292.3,286.6 291.7,287.7 291.8,288.7 292.7,289.0 294.0,288.8 295.2,290.6 295.4,292.0 296.0,293.2 295.7,294.7 297.1,296.1 296.3,296.6 295.2,296.2 293.9,296.6 292.3,296.3 290.7,296.6 290.6,298.0 290.1,298.9 288.9,299.3 285.2,299.0 282.2,298.4 278.0,297.3 276.0,297.4 274.8,296.2 272.5,295.8 272.4,295.1 270.9,293.8 266.3,292.1 265.4,292.3 263.0,292.0 259.4,291.2 254.6,290.8 253.1,290.9 247.2,290.2 246.2,289.5 245.1,289.2 244.0,288.1 244.1,286.5 244.6,285.5 245.8,285.4 245.8,284.1 247.7,282.6 247.7,281.0 245.5,280.3 244.5,280.9Z"},{"g":"IRIAN JAYA TENGAH","n":null,"d":"M861.5,190.2 862.1,191.8 862.3,193.4 863.6,193.9 864.0,192.8 865.6,191.8 865.6,194.0 864.9,194.4 865.2,196.7 866.0,197.6 865.9,199.4 867.9,199.7 868.5,201.0 870.0,201.1 871.1,202.1 874.1,202.1 876.0,202.4 878.1,201.9 879.0,202.1 879.9,201.7 881.2,200.4 881.1,199.6 882.3,197.8 884.3,197.2 885.5,196.4 886.0,195.2 887.0,194.2 889.2,193.3 889.4,192.0 889.0,191.1 889.9,189.7 889.7,189.0 891.2,187.7 891.4,187.1 895.0,185.9 895.9,185.3 896.9,183.2 897.4,180.9 898.2,180.1 897.9,178.2 899.9,176.6 900.7,176.7 902.1,176.2 903.8,177.5 905.5,177.7 906.2,177.0 906.9,177.5 908.7,176.8 909.5,176.2 910.7,175.9 911.4,174.7 912.2,174.9 914.1,174.2 914.8,174.4 916.2,174.1 917.6,173.3 917.8,172.1 916.7,170.8 914.7,168.9 914.9,167.8 915.7,167.2 917.7,166.7 921.0,164.7 923.1,163.3 924.2,163.0 926.7,161.6 928.8,161.1 930.2,160.4 932.0,160.3 932.7,161.2 931.7,164.8 932.1,166.1 931.8,167.1 932.3,169.2 931.3,171.3 931.0,173.7 931.5,174.6 933.1,176.0 933.5,177.2 935.1,179.0 936.2,179.1 937.1,180.3 938.3,181.3 939.0,182.6 942.0,185.3 944.1,188.9 944.4,191.0 943.7,192.4 941.0,193.0 939.6,194.5 932.5,194.9 929.8,195.3 927.4,194.9 926.2,194.3 925.1,194.3 924.2,195.2 921.9,195.2 920.3,195.8 918.8,197.3 917.5,197.8 916.3,197.8 916.0,201.1 914.5,206.8 914.1,209.2 913.7,212.9 912.7,216.7 912.3,219.5 920.5,219.7 922.6,219.6 925.1,219.7 926.8,219.6 929.9,219.7 929.1,222.1 928.5,224.5 928.8,226.4 930.4,228.8 930.2,230.0 929.1,233.0 928.1,235.1 926.7,237.5 925.2,237.1 925.2,238.2 924.6,238.9 924.6,240.2 923.5,240.8 922.0,239.4 922.2,238.7 921.9,237.7 922.3,237.6 922.6,237.5 922.5,236.8 922.7,235.9 922.2,235.9 922.0,236.5 921.5,236.6 920.5,237.8 920.1,238.5 919.1,237.7 919.7,236.9 920.9,236.7 921.0,235.4 920.8,235.6 920.7,235.2 920.5,235.1 919.9,235.2 918.9,235.4 916.9,237.6 915.4,236.9 915.7,236.4 915.6,235.6 915.9,235.2 915.2,234.7 914.0,233.2 913.5,235.1 912.8,236.3 911.1,235.5 911.6,234.7 910.1,234.6 910.1,234.3 909.1,233.6 907.1,233.5 906.0,233.2 904.1,233.7 902.6,233.0 900.8,231.4 900.1,231.5 898.7,230.6 897.3,230.6 893.3,229.4 889.7,226.8 891.6,224.9 892.6,223.6 894.2,219.9 890.8,220.1 886.4,219.9 886.0,219.4 884.9,215.7 884.3,214.0 882.6,213.1 881.6,212.9 874.4,210.4 873.1,210.1 871.6,209.3 868.2,208.2 867.6,208.0 858.6,205.0 856.2,204.3 852.3,202.6 851.7,202.6 852.3,200.8 854.2,198.0 856.5,196.4 856.8,195.4 856.5,194.2 857.9,193.3 860.2,191.6 861.5,190.2Z M886.9,150.9 886.2,149.8 885.4,146.5 884.2,146.5 883.2,147.9 881.7,146.9 880.6,145.6 879.6,146.1 878.1,144.9 876.8,142.3 877.9,142.7 878.7,142.4 880.6,142.9 882.9,142.8 883.9,143.3 884.0,144.0 886.2,144.2 886.6,143.4 887.9,143.7 889.2,145.6 891.6,146.8 893.0,148.8 893.2,149.6 894.2,150.2 894.5,151.2 896.5,150.6 898.0,151.9 899.3,152.1 897.7,153.4 896.1,154.0 894.6,154.2 894.0,154.7 892.4,154.4 891.5,153.5 889.5,153.6 888.7,154.2 887.9,154.1 886.9,153.3 886.9,150.9Z M899.4,166.0 900.8,165.5 903.7,166.2 905.8,166.2 908.3,166.4 909.9,167.2 909.5,168.3 908.4,168.0 906.8,168.1 904.7,169.4 902.2,169.3 900.5,169.7 897.7,169.2 896.7,169.8 894.1,169.0 892.4,168.9 891.5,168.2 890.4,168.2 888.9,166.9 888.0,166.5 887.2,166.8 885.6,165.8 884.5,165.4 883.5,165.7 882.6,165.3 879.3,165.1 878.6,163.6 879.5,163.3 882.6,164.0 884.0,163.9 886.1,164.0 888.0,164.7 889.0,164.2 891.0,164.5 895.4,164.5 897.9,165.6 899.4,166.0Z"},{"g":"NUSA TENGGARA TIMUR","n":null,"d":"M598.7,312.0 599.8,311.8 601.1,311.2 602.0,311.2 603.0,309.8 604.3,309.7 604.8,309.2 605.4,307.5 604.2,307.1 603.0,307.6 602.4,308.4 601.4,307.8 602.3,306.7 602.3,305.6 603.4,305.4 604.2,304.6 606.5,306.3 606.2,307.5 607.4,309.3 607.5,310.2 606.2,311.0 605.5,310.4 604.5,311.7 604.7,313.1 602.5,312.6 602.3,313.3 603.5,314.6 603.5,316.2 601.1,317.2 599.8,317.0 597.6,317.9 596.8,318.9 593.5,319.9 592.8,319.6 591.4,319.9 589.5,319.8 587.9,319.3 587.1,319.6 586.0,320.8 583.6,321.6 582.2,321.7 581.2,322.5 579.5,322.6 579.0,322.2 577.3,321.9 575.7,321.0 575.2,321.2 571.8,320.6 571.3,321.3 571.2,322.8 570.1,323.4 568.8,322.9 566.1,323.0 564.9,323.7 563.3,324.2 561.3,323.4 560.2,322.3 559.6,321.2 558.5,321.4 558.3,322.3 557.4,322.4 555.2,321.6 554.7,320.8 553.3,320.5 552.5,320.8 549.7,320.7 548.5,321.5 546.8,321.4 545.4,320.2 544.1,320.3 542.9,320.8 540.1,321.4 537.6,320.3 537.1,319.3 537.4,317.6 537.2,315.8 539.7,313.4 540.6,312.9 541.5,313.1 541.6,312.1 542.3,311.4 543.5,311.5 544.3,311.0 544.9,311.3 545.9,309.7 547.2,309.2 550.4,309.1 551.2,308.4 551.7,309.4 553.0,308.9 553.8,309.6 555.9,309.3 556.6,310.2 557.7,310.7 559.2,310.5 560.3,310.9 562.9,310.8 563.2,311.9 566.9,313.0 567.4,312.9 568.6,313.7 570.0,314.0 570.9,315.5 572.6,316.1 573.3,315.5 574.4,316.7 576.6,315.2 576.6,314.1 578.1,314.5 579.3,314.1 581.0,314.5 581.7,313.9 583.6,314.1 584.1,313.2 585.8,312.9 585.5,314.8 587.5,314.9 588.7,315.4 590.1,316.9 591.6,317.4 593.1,316.7 595.7,316.7 596.6,315.3 595.8,314.4 596.1,313.5 597.1,313.5 598.3,311.9 598.7,312.0Z M629.9,332.6 631.0,334.2 632.3,334.4 633.4,333.3 634.7,334.2 635.2,336.1 636.6,335.5 637.1,332.9 638.8,331.9 639.2,329.0 640.5,329.4 642.4,328.6 643.5,327.9 644.4,326.3 645.0,326.5 646.7,325.4 647.5,325.4 648.2,324.7 649.6,324.3 649.4,326.1 650.4,326.5 652.2,325.7 653.2,324.5 654.7,325.7 654.8,326.3 654.4,329.0 652.9,329.4 651.9,328.9 651.0,329.0 650.3,329.7 650.7,331.6 651.8,332.3 652.4,333.5 652.7,335.2 650.8,336.9 650.3,339.2 648.2,340.5 647.3,341.4 645.4,343.9 645.1,344.5 643.4,345.4 643.1,346.0 640.3,347.6 639.7,349.1 637.9,350.4 637.1,350.6 633.9,350.5 632.6,350.3 630.9,350.9 630.4,351.8 629.2,352.8 626.9,353.4 625.7,354.2 624.4,354.7 622.4,354.9 621.4,354.6 620.2,355.0 618.9,354.1 617.0,354.7 618.4,351.7 618.6,350.8 621.4,349.9 623.3,349.0 623.3,347.6 621.2,347.1 619.7,347.6 619.7,345.3 621.2,344.6 621.6,342.9 621.1,342.1 621.9,341.6 621.6,339.2 623.0,337.6 624.0,337.2 624.3,335.9 625.1,336.0 627.5,334.4 628.5,332.9 629.9,332.6Z M534.5,343.2 534.5,342.4 533.1,342.5 532.4,342.0 531.3,341.8 530.0,341.3 528.7,341.8 528.2,342.5 527.3,341.7 526.3,341.3 523.6,341.4 520.4,339.9 519.4,338.3 518.1,337.3 518.5,336.3 519.6,335.0 520.9,334.3 521.7,334.4 523.8,333.3 524.3,333.7 526.2,333.0 528.0,333.5 529.8,332.9 531.2,333.4 532.7,332.6 533.5,332.5 534.6,333.3 536.4,333.4 537.1,333.7 540.3,331.2 540.7,332.1 543.8,335.4 545.3,335.3 546.4,335.9 546.7,338.0 547.1,339.1 549.4,339.2 551.4,338.8 552.4,340.4 553.6,340.7 554.8,342.4 555.5,344.2 556.7,345.1 557.4,345.1 558.9,346.3 559.5,347.4 559.4,348.8 558.1,349.8 557.6,350.7 556.1,351.7 554.9,352.3 553.7,352.0 552.1,352.6 551.8,353.5 550.9,353.5 549.3,352.3 546.1,352.5 544.6,351.8 542.2,349.6 541.4,347.7 540.1,346.5 538.0,345.3 536.9,345.2 536.3,344.5 535.2,344.0 534.5,343.2Z M636.6,311.5 638.0,309.7 639.0,308.9 640.0,308.9 640.1,308.1 637.6,309.2 637.4,308.1 639.2,306.1 641.9,306.0 641.8,307.4 643.5,306.9 645.9,306.6 647.0,307.0 650.9,306.8 652.6,306.6 653.7,308.2 653.4,310.7 651.8,311.1 648.5,311.4 646.1,312.2 643.3,311.8 641.7,312.7 640.8,312.9 639.9,312.4 638.3,313.2 636.8,313.0 636.1,312.5 636.6,311.5Z M618.5,311.1 619.2,311.3 620.0,310.5 620.0,309.5 620.6,308.6 622.3,308.7 622.2,307.9 624.0,306.9 625.4,307.8 626.8,308.0 626.9,308.9 625.3,309.4 623.7,309.5 621.7,312.6 620.6,312.1 619.1,313.5 619.7,315.1 618.9,315.7 618.0,314.6 616.8,314.9 616.3,315.8 615.5,316.0 613.9,314.8 613.3,315.2 612.1,314.4 613.4,313.4 614.4,311.9 616.4,311.3 617.3,310.6 616.5,309.2 618.7,308.3 619.2,308.8 618.0,310.6 618.5,311.1Z M611.3,359.8 612.8,358.2 615.9,356.9 615.2,359.0 616.4,361.2 613.7,362.3 612.6,362.9 611.7,364.8 610.0,364.6 608.6,365.4 606.3,365.7 605.1,367.0 604.5,366.6 603.1,367.0 603.1,365.0 602.7,364.5 603.8,363.4 606.6,362.9 608.0,362.8 609.8,361.0 610.9,360.8 611.3,359.8Z M627.6,312.0 628.0,310.8 630.1,309.6 631.1,311.2 632.4,309.6 633.4,308.9 633.8,307.9 634.9,307.0 635.8,307.2 635.8,308.3 635.2,309.1 635.3,310.5 634.2,311.1 633.3,312.3 633.4,313.3 631.9,315.0 630.2,315.3 630.2,314.2 629.6,312.5 627.6,312.0Z M610.6,311.8 609.4,312.0 607.1,312.0 607.8,310.0 610.3,308.3 612.4,308.2 613.7,309.7 613.7,311.2 613.3,311.8 610.6,311.8Z M582.4,360.3 579.9,360.2 578.6,359.5 581.3,358.0 582.1,356.6 582.9,356.2 585.0,356.5 585.1,358.3 582.4,360.3Z"},{"g":"BALI","n":null,"d":"M436.6,319.2 436.3,319.8 437.5,320.7 436.1,321.7 434.3,321.5 434.3,321.0 435.9,320.2 436.0,318.9 435.4,317.8 434.5,317.2 433.9,316.1 430.8,313.6 428.0,312.3 426.1,311.8 424.2,312.1 423.1,311.7 421.9,310.6 420.3,308.0 419.9,306.9 420.1,305.3 421.2,305.3 422.3,306.2 423.3,305.8 425.7,306.4 426.8,306.9 429.2,307.5 432.3,307.0 434.9,304.9 436.3,304.5 439.8,305.6 442.3,306.8 444.7,308.3 446.2,310.3 447.7,311.0 448.0,311.9 447.2,312.9 446.4,313.3 445.7,314.2 444.2,314.1 443.3,315.2 442.1,315.6 440.2,315.8 438.1,317.5 438.1,318.6 436.6,319.2Z"},{"g":"RIAU","n":"Riau","d":"M112.1,73.0 112.8,76.2 114.4,78.7 117.2,81.1 119.7,81.9 122.2,83.3 123.9,85.3 124.1,83.8 122.1,82.0 121.6,79.7 122.4,78.7 125.3,78.2 128.0,78.5 128.2,79.7 130.3,81.7 132.5,82.9 133.7,84.8 134.0,87.0 134.6,88.6 134.6,89.9 135.6,91.3 137.1,91.6 138.7,92.6 139.9,92.6 141.1,92.0 143.3,92.0 144.8,93.5 149.6,97.1 151.7,98.2 151.7,100.1 152.0,101.4 153.0,102.2 152.6,104.3 153.8,107.1 155.6,108.4 157.1,110.5 159.3,111.9 161.3,112.3 163.7,111.9 165.3,112.4 167.7,112.4 168.4,112.8 170.7,115.5 171.5,116.9 172.9,118.4 174.3,118.3 175.5,117.5 176.8,117.2 177.5,116.4 179.3,116.9 181.2,118.5 183.1,119.7 183.5,120.8 184.6,121.0 186.2,122.3 187.1,124.1 187.2,126.0 187.9,128.5 185.2,128.9 183.4,128.9 182.9,129.8 183.2,130.6 181.3,131.0 181.3,132.5 182.0,133.3 184.0,133.4 187.0,135.1 187.3,135.9 185.5,136.1 183.7,137.0 183.4,138.0 181.4,139.5 179.7,139.8 179.5,143.1 179.2,144.3 180.4,144.6 180.9,145.3 177.9,145.6 173.1,144.7 170.6,144.9 168.3,148.0 166.2,149.5 165.6,150.8 163.6,152.0 162.5,152.9 162.0,152.3 159.4,152.1 158.2,150.8 157.1,150.9 157.0,150.1 155.6,149.4 155.2,148.4 154.1,148.5 153.3,149.1 152.1,148.1 151.1,148.5 149.8,147.9 148.2,147.7 146.9,149.0 145.2,149.9 144.7,149.8 143.1,149.6 141.0,148.8 139.7,147.0 137.6,146.1 135.6,144.5 134.6,142.8 132.3,142.1 130.7,140.4 128.2,139.3 127.3,137.1 127.4,135.9 126.6,135.3 125.4,135.2 124.8,136.5 123.1,135.4 123.2,134.8 121.9,133.4 121.2,129.8 121.7,129.1 121.3,127.4 122.2,125.8 121.9,124.7 120.8,124.2 119.9,124.5 118.1,124.4 115.0,123.6 114.4,123.0 113.5,121.0 112.8,120.7 111.0,121.1 111.1,119.5 109.7,116.9 109.4,115.5 110.5,112.9 108.9,111.8 108.0,111.0 107.8,108.9 106.9,108.4 107.9,107.7 108.4,106.6 107.3,105.0 108.4,103.3 107.7,102.7 107.6,101.0 106.8,99.2 106.6,98.1 110.2,98.0 110.9,97.4 111.8,97.5 113.8,96.3 114.4,95.4 114.0,94.8 114.8,92.8 113.8,89.6 111.3,89.0 111.1,88.4 111.9,86.5 111.9,84.4 112.8,79.9 111.7,77.3 111.5,75.7 112.1,73.0Z M284.2,48.4 282.7,48.5 281.5,47.8 282.2,46.5 283.8,45.8 280.8,44.5 279.4,42.2 279.4,41.0 280.1,39.8 283.0,37.6 284.3,36.0 284.7,37.9 287.3,41.1 288.3,41.9 287.5,43.0 288.2,44.4 287.9,45.5 286.8,46.2 286.2,47.3 286.1,48.5 284.2,48.4Z M164.8,106.6 167.7,107.6 169.2,109.2 171.4,110.5 171.3,112.8 170.1,113.4 168.6,111.6 167.4,111.1 162.7,111.1 161.4,111.6 160.5,111.5 158.1,110.4 157.3,109.1 158.2,107.9 159.4,107.8 158.5,104.8 159.0,103.7 160.6,104.2 161.9,105.6 161.8,106.6 162.6,106.7 164.2,106.1 164.8,106.6Z M138.7,83.6 139.5,82.7 140.9,81.9 142.0,82.5 143.7,85.0 143.8,86.0 143.1,87.2 142.6,89.8 140.1,91.5 138.6,91.3 136.6,90.7 135.0,86.7 135.6,84.1 136.7,83.3 138.0,83.9 138.7,83.6Z M201.9,106.6 202.1,105.4 201.1,105.5 200.4,106.4 197.8,106.6 197.0,105.3 197.6,103.9 199.4,103.6 199.4,102.7 201.1,102.2 203.2,102.9 204.9,102.4 205.4,103.9 206.1,104.2 206.7,105.9 206.1,106.9 206.7,108.4 205.8,108.7 205.2,110.7 203.6,110.4 202.5,108.9 201.8,108.6 201.3,107.0 201.9,106.6Z M159.1,101.5 158.1,104.8 159.0,107.6 158.0,107.6 156.9,108.5 154.4,106.3 153.6,104.4 153.9,102.7 153.6,101.6 152.9,100.4 153.5,98.4 153.1,97.7 154.9,97.5 157.1,99.8 159.1,101.5Z M165.9,106.6 164.7,105.7 163.1,106.1 162.6,105.9 163.5,104.0 165.0,103.1 168.1,103.8 169.9,104.6 173.8,108.8 173.8,109.7 173.0,110.3 172.0,110.3 169.3,108.6 167.8,107.3 165.9,106.6Z M148.6,93.6 148.6,93.3 150.1,93.3 151.9,94.0 157.1,94.7 158.5,95.2 159.3,96.3 159.3,98.3 159.6,101.0 156.8,99.2 154.9,97.2 151.4,96.6 149.2,95.0 148.6,93.6Z M205.1,128.4 206.1,129.2 207.8,131.3 208.8,132.7 210.2,132.7 210.8,131.8 212.5,134.6 211.5,135.6 210.8,135.5 208.7,134.0 207.6,132.9 203.6,134.5 203.0,133.7 201.9,133.8 201.5,132.6 203.3,131.3 203.4,129.8 204.3,128.0 205.1,128.4Z M200.1,137.9 201.6,136.9 201.8,136.0 203.8,136.5 204.6,138.2 205.1,138.4 203.9,140.2 203.1,142.6 201.8,141.2 200.8,141.6 200.7,143.0 199.8,142.7 199.4,140.6 197.9,139.3 198.3,137.1 199.4,138.1 200.1,137.9Z M181.3,114.3 181.0,114.8 179.1,114.3 178.0,112.3 177.8,110.8 178.5,108.8 180.2,109.7 181.2,110.1 182.0,111.0 181.3,113.0 181.3,114.3Z M191.4,106.5 190.1,105.1 190.9,104.8 190.5,103.6 192.1,103.4 192.4,102.6 193.3,103.1 194.5,102.3 195.6,103.6 195.3,105.8 194.1,106.0 192.4,106.9 191.4,106.5Z"},{"g":"SULAWESI TENGAH","n":"Sulawesi Tengah","d":"M531.7,147.2 533.2,146.5 533.4,145.8 534.5,145.2 534.4,143.7 535.5,142.8 536.3,143.3 537.4,146.4 538.1,147.7 538.9,147.2 538.8,145.9 538.4,145.4 538.4,144.0 537.7,143.4 536.3,139.1 536.2,137.9 536.7,134.5 537.5,132.5 537.0,131.0 535.6,131.6 534.4,131.1 532.9,128.7 535.4,128.6 536.5,130.1 536.7,130.9 537.9,130.8 539.1,128.7 538.7,126.1 536.6,124.1 537.2,123.3 539.0,123.8 539.5,123.4 538.2,120.7 539.1,119.9 538.8,118.9 539.6,118.0 541.5,117.9 542.5,117.3 542.3,115.2 541.9,113.9 543.2,112.3 544.4,112.3 546.6,111.1 546.9,110.1 546.6,109.1 546.9,107.5 549.1,106.9 548.7,109.8 549.7,110.2 550.0,110.9 551.9,111.4 552.5,111.1 554.1,111.6 554.6,110.8 554.8,109.3 556.3,107.4 557.3,107.5 558.7,105.8 558.9,104.5 558.5,104.1 559.5,102.6 559.2,100.6 559.7,99.6 561.8,99.4 562.8,98.9 564.8,99.8 565.5,99.6 568.4,101.3 569.9,101.0 571.1,101.0 572.2,100.7 573.1,99.6 573.6,100.6 572.8,101.5 572.8,102.8 573.9,104.1 575.6,105.0 578.8,105.2 582.1,104.4 582.7,104.7 583.8,104.2 584.3,105.5 585.0,106.0 587.5,104.9 588.8,105.7 589.3,105.6 586.7,106.6 585.7,107.7 585.1,107.9 584.5,108.9 583.6,107.7 582.6,107.2 581.5,107.4 579.8,108.2 578.0,108.4 576.9,109.1 574.3,109.8 571.8,109.4 569.8,110.4 569.0,111.3 568.3,112.9 567.0,113.3 568.8,115.4 571.1,115.9 570.9,118.0 569.8,117.6 568.7,118.3 567.4,118.4 566.7,119.5 565.3,119.7 564.1,118.8 561.3,119.8 560.3,118.8 557.5,118.1 556.8,117.3 554.8,117.1 553.1,117.2 549.5,118.5 548.2,119.4 546.9,121.0 546.1,122.5 545.0,123.6 544.2,125.0 544.4,125.7 543.8,126.5 543.8,128.3 543.5,129.3 542.2,130.3 542.4,131.5 541.7,132.3 541.7,134.8 542.2,135.0 542.4,137.0 543.1,138.1 542.5,139.1 542.7,142.2 543.8,144.3 546.3,146.9 546.9,147.9 548.4,149.6 550.5,148.6 551.5,150.1 552.6,150.3 554.4,153.9 554.0,154.7 554.0,155.8 555.4,157.1 555.5,158.4 556.6,159.5 557.5,158.7 559.9,158.3 560.3,159.3 562.5,159.3 562.9,159.1 564.5,159.9 565.9,159.5 567.8,156.4 568.1,154.9 569.4,153.7 569.9,152.5 571.9,150.4 573.1,149.7 573.7,148.2 575.1,147.6 576.2,147.4 576.6,146.5 577.6,146.0 577.9,147.2 577.6,148.3 580.1,149.7 580.8,149.4 584.1,150.2 585.3,149.0 587.4,149.5 588.3,148.7 588.5,147.3 589.6,145.7 592.0,145.8 593.3,145.4 594.3,145.6 595.1,145.1 596.7,145.6 598.9,145.2 600.2,146.2 601.1,146.2 602.2,145.4 605.1,145.2 604.4,144.2 601.8,143.8 602.9,142.3 603.5,142.5 605.6,142.1 606.1,142.6 607.3,141.6 609.5,141.0 610.8,141.3 611.3,141.0 613.0,141.3 616.0,142.9 615.4,143.2 616.9,145.1 615.4,148.8 615.5,149.4 614.6,151.1 612.8,151.4 612.0,150.4 610.2,149.0 610.2,147.8 609.2,146.8 608.4,147.4 608.3,148.1 606.6,148.2 604.6,148.8 603.9,148.7 602.4,149.2 602.5,150.2 601.0,152.1 600.7,153.2 599.7,153.2 599.0,154.0 598.7,155.5 597.4,156.0 597.3,157.0 596.0,158.0 595.7,158.7 594.3,159.8 593.7,160.9 592.1,161.7 590.0,163.3 585.7,163.7 584.3,165.0 582.9,165.4 582.5,165.0 581.0,166.2 581.0,166.9 579.7,169.6 578.3,170.9 577.2,171.2 575.7,171.0 574.8,169.8 573.5,169.2 573.2,167.8 571.5,168.0 570.4,167.2 569.8,167.7 569.7,169.0 570.6,169.5 570.3,170.8 571.6,171.3 572.5,170.8 573.1,171.8 574.8,173.2 575.4,175.9 576.7,176.3 578.2,176.1 579.2,176.6 580.7,178.5 581.3,178.6 581.7,179.7 583.0,181.5 584.3,183.5 584.9,185.3 585.9,186.5 585.3,187.7 587.1,189.4 588.2,189.4 589.1,190.1 589.1,191.1 591.6,191.6 592.1,192.1 591.8,193.0 590.7,194.5 592.5,195.8 593.6,197.1 594.2,196.8 595.8,197.9 594.5,198.4 594.5,199.4 593.6,199.6 592.3,199.2 592.0,199.9 591.4,199.5 591.6,198.2 591.2,197.0 590.5,197.0 589.3,196.0 589.4,194.7 588.0,194.3 587.2,193.1 585.2,193.1 583.9,192.5 583.0,189.7 582.4,189.1 581.2,188.8 580.8,187.6 579.6,185.4 578.6,184.1 577.3,183.8 575.8,183.0 574.5,182.9 571.9,181.1 570.0,180.1 568.3,179.8 566.7,179.3 562.3,177.3 559.5,176.6 557.8,177.1 556.9,176.8 554.5,175.1 552.0,172.1 551.8,171.3 550.3,169.7 549.9,169.7 549.3,172.1 548.7,173.3 547.3,172.6 545.5,172.7 544.1,172.3 543.7,171.4 541.4,171.3 540.7,172.1 539.1,173.1 538.0,173.2 537.5,172.4 538.2,171.4 538.7,169.8 539.5,168.5 539.4,167.7 538.6,167.1 536.3,167.0 536.6,165.4 535.7,163.5 534.3,162.2 534.1,161.1 534.9,160.3 533.7,159.1 531.0,159.8 530.6,158.9 529.5,158.9 529.1,157.6 530.7,157.0 530.7,156.3 532.2,156.2 532.9,153.9 532.1,150.8 531.7,147.2Z M610.7,164.1 609.3,163.5 609.3,163.0 610.6,162.1 611.1,161.5 610.5,157.2 609.3,157.9 607.7,160.2 607.5,161.1 606.0,162.3 605.0,163.5 604.1,163.4 603.1,160.8 602.3,160.1 602.5,158.6 603.4,156.2 604.3,155.4 604.9,154.3 606.6,154.7 609.4,154.0 610.2,154.8 611.1,153.8 612.4,155.3 611.2,157.4 612.4,158.9 613.2,158.2 614.9,155.3 616.6,155.4 617.6,156.2 619.2,156.6 618.7,158.3 618.8,159.0 618.2,160.3 617.0,161.6 615.9,161.7 615.0,161.3 613.6,159.3 612.7,160.5 612.0,163.4 610.7,164.1Z"},{"g":"KALIMANTAN TIMUR","n":"Kalimantan Timur","d":"M408.7,107.0 408.8,106.9 408.1,105.7 409.2,105.2 410.3,103.4 411.6,103.7 412.3,103.0 413.1,103.1 413.6,102.0 413.5,101.9 413.9,98.2 415.0,97.7 415.7,96.9 416.5,96.8 418.8,95.8 419.5,95.3 422.3,97.0 423.0,97.1 423.7,95.8 424.0,93.9 424.7,93.6 426.0,91.8 426.1,89.5 425.7,88.8 426.7,87.6 427.9,87.8 428.5,87.0 429.7,86.5 429.2,85.3 430.0,84.5 429.5,83.9 428.1,83.8 428.3,82.4 427.6,81.6 428.1,79.4 430.6,79.0 431.3,78.5 431.4,76.8 432.3,77.0 435.4,74.4 436.6,74.4 437.5,73.9 437.5,73.1 435.9,71.4 434.8,71.8 435.0,69.7 434.8,68.8 435.5,68.3 435.4,66.9 434.4,66.7 435.6,65.4 435.6,64.8 437.6,63.1 438.6,61.7 439.5,63.2 441.0,63.1 441.8,62.2 443.0,62.2 443.6,61.4 443.6,60.5 444.7,59.1 443.8,58.3 444.1,55.7 444.7,53.8 445.3,52.9 446.0,53.7 446.6,53.2 445.7,51.3 445.6,50.2 445.0,49.5 444.9,48.1 445.3,45.5 445.9,43.9 444.8,42.9 445.0,42.2 446.4,41.6 447.2,39.1 447.4,37.6 449.2,35.8 450.4,36.0 450.6,35.3 451.5,34.5 451.5,32.7 452.8,33.3 454.2,33.4 455.1,34.6 456.0,35.0 456.5,34.0 457.4,33.6 457.8,32.6 460.1,33.1 462.1,32.7 464.5,34.5 464.9,33.7 465.9,33.8 465.9,32.9 466.6,32.3 467.8,33.8 469.8,33.6 470.4,32.7 471.4,33.6 472.3,33.9 473.9,33.1 475.1,33.6 477.1,33.5 478.3,33.8 480.4,33.7 481.4,32.9 482.6,34.0 485.2,35.6 486.2,37.2 487.5,37.4 487.4,38.9 485.1,37.9 485.4,39.0 486.3,39.2 488.0,40.6 489.2,42.6 490.3,43.1 492.1,44.7 492.0,45.2 493.0,45.8 491.9,46.4 490.0,45.9 487.3,45.9 486.5,46.6 486.3,47.5 487.3,49.5 486.8,50.0 484.5,49.0 481.7,49.5 479.8,48.9 478.0,49.0 477.0,49.7 479.1,49.4 480.7,49.7 481.1,50.1 480.4,51.3 481.3,52.5 483.8,53.2 484.2,54.0 485.1,54.6 485.1,55.6 484.5,55.9 483.8,57.1 484.2,58.0 482.8,58.4 483.0,59.1 485.4,59.2 486.5,60.7 485.7,61.8 487.9,61.5 488.3,61.9 489.6,61.7 489.5,62.6 488.6,63.4 488.2,65.0 491.7,65.3 489.5,67.4 491.1,67.7 493.0,68.5 493.2,70.2 493.6,71.5 495.4,73.1 496.3,74.4 499.3,77.1 499.8,78.2 499.5,79.4 498.2,80.6 496.3,80.9 493.8,80.4 492.0,80.7 491.3,81.3 491.8,81.8 491.7,82.5 491.8,82.9 492.1,83.0 493.4,82.5 493.9,83.4 493.2,84.5 494.3,84.7 494.9,85.5 494.9,87.5 495.9,88.8 497.0,89.3 498.6,89.3 498.9,90.8 500.5,92.6 501.3,92.8 503.1,94.4 504.2,94.7 506.2,96.0 506.7,95.9 507.3,97.9 508.6,98.4 510.0,98.4 511.9,99.9 514.6,102.2 514.5,103.0 516.9,105.0 518.5,105.2 519.5,106.0 519.5,106.8 518.8,107.8 517.3,109.3 516.8,109.1 515.1,110.9 513.3,110.3 512.6,109.6 510.7,110.7 509.8,110.7 507.6,109.9 506.0,110.8 504.8,109.8 502.3,109.5 499.2,108.7 498.9,107.7 498.1,107.5 497.5,105.3 495.5,103.8 495.1,104.4 497.3,107.0 497.2,107.5 498.5,110.3 498.5,111.3 497.3,111.5 496.2,110.8 496.0,110.1 494.0,110.9 492.4,111.9 491.5,113.5 491.6,114.6 490.8,115.0 489.8,117.4 489.2,117.8 489.4,118.9 488.6,119.5 488.1,121.1 486.6,125.0 487.4,125.7 486.4,126.5 487.4,129.1 486.6,129.9 485.7,132.9 485.1,133.8 485.9,135.0 485.9,136.2 485.4,137.0 486.0,138.3 485.0,140.2 484.0,140.9 482.2,141.0 482.6,143.2 482.2,145.7 481.6,146.0 481.5,148.2 479.9,149.1 477.2,152.9 476.5,153.3 476.0,154.6 474.4,155.9 471.9,156.4 472.0,155.0 471.3,154.9 471.2,153.4 470.1,152.5 470.7,150.3 469.9,151.3 469.5,152.9 470.5,153.6 470.8,158.1 467.3,159.5 466.3,160.1 465.7,161.3 466.4,163.3 464.8,164.4 463.9,164.5 461.3,165.6 460.3,166.3 459.7,167.3 459.9,168.0 462.5,166.9 464.0,167.1 464.1,167.8 463.3,169.2 464.2,170.3 464.2,172.8 464.0,173.5 462.5,174.1 463.6,175.0 465.2,174.5 465.6,175.5 467.1,176.4 466.7,179.5 466.3,181.1 465.0,180.4 461.2,179.6 459.7,179.0 458.3,179.1 453.9,178.9 451.8,179.4 451.7,180.3 450.7,180.6 450.0,178.2 450.1,177.6 449.5,176.8 449.7,175.0 450.1,173.7 447.9,173.2 447.8,171.3 448.3,169.2 448.2,167.9 447.5,166.7 446.9,165.7 447.0,164.1 446.3,163.5 446.1,161.9 446.6,161.1 448.4,158.3 448.8,157.2 449.3,155.3 450.8,153.8 449.8,152.7 448.7,153.0 448.6,152.3 447.5,151.5 446.8,150.3 445.1,149.1 443.2,146.9 440.9,146.4 440.4,144.8 440.1,141.1 439.5,140.6 439.0,139.4 437.7,138.1 437.3,135.1 437.6,133.7 438.3,132.5 438.2,131.9 439.4,130.5 438.9,129.1 435.8,130.7 435.6,131.4 434.2,131.8 433.3,132.6 431.9,132.3 431.2,132.6 430.1,129.2 429.8,127.3 427.8,126.4 428.6,124.1 429.9,121.9 431.2,121.2 431.6,121.5 432.9,121.3 433.3,121.8 435.1,120.3 435.3,119.0 434.4,118.1 432.6,114.9 432.2,112.7 431.2,111.5 430.4,111.3 429.0,112.8 428.6,112.0 427.3,112.2 426.1,113.0 424.8,113.4 423.4,114.7 422.4,114.6 421.9,116.1 421.3,115.9 419.9,116.5 419.5,117.6 418.3,116.8 416.7,116.6 415.2,116.8 413.8,115.6 414.3,114.7 413.8,113.7 412.8,113.2 411.6,113.7 409.7,114.1 407.1,113.9 407.1,113.1 408.3,112.1 408.1,111.3 408.9,110.0 407.9,109.1 407.9,108.2 408.7,107.0Z M492.1,46.7 493.9,47.2 492.9,48.0 492.3,49.0 490.6,49.5 489.0,49.3 487.4,48.3 486.6,47.3 487.4,46.0 490.0,46.1 492.1,46.7Z"},{"g":"SULAWESI UTARA","n":null,"d":"M617.2,121.2 618.4,118.6 618.5,115.9 617.8,114.5 615.1,114.0 612.6,112.0 612.3,110.1 610.2,109.1 609.6,108.1 611.0,108.6 611.9,107.6 612.8,108.3 615.3,108.4 615.7,108.7 619.1,108.9 620.2,108.6 623.0,109.5 624.1,110.2 627.1,109.9 630.5,108.2 631.9,108.1 633.2,106.9 635.0,106.5 635.6,106.1 636.7,103.6 636.4,103.1 637.9,102.3 639.5,102.5 640.7,101.9 641.6,102.3 642.2,101.4 641.7,100.7 640.1,100.0 640.5,98.8 641.4,97.8 642.5,97.4 643.6,97.9 645.1,96.7 647.0,96.3 647.3,95.1 646.4,94.0 647.7,93.4 649.0,92.0 649.8,90.6 650.6,90.1 651.3,90.5 651.0,91.4 653.1,92.1 654.0,93.9 655.3,94.5 656.0,95.5 655.7,96.5 654.9,97.0 653.9,97.0 652.3,98.5 652.1,100.1 651.1,103.4 650.0,105.1 648.5,106.6 648.1,107.4 646.1,107.8 645.5,109.0 644.7,108.9 643.9,110.3 642.5,111.7 642.6,112.8 641.9,113.0 640.9,114.5 641.1,115.5 639.7,116.4 640.0,118.1 637.1,118.7 635.9,118.7 635.0,119.6 630.7,119.9 630.3,120.3 628.8,120.2 628.4,120.5 624.8,121.0 624.1,121.6 623.2,121.3 621.9,121.8 619.9,121.6 619.0,121.3 617.9,121.7 617.2,121.2Z M687.6,32.9 688.1,30.9 688.2,29.5 688.9,28.8 690.1,29.1 691.2,30.1 691.5,31.3 691.1,32.6 692.5,34.8 689.8,37.3 690.1,38.3 690.0,39.7 689.1,40.7 687.8,40.5 687.0,39.8 688.5,38.2 689.7,35.5 688.1,34.9 687.6,32.9Z M664.9,51.7 665.5,53.6 664.7,54.6 662.1,53.4 661.3,52.4 661.9,50.7 661.2,49.8 660.3,49.4 659.4,48.4 659.9,47.0 661.8,47.2 663.7,49.6 663.2,50.2 664.3,51.6 664.9,51.7Z"},{"g":"IRIAN JAYA BARAT","n":"Papua Barat","d":"M861.5,190.2 860.2,191.6 857.9,193.3 856.5,194.2 856.8,195.4 856.5,196.4 854.2,198.0 852.3,200.8 851.7,202.6 852.3,202.6 856.2,204.3 858.6,205.0 867.6,208.0 868.2,208.2 871.6,209.3 873.1,210.1 874.4,210.4 881.6,212.9 882.6,213.1 884.3,214.0 884.9,215.7 886.0,219.4 886.4,219.9 890.8,220.1 894.2,219.9 892.6,223.6 891.6,224.9 889.7,226.8 888.8,226.4 886.3,226.4 884.8,226.7 881.9,226.1 880.3,225.6 877.7,225.2 873.6,225.9 871.1,224.8 868.1,223.0 866.6,221.4 864.9,221.4 863.9,220.1 862.9,220.1 862.6,218.9 861.2,218.7 861.1,217.9 862.2,217.3 861.5,215.5 863.8,214.3 865.2,214.7 865.5,215.4 866.7,215.2 866.5,214.3 864.9,214.4 864.1,214.0 863.2,214.4 861.9,214.0 860.8,214.7 860.4,215.7 859.6,215.8 858.3,216.7 857.4,215.7 857.6,215.1 856.8,214.0 854.8,213.4 854.8,215.0 853.7,215.0 854.5,216.2 853.6,216.4 852.8,215.4 851.4,214.9 850.4,213.5 851.3,212.2 850.7,210.8 848.7,211.9 847.9,211.1 846.4,212.8 845.3,211.1 845.2,209.4 843.8,207.9 843.6,206.2 842.5,207.1 842.8,209.4 840.9,207.3 839.0,204.4 840.7,203.0 840.4,202.2 839.9,199.3 841.1,197.9 842.2,197.6 843.6,195.8 843.5,194.8 844.3,194.6 843.8,192.6 843.1,193.1 842.8,194.6 841.4,194.8 839.6,197.4 840.1,198.7 839.6,199.1 839.9,201.5 839.3,203.0 837.2,203.4 838.4,205.4 838.1,206.5 836.2,207.6 835.0,208.9 834.0,209.1 834.0,210.1 834.4,211.5 835.4,212.7 834.2,213.8 832.2,216.2 830.4,217.5 828.7,217.5 827.0,217.1 825.8,217.9 824.5,218.2 823.5,217.7 823.1,216.5 821.4,215.0 821.4,213.4 820.4,210.8 819.5,209.0 819.4,208.0 823.0,208.1 823.3,205.7 822.9,204.2 822.1,204.5 821.3,203.8 821.0,201.9 821.6,201.2 821.0,199.8 819.6,200.1 819.4,201.4 818.2,201.1 817.5,199.8 817.4,198.0 816.2,197.5 815.7,196.4 812.9,194.1 811.1,193.2 811.0,192.7 808.0,192.3 805.5,193.1 804.9,192.0 803.9,191.3 804.6,189.1 804.0,188.2 805.4,187.8 806.6,186.6 807.6,186.4 811.3,186.6 813.3,187.5 814.2,187.0 815.9,187.1 817.4,188.0 818.3,189.1 819.5,189.7 821.0,188.9 824.5,185.5 826.3,183.0 828.1,181.7 830.2,181.1 832.1,181.8 833.8,183.5 833.6,185.1 834.2,187.3 835.0,187.1 835.6,186.0 837.0,186.2 837.9,185.5 838.0,184.6 839.5,183.8 840.2,184.4 840.0,185.5 841.9,185.8 841.9,186.5 842.1,186.9 843.0,186.3 843.3,184.9 842.8,182.7 843.3,182.4 843.5,182.2 843.5,181.9 843.7,181.9 844.1,182.3 844.6,182.1 845.3,182.7 846.6,182.4 847.1,182.0 846.3,181.4 847.2,180.0 846.4,179.3 847.3,178.7 847.5,177.3 846.3,177.1 846.1,174.9 846.3,173.8 844.7,174.5 843.2,174.0 840.6,175.2 839.5,174.9 839.0,176.0 838.3,175.9 837.8,176.9 837.0,177.2 834.9,177.1 834.3,176.6 832.8,176.8 831.5,176.3 830.4,176.8 829.5,176.3 827.9,177.0 826.2,177.2 824.5,178.5 823.2,178.2 822.2,177.4 821.2,177.4 819.6,178.0 819.1,178.6 817.6,178.3 816.5,176.2 815.2,176.2 811.5,177.9 810.2,178.1 808.9,176.5 807.7,175.5 806.1,174.9 804.3,173.5 804.4,172.6 802.8,171.3 802.0,169.5 802.4,168.7 801.9,168.0 803.5,166.5 804.1,165.6 801.6,166.0 801.0,164.5 801.4,163.2 800.3,162.9 799.4,163.7 798.4,162.8 797.6,163.0 796.9,162.3 795.5,162.0 794.3,160.5 793.7,160.9 792.2,160.7 791.6,161.3 790.3,160.3 790.5,159.5 788.9,157.8 787.5,158.6 789.0,159.7 787.9,161.1 786.1,161.6 785.3,160.3 783.8,160.1 781.6,160.2 780.2,159.5 781.5,158.7 782.1,156.4 782.7,155.8 785.3,155.2 787.0,152.1 786.8,150.8 787.8,150.0 787.5,148.6 786.7,146.2 790.2,145.4 790.8,144.9 793.4,144.3 793.8,145.1 799.8,143.9 801.0,143.3 801.8,142.1 803.2,140.8 805.0,140.2 805.4,138.9 809.1,136.7 810.8,136.8 812.5,135.9 814.0,136.2 816.4,136.2 819.1,136.7 823.2,138.5 824.1,138.3 824.4,139.0 827.2,140.2 828.4,140.2 828.8,140.8 830.3,141.4 832.3,143.6 834.0,144.6 837.0,144.8 838.2,144.4 841.2,144.7 841.4,144.1 843.4,144.4 846.0,144.0 847.9,145.7 849.0,146.1 848.9,147.4 848.1,148.7 847.4,149.2 848.8,151.1 848.7,151.7 849.5,153.1 851.6,154.8 851.6,155.2 853.2,157.5 851.8,159.2 851.5,160.4 851.8,161.1 851.3,162.5 849.8,164.2 848.7,164.5 849.4,166.9 849.4,169.1 849.8,169.6 850.2,172.3 849.4,173.7 849.7,175.5 850.3,175.6 850.5,178.2 851.0,179.9 851.9,181.4 852.9,181.6 853.1,182.5 854.4,184.1 854.6,185.3 856.0,188.1 856.1,189.0 857.0,189.8 857.3,191.1 858.3,190.4 857.9,186.6 857.5,186.2 857.2,184.2 858.2,182.8 859.6,182.5 860.8,182.9 861.4,183.8 861.5,185.1 861.4,189.1 861.5,190.2Z M764.5,133.0 766.2,133.2 766.3,132.2 765.9,130.8 767.3,130.7 768.4,130.2 768.7,130.9 770.2,130.0 772.6,129.3 773.4,129.8 776.8,128.7 778.8,128.8 780.9,129.7 782.3,128.9 782.6,129.9 784.0,129.8 786.4,131.5 787.3,131.4 788.2,132.2 788.0,133.3 788.3,134.3 789.0,134.8 786.9,136.4 783.3,135.3 781.3,136.2 780.3,135.9 779.4,134.4 778.4,133.4 777.2,133.6 776.5,132.3 775.5,131.9 775.0,130.5 773.6,130.5 773.3,131.6 774.7,133.2 776.4,134.7 777.2,135.1 779.8,135.1 780.2,136.1 779.3,137.5 777.5,138.2 775.6,138.2 774.5,135.9 774.6,134.9 773.2,135.4 771.7,135.6 771.0,134.6 770.9,133.4 769.6,134.5 769.1,134.1 767.8,134.1 766.0,133.3 764.5,133.0Z M768.2,171.7 766.8,171.6 765.5,172.6 765.4,173.3 762.5,173.5 761.5,172.5 760.7,172.7 758.6,172.3 756.7,171.4 755.5,170.5 753.8,169.7 754.0,168.9 756.4,168.2 757.6,167.2 759.2,166.9 761.2,165.9 764.1,165.8 765.5,166.0 765.8,165.3 767.0,165.1 767.4,166.1 769.0,167.2 769.4,168.4 767.5,170.3 768.2,171.7Z M773.7,149.4 777.1,148.8 778.1,148.0 780.0,147.9 780.5,149.0 781.4,148.5 782.7,148.7 783.4,150.5 782.3,154.7 782.5,155.6 781.7,156.3 781.5,157.4 780.9,158.1 779.5,157.3 778.6,157.8 777.5,156.1 776.4,155.9 775.9,155.1 775.9,153.9 775.2,153.5 775.2,151.9 773.7,149.4Z M770.8,145.9 771.7,146.8 773.6,145.9 774.0,146.4 775.5,146.5 778.0,145.3 779.3,145.7 778.1,147.3 776.3,147.5 774.6,148.1 771.5,148.5 771.1,148.0 769.7,148.1 769.6,146.5 770.8,145.9Z"},{"g":"SUMATERA UTARA","n":"Sumatera Utara","d":"M66.8,34.7 66.7,36.6 64.9,37.5 65.0,38.6 66.3,38.2 67.2,38.4 68.0,39.4 69.7,39.4 70.7,40.2 72.8,40.8 73.4,42.3 74.5,42.9 75.9,43.0 76.5,43.8 76.6,45.1 78.4,47.2 82.9,48.6 84.7,49.5 85.9,50.5 87.6,51.2 89.0,52.5 91.2,54.1 93.7,55.3 93.7,55.8 95.0,57.5 97.7,58.3 99.2,59.1 101.1,61.5 103.1,63.3 104.9,64.3 104.7,66.0 104.9,67.2 104.5,68.5 105.0,68.9 106.2,68.7 107.1,69.9 107.9,70.0 108.8,69.3 109.8,69.3 110.2,70.8 112.1,73.0 111.5,75.7 111.7,77.3 112.8,79.9 111.9,84.4 111.9,86.5 111.1,88.4 111.3,89.0 113.8,89.6 114.8,92.8 114.0,94.8 114.4,95.4 113.8,96.3 111.8,97.5 110.9,97.4 110.2,98.0 106.6,98.1 106.8,99.2 107.6,101.0 107.7,102.7 108.4,103.3 107.3,105.0 108.4,106.6 107.9,107.7 106.9,108.4 107.8,108.9 108.0,111.0 108.9,111.8 106.7,111.1 104.0,109.3 102.3,108.6 101.3,109.0 101.5,110.1 101.5,113.4 103.0,113.5 103.1,115.2 104.1,116.3 102.9,118.0 101.0,118.3 99.8,117.9 98.7,118.5 97.7,117.9 97.0,116.5 95.9,117.1 94.0,116.6 92.0,117.6 90.3,120.5 89.6,121.0 88.2,121.3 86.6,123.3 86.4,121.7 85.5,120.9 86.0,118.9 85.1,115.2 84.6,114.7 84.3,112.5 83.4,110.6 82.9,110.4 82.4,108.1 81.5,105.7 81.1,103.9 79.6,100.3 79.7,99.3 78.2,97.1 77.8,95.0 78.1,94.3 79.6,92.8 79.3,91.8 78.6,91.6 78.0,90.0 76.7,89.3 76.1,90.4 74.6,88.2 72.2,86.0 71.4,85.0 69.7,84.6 68.6,83.7 67.2,83.6 66.1,82.6 64.6,81.5 65.3,77.7 64.6,75.7 63.7,75.4 63.6,74.4 63.1,73.6 62.9,72.1 63.1,70.9 63.9,70.4 63.1,68.7 63.2,66.8 62.2,66.6 61.4,65.3 60.2,65.0 60.3,63.7 59.9,61.3 60.9,61.0 60.8,60.1 60.0,59.3 59.6,57.9 58.4,57.4 60.9,56.8 61.9,55.7 61.3,54.8 60.1,54.3 59.2,50.8 58.4,50.4 57.8,48.4 56.9,46.9 59.2,44.9 59.0,43.4 60.0,43.3 60.3,42.6 61.7,41.7 62.5,36.8 63.2,36.7 64.4,34.7 66.8,34.7Z M81.5,70.2 81.4,69.5 79.4,68.4 78.5,67.4 76.3,66.1 74.9,65.5 72.8,65.2 72.8,67.4 74.2,68.8 74.9,69.8 74.7,70.6 76.1,70.8 76.4,68.9 77.0,68.2 78.2,68.6 79.9,70.2 81.4,72.9 82.5,73.7 82.8,74.8 81.4,75.4 80.3,75.4 78.2,73.7 77.1,73.1 76.5,71.6 75.8,72.8 77.3,73.4 78.8,75.4 79.1,76.4 79.9,77.4 81.3,77.1 82.9,77.6 83.7,76.9 84.3,77.5 86.4,76.2 86.3,75.3 84.4,76.2 84.1,74.1 83.7,73.4 81.4,71.9 81.1,71.1 81.5,70.2Z M50.3,108.4 49.7,108.0 48.1,107.8 47.2,104.9 44.9,101.5 43.4,100.2 42.4,98.6 41.0,97.4 42.1,97.3 43.7,97.9 45.0,97.6 46.8,95.8 47.8,95.8 48.8,96.3 49.8,96.3 51.0,97.7 51.0,98.2 52.1,99.3 54.2,102.7 56.6,103.3 58.1,105.4 58.8,105.4 59.8,107.4 58.9,108.8 58.7,110.4 59.0,111.1 58.5,112.2 58.9,114.7 57.5,116.0 56.8,116.2 55.4,115.8 54.8,116.2 53.8,114.0 53.5,112.3 52.2,110.1 50.3,108.4Z M70.2,141.5 68.7,139.6 69.3,138.3 69.2,136.7 69.5,135.8 70.8,134.9 70.9,133.8 72.5,136.2 72.2,137.0 72.1,139.1 71.6,139.7 72.1,140.5 70.2,141.5Z"},{"g":"BANGKA BELITUNG","n":"Bangka Belitung","d":"M216.4,172.6 216.8,171.2 217.7,170.5 218.9,170.2 221.6,168.6 222.6,167.3 222.1,165.9 221.3,165.4 221.9,164.5 224.2,162.5 225.7,162.6 227.2,162.2 228.1,164.3 229.7,164.6 228.3,165.9 228.8,166.9 230.0,167.3 231.4,166.8 230.3,165.2 230.8,164.4 229.8,162.9 230.5,161.9 233.2,161.6 234.4,162.2 236.1,162.7 236.5,163.7 236.8,165.5 239.1,169.0 240.1,169.8 239.5,170.5 239.2,172.5 239.7,175.4 240.8,177.8 241.0,179.3 242.0,180.8 243.3,182.1 244.2,182.5 245.6,182.4 247.1,183.3 250.9,183.9 253.3,184.5 251.3,186.1 250.2,187.9 248.7,192.1 248.9,192.9 252.0,194.1 252.1,195.1 251.3,196.0 250.0,195.7 248.2,195.8 247.3,196.4 246.8,195.4 244.9,193.2 243.1,193.2 241.9,191.8 241.1,191.8 239.7,191.1 239.0,191.2 238.0,190.3 235.8,190.0 235.1,189.7 234.0,188.2 233.4,186.0 234.4,182.4 233.9,181.8 232.2,181.0 231.6,180.0 232.0,178.8 231.2,177.5 231.0,175.5 230.1,174.9 228.4,174.6 226.9,174.7 226.3,173.9 225.0,173.9 223.6,175.0 221.9,174.7 220.6,175.2 219.6,173.9 218.8,173.5 216.8,173.9 216.4,172.6Z M271.4,188.3 271.2,187.3 271.9,185.8 271.5,185.1 272.2,184.3 273.5,184.1 274.5,184.3 275.5,183.8 277.6,184.7 279.4,184.7 279.8,185.2 281.4,185.4 283.6,186.9 285.2,188.9 285.9,190.8 284.9,192.0 284.7,193.0 283.9,194.2 284.1,195.0 283.3,196.3 283.2,197.2 282.5,197.6 281.1,197.6 280.9,199.1 278.9,199.2 278.7,197.2 276.3,195.1 276.0,197.2 274.3,198.0 273.3,198.1 271.7,199.0 270.6,198.3 271.4,197.1 270.5,195.7 270.2,194.6 271.1,192.3 269.6,191.8 270.8,190.9 270.8,189.3 271.4,188.3Z"},{"g":"SUMATERA BARAT","n":"Sumatera Barat","d":"M86.6,123.3 88.2,121.3 89.6,121.0 90.3,120.5 92.0,117.6 94.0,116.6 95.9,117.1 97.0,116.5 97.7,117.9 98.7,118.5 99.8,117.9 101.0,118.3 102.9,118.0 104.1,116.3 103.1,115.2 103.0,113.5 101.5,113.4 101.5,110.1 101.3,109.0 102.3,108.6 104.0,109.3 106.7,111.1 108.9,111.8 110.5,112.9 109.4,115.5 109.7,116.9 111.1,119.5 111.0,121.1 112.8,120.7 113.5,121.0 114.4,123.0 115.0,123.6 118.1,124.4 119.9,124.5 120.8,124.2 121.9,124.7 122.2,125.8 121.3,127.4 121.7,129.1 121.2,129.8 121.9,133.4 123.2,134.8 123.1,135.4 124.8,136.5 125.4,135.2 126.6,135.3 127.4,135.9 127.3,137.1 128.2,139.3 130.7,140.4 132.3,142.1 134.6,142.8 135.6,144.5 137.6,146.1 139.7,147.0 141.0,148.8 143.1,149.6 144.7,149.8 144.9,152.5 145.9,152.7 145.5,153.7 144.5,154.8 142.2,155.5 141.8,156.7 142.4,157.8 141.8,158.9 142.5,159.5 141.9,160.8 139.1,162.8 138.2,163.7 137.5,165.1 136.1,165.5 135.8,164.9 133.7,165.4 132.4,165.4 131.4,165.9 130.8,165.1 129.5,165.1 129.4,167.4 129.9,170.3 131.0,171.9 132.0,172.6 133.1,175.0 133.4,177.3 133.1,178.2 132.1,179.7 130.1,180.6 127.3,182.6 126.6,181.5 124.5,179.5 124.0,177.5 123.0,176.2 123.0,175.3 123.9,174.4 124.2,173.0 123.6,170.3 122.0,168.2 119.8,164.7 118.9,163.8 118.7,162.6 117.0,159.1 117.5,158.5 116.8,157.0 115.6,156.8 114.9,156.0 113.7,156.1 114.0,154.6 113.3,154.2 113.9,151.1 112.9,150.2 112.4,147.7 110.8,145.5 107.5,142.2 106.7,140.4 104.3,138.1 103.1,137.2 102.4,136.0 101.0,135.1 100.7,133.8 99.5,131.8 99.8,129.8 99.1,129.0 96.4,126.9 93.4,125.5 91.7,125.1 90.8,123.4 89.9,123.2 88.6,123.8 86.6,123.3Z M88.8,166.0 88.3,167.6 86.8,167.2 85.3,167.9 83.3,166.9 80.3,165.0 79.1,163.7 79.4,163.0 78.7,161.6 76.2,158.1 75.0,156.5 74.3,155.1 75.3,152.5 75.6,149.8 76.8,149.0 78.4,149.3 81.0,148.2 80.9,149.0 81.5,151.5 83.0,152.7 83.1,153.7 83.7,154.3 84.6,156.0 85.1,158.1 86.6,159.6 86.5,161.0 87.3,161.3 87.3,162.4 87.9,163.5 88.7,163.2 89.2,164.0 88.8,166.0Z M114.3,194.0 115.1,194.7 115.1,197.1 113.5,197.2 113.4,198.3 115.3,201.3 114.1,200.8 112.4,199.3 112.0,198.6 112.2,196.8 111.4,195.7 109.9,195.0 109.0,193.7 109.3,192.5 108.7,189.6 110.0,189.1 110.6,190.0 112.6,191.7 114.3,194.0Z M104.8,188.5 105.0,187.9 104.2,183.2 104.8,183.0 106.4,184.7 108.6,186.1 109.7,188.3 107.4,190.3 105.2,189.7 104.8,188.5Z M101.0,178.8 101.3,180.0 100.4,180.2 99.3,179.6 97.8,178.4 96.1,178.3 94.6,175.4 95.5,175.3 95.0,173.6 95.4,172.9 96.6,172.7 98.1,173.7 98.6,175.5 100.2,178.3 101.0,178.8Z"},{"g":"KALIMANTAN TENGAH","n":"Kalimantan Tengah","d":"M339.0,194.1 339.5,192.9 340.6,192.0 342.6,191.2 344.3,190.8 345.3,189.5 346.4,189.3 348.1,188.5 348.7,187.6 348.6,186.8 347.6,186.4 348.0,185.5 347.3,182.7 347.3,181.6 346.5,178.6 345.8,177.5 346.7,175.5 346.1,173.6 346.9,172.3 346.0,171.2 344.6,171.1 345.0,169.9 344.4,169.2 344.4,168.0 345.4,166.9 345.1,165.4 344.5,164.9 343.2,165.9 341.9,164.9 341.9,164.1 343.1,163.0 343.9,162.9 344.6,162.0 345.9,162.0 346.7,162.5 347.7,162.2 347.5,160.9 348.5,160.5 349.2,161.0 349.7,159.3 350.8,158.7 352.6,156.5 354.2,155.7 355.7,156.4 355.8,155.1 357.3,154.9 357.5,153.4 357.1,152.8 357.5,151.9 358.7,151.0 358.7,149.9 360.7,149.1 361.1,148.6 363.2,148.4 364.8,147.4 364.8,145.4 365.9,146.3 366.9,145.5 366.9,144.3 367.7,143.8 369.2,143.5 371.2,141.9 372.2,142.3 373.5,144.4 376.7,143.3 378.6,143.7 379.9,143.4 380.7,142.7 381.9,142.7 382.8,142.1 383.3,140.8 385.5,140.8 386.3,140.1 389.4,139.1 390.0,139.3 391.6,138.3 393.7,138.8 394.5,137.9 394.4,136.9 393.5,135.8 396.0,132.5 398.0,128.2 397.6,125.4 395.8,124.5 394.6,123.2 395.7,122.5 398.3,122.6 399.9,121.4 401.5,119.6 403.0,118.8 403.4,117.4 404.8,116.5 407.1,113.9 409.7,114.1 411.6,113.7 412.8,113.2 413.8,113.7 414.3,114.7 413.8,115.6 415.2,116.8 416.7,116.6 418.3,116.8 419.5,117.6 419.9,116.5 421.3,115.9 421.9,116.1 422.4,114.6 423.4,114.7 424.8,113.4 426.1,113.0 427.3,112.2 428.6,112.0 429.0,112.8 430.4,111.3 431.2,111.5 432.2,112.7 432.6,114.9 434.4,118.1 435.3,119.0 435.1,120.3 433.3,121.8 432.9,121.3 431.6,121.5 431.2,121.2 429.9,121.9 428.6,124.1 427.8,126.4 429.8,127.3 430.1,129.2 431.2,132.6 431.9,132.3 433.3,132.6 434.2,131.8 435.6,131.4 435.8,130.7 438.9,129.1 439.4,130.5 438.2,131.9 438.3,132.5 437.6,133.7 437.3,135.1 437.7,138.1 439.0,139.4 439.5,140.6 440.1,141.1 440.4,144.8 440.9,146.4 443.2,146.9 445.1,149.1 446.8,150.3 447.5,151.5 448.6,152.3 448.7,153.0 449.8,152.7 450.8,153.8 449.3,155.3 448.8,157.2 448.7,157.1 447.0,157.6 444.5,158.9 441.4,159.5 440.0,164.1 439.4,167.9 439.7,168.9 441.1,171.1 440.5,172.3 441.2,173.4 439.4,173.7 438.9,175.3 438.7,177.0 437.8,176.7 433.3,179.8 432.1,181.2 430.6,182.1 429.9,183.1 428.1,184.8 427.7,187.0 427.2,187.9 425.2,188.4 425.0,189.6 423.6,189.9 424.0,191.4 422.9,191.0 422.5,192.8 421.4,194.3 422.5,195.4 419.9,197.8 420.4,198.6 418.9,199.8 418.1,201.6 418.4,202.4 418.2,203.9 417.5,203.8 415.9,202.4 414.5,202.6 412.2,201.6 409.5,201.9 407.1,203.5 406.2,203.9 403.9,204.2 401.4,203.8 402.4,201.0 402.4,199.6 401.7,197.6 400.8,197.4 398.7,197.9 398.2,198.8 396.3,200.1 394.8,198.3 393.4,196.9 392.8,195.9 391.1,195.0 389.3,193.7 389.1,194.5 387.5,196.2 387.7,197.0 388.9,197.5 387.2,199.1 384.5,200.6 381.7,202.0 380.9,202.8 378.9,203.7 377.3,203.0 376.4,201.9 373.9,200.8 372.3,200.9 370.8,201.5 368.9,202.6 365.1,205.9 364.3,206.2 362.7,206.0 362.0,205.3 362.6,204.3 363.0,202.5 363.0,200.8 362.6,198.2 363.2,195.5 362.6,193.6 361.1,191.3 360.3,191.0 359.6,191.7 360.0,192.8 358.9,193.1 358.2,194.0 356.9,194.3 356.4,193.5 355.0,192.4 352.9,192.1 351.5,192.5 349.7,193.6 346.2,195.0 344.6,195.5 343.0,194.9 340.9,193.5 339.0,194.1Z"},{"g":"SUMATERA SELATAN","n":"Sumatera Selatan","d":"M231.2,218.4 230.1,218.9 229.4,218.0 228.3,217.7 227.3,214.5 225.2,213.0 224.5,211.9 223.5,212.0 223.1,210.9 221.8,211.3 221.5,209.9 220.2,211.4 220.4,212.3 219.4,213.8 218.4,213.5 217.8,213.9 217.0,215.6 216.5,215.8 215.4,218.4 214.3,219.6 213.3,219.5 210.0,221.1 209.4,221.5 208.3,221.3 208.2,221.3 206.5,221.3 205.3,220.9 202.0,222.3 199.4,225.1 199.0,227.2 199.5,229.2 198.6,230.0 198.8,232.5 199.3,233.4 199.3,233.5 199.8,233.8 199.9,234.4 199.8,234.5 199.0,235.2 196.4,234.7 195.7,236.0 194.6,236.0 193.5,235.3 192.7,235.6 191.3,235.6 191.2,235.6 190.8,235.2 189.3,235.9 189.3,234.3 188.4,233.3 187.4,233.2 187.0,232.0 185.8,231.1 185.5,230.1 184.3,228.9 184.2,227.9 183.3,227.2 181.8,228.4 180.8,228.2 179.2,226.7 179.7,224.7 180.6,223.4 180.3,223.1 177.6,222.2 177.1,221.4 174.8,221.2 174.4,219.4 173.8,218.2 173.2,216.4 169.4,216.1 168.5,215.2 167.9,215.6 165.9,214.8 164.8,213.5 163.5,212.7 162.4,211.7 162.9,210.8 164.5,210.4 164.6,209.3 165.3,208.0 166.2,207.3 166.3,205.6 167.1,205.7 168.7,206.9 169.3,205.6 170.0,205.5 170.3,204.2 170.2,202.1 168.0,202.2 167.8,201.5 166.4,201.3 165.5,200.1 164.8,200.8 163.6,200.9 162.5,201.6 161.6,201.2 159.8,200.0 159.3,199.3 159.1,196.3 158.2,195.2 157.1,194.9 155.6,195.4 154.0,194.6 153.4,192.4 151.4,191.2 151.4,190.3 150.1,189.2 150.1,189.1 150.0,188.9 151.3,188.0 153.7,187.1 154.0,185.9 154.7,185.6 155.8,186.4 157.0,186.3 157.4,187.2 159.3,187.5 159.9,186.9 161.6,186.9 162.6,185.4 164.6,184.7 165.9,183.8 165.9,183.2 167.7,181.0 166.9,179.9 167.7,178.8 170.1,179.5 171.2,179.5 171.6,178.9 173.1,179.9 175.0,178.9 174.6,177.7 174.0,176.9 175.2,175.9 176.4,175.5 177.0,177.3 179.0,178.6 179.3,179.4 180.2,179.6 180.6,177.6 180.0,176.8 180.3,176.0 181.9,175.8 181.6,174.0 182.4,173.2 182.7,172.1 180.0,170.2 181.3,169.0 182.5,169.7 183.4,168.0 185.3,167.8 189.2,167.8 190.6,166.7 191.8,167.9 193.8,167.9 194.6,167.5 198.2,166.5 198.8,167.2 199.9,166.5 200.1,164.3 201.4,164.0 203.5,165.0 204.1,166.1 203.9,167.7 202.7,168.6 202.6,170.2 203.6,170.5 204.3,168.9 206.4,170.2 206.6,171.3 207.2,171.9 210.7,172.3 211.9,174.1 212.0,175.3 210.9,177.3 210.8,178.4 212.2,178.3 212.6,179.6 214.0,179.5 216.7,180.5 219.0,179.4 220.5,180.2 223.1,180.6 225.7,180.8 226.2,181.3 227.5,180.6 227.7,181.6 227.2,184.2 227.9,186.2 229.4,187.1 230.6,187.2 231.2,187.7 231.3,191.2 231.8,192.1 232.8,193.0 236.0,193.2 236.8,193.8 237.1,195.5 236.9,196.4 237.6,198.2 237.6,199.4 236.2,200.2 234.0,202.4 232.5,205.5 231.9,208.1 232.1,209.5 234.3,210.9 234.9,212.5 233.0,216.2 232.4,219.3 232.0,219.4 231.8,219.2 231.8,219.1 231.4,218.4 231.2,218.4Z"},{"g":"JAMBI","n":"Jambi","d":"M133.1,178.2 133.4,177.3 133.1,175.0 132.0,172.6 131.0,171.9 129.9,170.3 129.4,167.4 129.5,165.1 130.8,165.1 131.4,165.9 132.4,165.4 133.7,165.4 135.8,164.9 136.1,165.5 137.5,165.1 138.2,163.7 139.1,162.8 141.9,160.8 142.5,159.5 141.8,158.9 142.4,157.8 141.8,156.7 142.2,155.5 144.5,154.8 145.5,153.7 145.9,152.7 144.9,152.5 144.7,149.8 145.2,149.9 146.9,149.0 148.2,147.7 149.8,147.9 151.1,148.5 152.1,148.1 153.3,149.1 154.1,148.5 155.2,148.4 155.6,149.4 157.0,150.1 157.1,150.9 158.2,150.8 159.4,152.1 162.0,152.3 162.5,152.9 163.6,152.0 165.6,150.8 166.2,149.5 168.3,148.0 170.6,144.9 173.1,144.7 177.9,145.6 180.9,145.3 181.1,145.9 182.3,146.2 182.4,147.2 183.2,147.5 185.0,149.2 186.0,149.3 186.7,150.0 189.4,150.3 190.5,150.0 193.4,150.5 195.0,151.3 196.8,151.8 198.0,151.3 199.6,151.2 200.3,150.7 201.3,153.1 201.0,155.3 202.3,157.6 202.3,159.0 201.9,160.5 202.4,163.3 203.5,165.0 201.4,164.0 200.1,164.3 199.9,166.5 198.8,167.2 198.2,166.5 194.6,167.5 193.8,167.9 191.8,167.9 190.6,166.7 189.2,167.8 185.3,167.8 183.4,168.0 182.5,169.7 181.3,169.0 180.0,170.2 182.7,172.1 182.4,173.2 181.6,174.0 181.9,175.8 180.3,176.0 180.0,176.8 180.6,177.6 180.2,179.6 179.3,179.4 179.0,178.6 177.0,177.3 176.4,175.5 175.2,175.9 174.0,176.9 174.6,177.7 175.0,178.9 173.1,179.9 171.6,178.9 171.2,179.5 170.1,179.5 167.7,178.8 166.9,179.9 167.7,181.0 165.9,183.2 165.9,183.8 164.6,184.7 162.6,185.4 161.6,186.9 159.9,186.9 159.3,187.5 157.4,187.2 157.0,186.3 155.8,186.4 154.7,185.6 154.0,185.9 153.7,187.1 151.3,188.0 150.0,188.9 148.3,187.9 146.7,188.2 145.7,188.0 142.7,185.4 141.5,183.8 139.9,183.9 138.7,184.4 138.9,182.0 133.9,178.9 133.1,178.2Z"},{"g":"LAMPUNG","n":"Lampung","d":"M187.4,233.2 188.4,233.3 189.3,234.3 189.3,235.9 190.8,235.2 191.2,235.6 191.3,235.6 192.7,235.6 193.5,235.3 194.6,236.0 195.7,236.0 196.4,234.7 199.0,235.2 199.8,234.5 199.9,234.4 199.8,233.8 199.3,233.5 199.3,233.4 198.8,232.5 198.6,230.0 199.5,229.2 199.0,227.2 199.4,225.1 202.0,222.3 205.3,220.9 206.5,221.3 208.2,221.3 208.3,221.3 209.4,221.5 210.0,221.1 213.3,219.5 214.3,219.6 215.4,218.4 216.5,215.8 217.0,215.6 217.8,213.9 218.4,213.5 219.4,213.8 220.4,212.3 220.2,211.4 221.5,209.9 221.8,211.3 223.1,210.9 223.5,212.0 224.5,211.9 225.2,213.0 227.3,214.5 228.3,217.7 229.4,218.0 230.1,218.9 231.2,218.4 231.4,218.4 231.8,219.1 231.8,219.2 232.0,219.4 231.9,222.7 232.8,224.0 233.7,226.0 233.8,227.7 233.4,228.8 234.0,230.0 233.2,231.0 232.8,232.8 233.0,235.0 233.8,236.3 233.0,237.3 232.7,239.4 232.9,243.3 231.9,245.0 232.0,250.6 231.7,252.6 231.3,253.4 231.3,254.9 231.0,256.0 229.6,256.4 227.2,255.8 226.8,255.2 226.9,253.9 226.1,252.8 223.0,251.3 222.1,249.7 220.4,247.4 219.5,248.0 219.8,249.0 219.4,250.5 218.5,250.3 217.9,252.3 218.3,253.1 217.5,254.0 218.1,255.2 217.3,255.4 213.8,253.3 212.5,252.9 210.2,251.2 209.2,250.9 207.7,249.1 205.2,248.5 203.8,249.5 204.7,251.0 206.2,252.7 206.3,254.0 207.7,256.1 207.4,256.8 208.0,258.1 205.2,258.1 204.5,256.6 202.1,254.4 201.2,253.1 198.8,251.7 199.2,251.0 198.7,250.2 195.9,248.1 194.8,247.6 192.2,244.7 192.1,243.5 190.2,242.2 190.8,241.4 190.2,240.4 189.3,240.1 188.6,239.1 187.2,238.3 186.0,237.0 184.7,236.7 183.5,236.0 183.6,235.3 184.8,234.6 184.9,234.6 186.1,233.3 186.7,233.2 187.3,233.4 187.3,233.3 187.4,233.2Z"},{"g":"BENGKULU","n":"Bengkulu","d":"M187.4,233.2 187.3,233.3 187.3,233.4 186.7,233.2 186.1,233.3 184.9,234.6 184.8,234.6 183.6,235.3 183.5,236.0 182.1,235.8 181.3,235.0 179.8,234.9 179.1,233.7 177.1,232.9 176.5,231.2 175.7,230.5 172.9,228.4 171.3,227.6 168.2,226.5 167.8,225.5 165.9,223.6 163.7,221.8 156.1,216.2 154.6,214.7 155.3,213.6 155.1,212.3 154.1,211.4 154.4,210.7 153.2,208.2 150.5,206.0 147.1,204.4 146.4,203.3 144.2,202.1 140.3,199.2 138.2,196.4 137.4,194.5 135.6,192.3 133.8,188.3 133.1,187.6 130.1,186.1 127.3,182.6 130.1,180.6 132.1,179.7 133.1,178.2 133.9,178.9 138.9,182.0 138.7,184.4 139.9,183.9 141.5,183.8 142.7,185.4 145.7,188.0 146.7,188.2 148.3,187.9 150.0,188.9 150.1,189.1 150.1,189.2 151.4,190.3 151.4,191.2 153.4,192.4 154.0,194.6 155.6,195.4 157.1,194.9 158.2,195.2 159.1,196.3 159.3,199.3 159.8,200.0 161.6,201.2 162.5,201.6 163.6,200.9 164.8,200.8 165.5,200.1 166.4,201.3 167.8,201.5 168.0,202.2 170.2,202.1 170.3,204.2 170.0,205.5 169.3,205.6 168.7,206.9 167.1,205.7 166.3,205.6 166.2,207.3 165.3,208.0 164.6,209.3 164.5,210.4 162.9,210.8 162.4,211.7 163.5,212.7 164.8,213.5 165.9,214.8 167.9,215.6 168.5,215.2 169.4,216.1 173.2,216.4 173.8,218.2 174.4,219.4 174.8,221.2 177.1,221.4 177.6,222.2 180.3,223.1 180.6,223.4 179.7,224.7 179.2,226.7 180.8,228.2 181.8,228.4 183.3,227.2 184.2,227.9 184.3,228.9 185.5,230.1 185.8,231.1 187.0,232.0 187.4,233.2Z M152.0,243.9 152.3,243.7 157.3,246.2 156.6,248.7 155.0,248.0 154.5,248.5 153.3,246.6 150.9,245.3 152.0,243.9Z"},{"g":"DI. ACEH","n":"Aceh","d":"M66.8,34.7 64.4,34.7 63.2,36.7 62.5,36.8 61.7,41.7 60.3,42.6 60.0,43.3 59.0,43.4 59.2,44.9 56.9,46.9 57.8,48.4 58.4,50.4 59.2,50.8 60.1,54.3 61.3,54.8 61.9,55.7 60.9,56.8 58.4,57.4 59.6,57.9 60.0,59.3 60.8,60.1 60.9,61.0 59.9,61.3 60.3,63.7 60.2,65.0 61.4,65.3 62.2,66.6 63.2,66.8 63.1,68.7 63.9,70.4 63.1,70.9 62.9,72.1 63.1,73.6 63.6,74.4 63.7,75.4 64.6,75.7 65.3,77.7 64.6,81.5 63.4,80.5 60.1,78.8 57.9,79.3 57.0,78.9 56.6,79.6 53.8,75.9 53.6,70.1 52.8,66.5 52.1,65.3 51.2,65.4 50.1,64.6 49.2,64.5 47.9,63.6 46.2,61.4 45.2,58.3 43.6,57.2 43.1,57.3 42.1,55.3 41.3,54.2 39.4,50.9 37.3,49.7 36.4,47.7 34.3,46.7 32.2,46.6 29.1,46.9 26.7,45.0 25.4,43.5 23.9,41.2 22.1,39.1 20.7,37.9 20.3,38.0 18.8,36.5 17.9,36.3 15.0,33.1 13.3,31.6 11.7,29.8 8.7,27.3 7.8,26.7 6.7,25.5 6.5,24.6 5.0,23.2 4.1,19.9 2.3,16.6 2.5,15.6 1.6,14.8 0.4,12.4 1.2,11.1 1.0,9.1 0.0,7.6 0.9,7.0 1.6,7.1 2.8,6.2 3.6,6.1 5.4,4.8 6.4,5.8 9.0,5.4 10.7,6.4 11.9,6.7 15.2,8.3 15.5,9.5 16.4,10.4 18.7,12.0 19.4,12.9 21.7,13.5 23.3,13.5 26.1,14.6 27.6,14.0 29.3,14.9 31.4,14.6 33.2,13.9 35.6,13.2 37.5,13.7 39.6,13.5 42.5,14.8 42.8,15.9 43.6,16.1 48.8,14.3 50.2,13.7 51.5,14.5 52.0,15.5 53.5,17.3 57.4,20.9 59.1,21.6 60.4,25.1 60.3,26.3 61.5,27.6 60.6,28.8 61.1,29.5 63.2,29.6 64.9,30.1 67.5,31.9 67.4,33.4 66.8,34.7Z M17.6,71.9 16.2,72.2 15.1,71.5 14.6,70.8 13.5,70.6 12.3,69.5 12.0,68.8 10.8,67.8 11.4,66.8 12.4,66.0 12.6,65.0 13.3,64.5 15.5,65.3 14.7,66.1 17.5,67.6 19.9,68.6 19.6,70.5 21.3,71.0 21.9,70.7 22.9,71.9 24.9,72.7 25.5,74.1 26.8,74.0 27.7,74.8 28.3,76.8 26.8,77.5 25.9,77.1 24.3,76.9 24.1,75.5 22.4,75.1 22.2,74.6 20.3,73.4 19.1,72.3 17.6,71.9Z"}]};
+const FC     = {"hist":{"labels":["Jan-I","Jan-II","Jan-III","Jan-IV","Feb-I","Feb-II","Feb-III","Feb-IV","Mar-I","Mar-II","Mar-III","Mar-IV","Apr-I","Apr-II","Apr-III","Apr-IV","Mei-I","Mei-II","Mei-III","Mei-IV","Jun-I","Jun-II","Jun-III","Jun-IV","Jul-I","Jul-II","Jul-III","Jul-IV","Agu-II","Agu-III","Agu-IV","Sep-I","Sep-II"],"tbs":[3278.3,3261.7,3283.3,3314.3,3434,3441.6,3384.9,3325.9,3375.9,3450.9,3619.3,3765.5,3726.3,3827.5,3762,3645.6,3683.9,3706,3636,3370.6,3182.7,3446.7,3479.2,3519.2,3469,3599.3,3600.2,3671.5,3556,3541,3577,3582,3592],"cpo":[14001.5,13896.4,14028.2,14129.5,14598.1,14454.3,14041.3,13721.4,13909,14288,15000.9,15582.7,15348.1,15709.3,15358.2,14829.6,15078,15099.9,14888.8,13733.2,12942.8,14418.9,14787.5,14953.4,14726.8,15191.9,15207.8,15318.4,15359,15166,15278,15292,15358],"k":[91.68,91.61,91.61,91.61,91.61,92.01,92.01,92.01,92.01,91.69,91.69,91.69,91.69,91.72,91.72,91.72,91.72,92.4,92.4,92.4,92.4,91.81,91.81,91.81,91.81,91.28,91.28,91.28,91.28,90,90,90,90]},"fc":{"labels":["Sep-III","Sep-IV","Okt-I","Okt-II","Okt-III","Okt-IV"],"tbs":[3600,3608,3614,3620,3624,3628],"tbs_band":[160,230,280,325,365,400],"cpo":[15380,15410,15440,15470,15490,15510],"cpo_band":[780,1100,1340,1550,1730,1900],"pko":[15540,15590,15640,15690,15730,15770],"pko_band":[800,1130,1380,1590,1780,1950]},"growth":[1.0022,1.0045,1.0061,1.0078,1.0089,1.01],"nat_now":3592,"hidx":3,"backtest":{"k":8,"mae":37,"mape":1,"base_mape":2.7,"rows":[{"lbl":"Jul-I","pred":3583,"act":3469,"err":114},{"lbl":"Jul-II","pred":3527,"act":3599,"err":-73},{"lbl":"Jul-III","pred":3645,"act":3600,"err":45},{"lbl":"Agu-II","pred":3568,"act":3556,"err":12},{"lbl":"Agu-III","pred":3574,"act":3541,"err":33},{"lbl":"Agu-IV","pred":3582,"act":3577,"err":5},{"lbl":"Sep-I","pred":3593,"act":3582,"err":11},{"lbl":"Sep-II","pred":3591,"act":3592,"err":-1}]},"commodity":{"cpo":{"now":15708,"proj":15470,"band":1550,"mape":2.3,"base_mape":2.9},"pko":{"now":15540,"proj":15690,"band":1590,"mape":3.3,"base_mape":4.6},"pke":{"now":2150,"proj":2120,"band":350,"mape":0,"base_mape":0,"lo":1800,"hi":2500}},"method":"Ensemble: CPO-linked catch-up + overlay B50, ENSO, musim, FX","through":"Sep-II (7–13 Sep 2026)","meta":{"method":"Ensemble: CPO-linked catch-up + overlay B50, ENSO, musim, FX","h":6,"through":"Sep-II (7–13 Sep 2026)"}};
+const ENRICH = {"prov":[{"name":"Sumatera Barat","isl":"Sumatera","pl":4028,"sw":3240,"d":23,"k":94,"r4":4037,"cpo":15756,"gap":-788,"gapp":-19.6,"fair":5559,"wgap":-27.5},{"name":"Sumatera Utara","isl":"Sumatera","pl":4079,"sw":3081,"d":23,"k":94,"r4":4088,"cpo":16245,"gap":-998,"gapp":-24.5,"fair":5559,"wgap":-26.6},{"name":"Sumatera Selatan","isl":"Sumatera","pl":3809,"sw":3256,"d":-44,"k":92,"r4":3817,"cpo":15440,"gap":-553,"gapp":-14.5,"fair":5441,"wgap":-30},{"name":"Riau","isl":"Sumatera","pl":3994,"sw":3380,"d":63,"k":94,"r4":4003,"cpo":15964,"gap":-614,"gapp":-15.4,"fair":5559,"wgap":-28.2},{"name":"Kalimantan Selatan","isl":"Kalimantan","pl":3759,"sw":3319,"d":0,"k":94,"r4":3767,"cpo":15431,"gap":-440,"gapp":-11.7,"fair":5559,"wgap":-32.4},{"name":"Jambi","isl":"Sumatera","pl":3951,"sw":3400,"d":31,"k":94,"r4":3960,"cpo":15641,"gap":-551,"gapp":-13.9,"fair":5559,"wgap":-28.9},{"name":"Bangka Belitung","isl":"Sumatera","pl":3796,"sw":3100,"d":0,"k":93,"r4":3804,"cpo":15478,"gap":-696,"gapp":-18.3,"fair":5500,"wgap":-31},{"name":"Kalimantan Tengah","isl":"Kalimantan","pl":3761,"sw":3275,"d":0,"k":92,"r4":3769,"cpo":15436,"gap":-486,"gapp":-12.9,"fair":5441,"wgap":-30.9},{"name":"Aceh","isl":"Sumatera","pl":3746,"sw":3436,"d":31,"k":90,"r4":3754,"cpo":15783,"gap":-310,"gapp":-8.3,"fair":5322,"wgap":-29.6},{"name":"Kalimantan Barat","isl":"Kalimantan","pl":3667,"sw":3265,"d":0,"k":92,"r4":3675,"cpo":15465,"gap":-402,"gapp":-11,"fair":5441,"wgap":-32.6},{"name":"Kalimantan Timur","isl":"Kalimantan","pl":3604,"sw":3445,"d":0,"k":88,"r4":3612,"cpo":15434,"gap":-159,"gapp":-4.4,"fair":5204,"wgap":-30.7},{"name":"Papua","isl":"Papua","pl":3610,"sw":2700,"d":0,"k":93,"r4":3618,"cpo":14552,"gap":-910,"gapp":-25.2,"fair":5500,"wgap":-34.4},{"name":"Kalimantan Utara","isl":"Kalimantan","pl":3465,"sw":3000,"d":0,"k":87,"r4":3473,"cpo":15199,"gap":-465,"gapp":-13.4,"fair":5145,"wgap":-32.7},{"name":"Sulawesi Tengah","isl":"Sulawesi","pl":3416,"sw":3490,"d":0,"k":87,"r4":3424,"cpo":15100,"gap":74,"gapp":2.2,"fair":5145,"wgap":-33.6},{"name":"Sulawesi Barat","isl":"Sulawesi","pl":3480,"sw":3315,"d":93,"k":88,"r4":3488,"cpo":15462,"gap":-165,"gapp":-4.7,"fair":5204,"wgap":-33.1},{"name":"Bengkulu","isl":"Sumatera","pl":3506,"sw":2959,"d":0,"k":89,"r4":3514,"cpo":15813,"gap":-547,"gapp":-15.6,"fair":5263,"wgap":-33.4},{"name":"Lampung","isl":"Sumatera","pl":3449,"sw":3371,"d":0,"k":88,"r4":3457,"cpo":15308,"gap":-78,"gapp":-2.3,"fair":5204,"wgap":-33.7},{"name":"Papua Barat","isl":"Papua","pl":3104,"sw":1650,"d":0,"k":88,"r4":3111,"cpo":14062,"gap":-1454,"gapp":-46.8,"fair":5204,"wgap":-40.4},{"name":"Sulawesi Tenggara","isl":"Sulawesi","pl":3371,"sw":3155,"d":0,"k":87,"r4":3378,"cpo":15095,"gap":-216,"gapp":-6.4,"fair":5145,"wgap":-34.5},{"name":"Gorontalo","isl":"Sulawesi","pl":3202,"sw":2050,"d":0,"k":83,"r4":3209,"cpo":15102,"gap":-1152,"gapp":-36,"fair":4908,"wgap":-34.8},{"name":"Sulawesi Selatan","isl":"Sulawesi","pl":3071,"sw":2750,"d":0,"k":89,"r4":3078,"cpo":14440,"gap":-321,"gapp":-10.5,"fair":5263,"wgap":-41.6},{"name":"Banten","isl":"Jawa","pl":3155,"sw":2800,"d":0,"k":83,"r4":3162,"cpo":15668,"gap":-355,"gapp":-11.3,"fair":4908,"wgap":-35.7}],"nat":{"plasma":3592,"swadaya":3065,"gap":-527,"gapp":-14.7,"cpo":15358,"k":90,"plasma_calc":3592},"world":{"kpbn":15708,"mys":21013,"rott":28160,"kurs_usd":17655,"kurs_rm":4365,"rend":0.21},"avg_wgap":-32.5,"period":"7–13 September 2026","prev_period":"31 Agustus–6 September 2026"};
+</script>
+<script>
+(function(){
+  "use strict";
+  var ISLC={Sumatera:"#3e5c4e",Kalimantan:"#6e7f95",Sulawesi:"#a8894a",Papua:"#8a7a9e",Jawa:"#9e5a52"};
+  var P=ENRICH.prov, NATX=ENRICH.nat, WORLD=ENRICH.world, AVGW=ENRICH.avg_wgap;
+  var HIDX=(FC&&FC.hidx!=null)?FC.hidx:3, GROW=(FC&&FC.growth)?FC.growth[HIDX]:1, BANDF=(FC&&FC.fc)?FC.fc.tbs_band[HIDX]/FC.nat_now:0.04;
+  var KPBN=[15700,15607,15700,16100,15800,16025,15708];
+  // partial newer prints (per-province, various Disbun periods) — main ranking updated to 10–16 Agu 2026
+  var LATEST=[{"name":"Sumatera Utara · plasma","period":"9–15 Sep 2026","pl":4079,"prev":4056,"note":"Naik Rp23 vs Sep-I. K 93,74% · CPO mill Rp16.245 · 10–20 th."},{"name":"Sumatera Barat · plasma","period":"8–14 Sep 2026","pl":4028,"prev":4005,"note":"Naik Rp23. Usia 10–20 th Rp4.027,65 · K 94,34%."},{"name":"Riau · plasma","period":"9–15 Sep 2026","pl":3994,"prev":3931,"note":"Naik Rp63, hampir Rp4.000. Umur 9 th Rp3.994,10 · K 93,51% · CPO mill Rp15.964."},{"name":"Jambi · plasma","period":"11–17 Sep 2026","pl":3951,"prev":3920,"note":"Naik Rp31. Usia 10–20 th Rp3.950,68 · K 93,64%."},{"name":"Aceh · plasma","period":"9–22 Sep 2026","pl":3746,"prev":3715,"note":"Naik Rp31. Timur 10–20 th Rp3.746 · penetapan dua pekan."},{"name":"Sulawesi Barat · plasma","period":"11 Sep 2026–","pl":3480,"prev":3387,"note":"Naik Rp93, pergerakan terbesar. Usia 10–20 th Rp3.479,66."},{"name":"Sumatera Selatan · plasma","period":"1–15 Sep 2026","pl":3809,"prev":3853,"note":"Turun Rp44. Usia 10–20 th Rp3.809,12 · K 92,47%."}];
+  // derive rows
+  var rows=P.map(function(r){return{
+    name:r.name,island:r.isl,pl:r.pl,sw:r.sw,d:r.d,k:r.k,r4:r.r4,cpo:r.cpo,
+    gap:r.gap,gapp:r.gapp,fair:r.fair,wgap:r.wgap,proj:Math.round(r.pl*GROW)};});
+  var byName={};rows.forEach(function(r){byName[r.name]=r;});
+  var state={sortKey:"pl",sortDir:-1,island:"all",q:"",metric:"pl"};
+  var fmt=function(n){return n==null?"–":Math.round(n).toLocaleString("id-ID");};
+  var pct=function(n){return (n>0?"+":"")+n.toFixed(1).replace(".",",")+"%";};
+  var $=function(s,e){return(e||document).querySelector(s);};
+  var $$=function(s,e){return Array.prototype.slice.call((e||document).querySelectorAll(s));};
+
+  /* metric accessors */
+  function mval(r){return state.metric==="sw"?r.sw:state.metric==="gap"?-r.gap:state.metric==="fc"?r.proj:r.pl;}
+  var GREEN=["#eef3f0","#c9d9cf","#9dbba9","#6b8f7b","#3e5c4e"];
+  var HEAT =["#f7f0e2","#e8cfa0","#d2a95b","#ce8a66","#c9695e"]; // for selisih (wider gap = darker)
+  function ramp(){return state.metric==="gap"?HEAT:GREEN;}
+  function quantiles(vals){var s=vals.slice().sort(function(a,b){return a-b;}),q=[],R=ramp();
+    for(var i=1;i<R.length;i++)q.push(s[Math.floor(i/R.length*s.length)]);return q;}
+  function metricVals(){return rows.map(mval);}
+  function colorFor(v){if(v==null)return"#e8e8ed";var R=ramp(),q=quantiles(metricVals());
+    for(var i=0;i<q.length;i++)if(v<q[i])return R[i];return R[R.length-1];}
+
+  /* KPIs */
+  function kpis(){
+    $("#kPl").textContent=fmt(NATX.plasma);$("#kSw").textContent=fmt(NATX.swadaya);
+    $("#kSwD").innerHTML='selisih '+fmt(NATX.gap)+' <em>vs plasma ('+pct(NATX.gapp)+')</em>';
+    $("#kFair").textContent=AVGW.toFixed(1).replace(".",",");
+    $("#kK").textContent=90;
+    var fairNat=Math.round(NATX.plasma/(1+AVGW/100));
+    $("#fairNat").textContent=fmt(fairNat);
+    $("#fairNat2").textContent=fmt(fairNat);
+    $("#wgapBig").textContent=AVGW.toFixed(1).replace(".",",")+"%";
+  }
+
+  /* table */
+  function filterSort(){
+    var out=rows.filter(function(r){
+      if(state.island!=="all"&&r.island!==state.island)return false;
+      if(state.q&&r.name.toLowerCase().indexOf(state.q)<0)return false;return true;});
+    var k=state.sortKey,dir=state.sortDir;
+    out.sort(function(a,b){
+      if(k==="name")return a.name<b.name?-dir:a.name>b.name?dir:0;
+      var av=a[k],bv=b[k];if(av==null)av=-1e9;if(bv==null)bv=-1e9;return(av-bv)*dir;});
+    return out;
+  }
+  function rankMap(){var o=rows.slice().sort(function(a,b){return b.pl-a.pl;}),m={};o.forEach(function(r,i){m[r.name]=i+1;});return m;}
+  function board(){
+    var data=filterSort(),rk=rankMap(),tb=$("#tb");tb.innerHTML="";
+    data.forEach(function(r){
+      var rank=rk[r.name];
+      var dc=r.d>0?"up":r.d<0?"down":"flat",da=r.d>0?"↑":r.d<0?"↓":"–";
+      var dtxt=r.d===0?'<span class="na">0</span>':da+" "+(r.d>0?"+":"")+fmt(r.d);
+      var tr=document.createElement("tr");
+      if(r.name==="Riau"||r.name==="Sumatera Utara")tr.className="hl";
+      tr.innerHTML=
+        '<td class="rank'+(rank<=3?" top":"")+'">'+rank+'</td>'+
+        '<td class="prov"><span class="dot" style="background:'+ISLC[r.island]+'"></span>'+r.name+'</td>'+
+        '<td class="n strong">'+fmt(r.pl)+'</td>'+
+        '<td class="n muted">'+(r.sw==null?'<span class="na">–</span>':fmt(r.sw))+'</td>'+
+        '<td class="n gap">'+(r.gap==null?'':"−"+fmt(-r.gap))+'</td>'+
+        '<td class="delta '+dc+'">'+dtxt+'</td>'+
+        '<td class="n proj col-hide">'+fmt(r.proj)+' <span class="pp">'+pct((GROW-1)*100)+'</span></td>'+
+        '<td class="n muted col-hide">'+(r.k==null?'<span class="na">–</span>':r.k)+'</td>';
+      tb.appendChild(tr);
+    });
+    if(!data.length)tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:26px;color:var(--muted)">Tidak ada provinsi yang cocok.</td></tr>';
+    arrows();
+  }
+  function arrows(){$$("thead .arw").forEach(function(a){a.textContent="";});
+    var a=$('thead .arw[data-for="'+state.sortKey+'"]');if(a)a.textContent=state.sortDir<0?"▾":"▴";}
+
+  /* movers up/down */
+  function movers(){
+    var sorted=rows.slice().sort(function(a,b){return b.d-a.d;});
+    var up=sorted.filter(function(r){return r.d>0;}).slice(0,4);
+    var dn=sorted.filter(function(r){return r.d<0;}).sort(function(a,b){return a.d-b.d;}).slice(0,4);
+    function fill(el,arr,cls){el.innerHTML="";if(!arr.length){el.innerHTML='<li class="muted" style="padding:4px 0">Tidak ada.</li>';return;}
+      arr.forEach(function(r){var p=(r.d/(r.pl-r.d)*100);
+        var li=document.createElement("li");
+        li.innerHTML='<span>'+r.name+'</span><span class="m '+cls+'">'+(r.d>0?"↑ +":"↓ ")+fmt(r.d)+' · '+pct(p)+'</span>';el.appendChild(li);});}
+    fill($("#moversUp"),up,"up");fill($("#moversDown"),dn,"down");
+  }
+
+  /* fair-price bars */
+  function fairBars(){
+    var el=$("#fairBars");
+    var arr=rows.filter(function(r){return r.wgap!=null;}).sort(function(a,b){return a.wgap-b.wgap;});
+    var worst=Math.min.apply(null,arr.map(function(r){return r.wgap;}));
+    el.innerHTML="";
+    arr.slice(0,10).forEach(function(r){
+      var w=Math.round(Math.abs(r.wgap)/Math.abs(worst)*100);
+      var row=document.createElement("div");row.className="fbrow";
+      row.innerHTML='<span class="nm">'+r.name+'</span>'+
+        '<span class="tr"><span class="fl" style="width:'+w+'%"></span></span>'+
+        '<span class="pc">'+r.wgap.toFixed(1).replace(".",",")+'%</span>';
+      el.appendChild(row);
+    });
+  }
+
+  /* map */
+  function buildMap(){
+    if(!MAP){$("#peta").style.display="none";return;}
+    var svg=$("#mapSvg");svg.setAttribute("viewBox",MAP.viewBox);var html="";
+    MAP.provinces.forEach(function(p){var cls=p.n&&byName[p.n]?"hasdata":"";
+      html+='<path d="'+p.d+'" data-n="'+(p.n||"")+'" class="'+cls+'" fill="#e8e8ed"></path>';});
+    svg.innerHTML=html;paintMap();bindMap();
+  }
+  function paintMap(){
+    var svg=$("#mapSvg");
+    $$("path",svg).forEach(function(pt){var n=pt.getAttribute("data-n"),r=n&&byName[n];
+      pt.setAttribute("fill", r? colorFor(mval(r)) : "#e8e8ed");});
+    var vals=metricVals(),q=quantiles(vals),mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+    var bounds=[mn].concat(q).concat([mx]),list=$("#scaleList"),R=ramp();list.innerHTML="";
+    for(var i=0;i<R.length;i++){var lo=bounds[i],hi=bounds[i+1];
+      var lbl=state.metric==="gap"?("−"+fmt(lo))+(i===R.length-1?"+":" – −"+fmt(hi)):fmt(lo)+(i===R.length-1?"+":" – "+fmt(hi));
+      var row=document.createElement("div");row.className="row";
+      row.innerHTML='<span class="sw" style="background:'+R[i]+'"></span>'+lbl;list.appendChild(row);}
+    var titles={pl:"TBS Plasma · Rp/kg",sw:"TBS Swadaya · Rp/kg",gap:"Selisih Plasma−Swadaya · Rp/kg",fc:"Proyeksi ~Agu · Rp/kg"};
+    $("#mapTitle").textContent=titles[state.metric];
+    $("#scaleSub").textContent=titles[state.metric];
+    var top=rows.slice().sort(function(a,b){return mval(b)-mval(a);})[0];
+    if(state.metric==="gap"){$("#leadVal").textContent="−Rp "+fmt(-top.gap)+" · "+top.name;$("#leadLo").textContent="Selisih P/S terlebar";}
+    else{$("#leadVal").textContent="Rp "+fmt(mval(top))+" · "+top.name;$("#leadLo").textContent=state.metric==="fc"?"Proyeksi tertinggi":"Tertinggi pekan ini";}
+  }
+  function bindMap(){
+    var svg=$("#mapSvg"),tip=$("#mapTip"),wrap=$(".mapwrap");
+    $$("path.hasdata",svg).forEach(function(pt){
+      pt.addEventListener("mousemove",function(e){
+        var r=byName[pt.getAttribute("data-n")];if(!r)return;var rect=wrap.getBoundingClientRect();
+        var dc=r.d>0?"up":r.d<0?"down":"",da=r.d>0?"↑ +":r.d<0?"↓ ":"– ";
+        tip.innerHTML='<b class="h">'+r.name+'</b>'+
+          '<div class="r"><span>Plasma</span><b>Rp '+fmt(r.pl)+'</b></div>'+
+          '<div class="r"><span>Swadaya</span><b>'+(r.sw==null?"–":"Rp "+fmt(r.sw))+'</b></div>'+
+          '<div class="r"><span>Selisih P/S</span><b class="down">−Rp '+fmt(-r.gap)+'</b></div>'+
+          (r.d!==0?'<div class="r"><span>Δ pekan</span><b class="'+dc+'">'+da+fmt(Math.abs(r.d))+'</b></div>':'')+
+          (r.wgap!=null?'<div class="r"><span>vs wajar dunia</span><b class="am">'+r.wgap.toFixed(1).replace(".",",")+'%</b></div>':'')+
+          '<div class="r"><span>Proyeksi</span><b>Rp '+fmt(r.proj)+'</b></div>';
+        var x=e.clientX-rect.left+12,y=e.clientY-rect.top+12;if(x>rect.width-165)x=e.clientX-rect.left-165;
+        tip.style.left=x+"px";tip.style.top=y+"px";tip.style.opacity="1";tip.style.transform="translateY(0)";
+      });
+      pt.addEventListener("mouseleave",function(){tip.style.opacity="0";tip.style.transform="translateY(3px)";});
+    });
+  }
+
+  /* sparklines + forecast */
+  function path(vals,w,h,p){var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals),rg=(mx-mn)||1;
+    return vals.map(function(v,i){var x=p+i/(vals.length-1)*(w-2*p),y=p+(1-(v-mn)/rg)*(h-2*p);return(i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);}).join(" ");}
+  function drawNat(){if(!FC||!FC.hist)return;var W=300,H=66,P=7,tbs=FC.hist.tbs,cpo=FC.hist.cpo;
+    $("#natSpark").innerHTML='<path d="'+path(cpo,W,H,P)+'" fill="none" stroke="#d2a95b" stroke-width="1.6" opacity=".9"/>'+
+      '<path d="'+path(tbs,W,H,P)+'" fill="none" stroke="#3e5c4e" stroke-width="2"/>';
+    var d=tbs[tbs.length-1]-tbs[tbs.length-2];$("#natTxt").innerHTML='TBS <b style="color:'+(d>=0?"var(--up)":"var(--down)")+'">'+(d>=0?"+":"")+fmt(d)+'</b>';}
+  function drawKpbn(){var W=300,H=66,P=7,vals=KPBN,mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals),rg=(mx-mn)||1;
+    var pts=vals.map(function(v,i){return[P+i/(vals.length-1)*(W-2*P),P+(1-(v-mn)/rg)*(H-2*P)];});
+    var area="M"+pts[0][0].toFixed(1)+" "+(H-P);pts.forEach(function(p){area+="L"+p[0].toFixed(1)+" "+p[1].toFixed(1);});area+="L"+pts[pts.length-1][0].toFixed(1)+" "+(H-P)+"Z";
+    $("#kpbnSpark").innerHTML='<path d="'+area+'" fill="#3e5c4e" opacity=".08"/><path d="'+path(vals,W,H,P)+'" fill="none" stroke="#3e5c4e" stroke-width="1.9"/>';
+    $("#kpbnTxt").innerHTML='2 Agu→13 Sep <b style="color:'+(vals[vals.length-1]-vals[0]>=0?'var(--up)':'var(--down)')+'">'+(vals[vals.length-1]-vals[0]>=0?'+':'')+fmt(vals[vals.length-1]-vals[0])+'</b> · terakhir Rp'+fmt(vals[vals.length-1]);}
+  function drawForecast(){
+    if(!FC||!FC.hist){$("#prediksi").style.display="none";return;}
+    var W=640,H=210,PL=6,PR=6,PT=12,PB=22,hist=FC.hist.tbs.slice(-12),f=FC.fc.tbs,b=FC.fc.tbs_band;
+    var histN=hist.length,n=histN+f.length,up=f.map(function(v,i){return v+b[i];}),dn=f.map(function(v,i){return v-b[i];});
+    var lo=Math.min.apply(null,dn.concat(hist)),hi=Math.max.apply(null,up.concat(hist)),rg=(hi-lo)||1;
+    function X(i){return PL+i/(n-1)*(W-PL-PR);}function Y(v){return PT+(1-(v-lo)/rg)*(H-PT-PB);}
+    var bx0=histN-1,band="M"+X(bx0)+" "+Y(hist[histN-1]);
+    up.forEach(function(v,i){band+=" L"+X(histN+i)+" "+Y(v);});
+    for(var i=dn.length-1;i>=0;i--)band+=" L"+X(histN+i)+" "+Y(dn[i]);band+=" L"+X(bx0)+" "+Y(hist[histN-1])+"Z";
+    var hp=hist.map(function(v,i){return(i?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1);}).join(" ");
+    var fp="M"+X(bx0)+" "+Y(hist[histN-1]);f.forEach(function(v,i){fp+=" L"+X(histN+i)+" "+Y(v);});
+    var lastY=Y(hist[histN-1]),dots="";f.forEach(function(v,i){dots+='<circle cx="'+X(histN+i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="2.3" fill="#3e5c4e"/>';});
+    var labels='';FC.fc.labels.forEach(function(t,i){labels+='<text x="'+X(histN+i).toFixed(1)+'" y="'+(H-6)+'" font-size="9" fill="#86868b" text-anchor="middle">'+t+'</text>';});
+    labels+='<text x="'+X(0).toFixed(1)+'" y="'+(H-6)+'" font-size="9" fill="#86868b" text-anchor="start">'+FC.hist.labels[FC.hist.labels.length-12]+'</text>';
+    $("#fchart").innerHTML='<line x1="'+PL+'" x2="'+(W-PR)+'" y1="'+lastY.toFixed(1)+'" y2="'+lastY.toFixed(1)+'" stroke="#d2d2d7" stroke-width="1" stroke-dasharray="3 3"/>'+
+      '<path d="'+band+'" fill="#3e5c4e" opacity=".10"/><path d="'+hp+'" fill="none" stroke="#3e5c4e" stroke-width="2"/>'+
+      '<path d="'+fp+'" fill="none" stroke="#3e5c4e" stroke-width="1.8" stroke-dasharray="4 3" opacity=".85"/>'+dots+labels;
+    var now=FC.nat_now,ft=FC.fc.tbs[HIDX],fc_=FC.fc.cpo[HIDX],bnd=FC.fc.tbs_band[HIDX],chg=(ft/now-1)*100;
+    $("#fTbs").textContent="Rp "+fmt(ft)+" /kg";$("#fChg").textContent=pct(chg);$("#fChg").style.color=chg>=0?"var(--up)":"var(--down)";
+    $("#fCpo").textContent="Rp "+fmt(fc_)+" /kg";$("#fBand").textContent="± Rp "+fmt(bnd)+" (~"+(bnd/now*100).toFixed(1)+"%)";
+    if(FC.backtest){
+      $("#fMae").textContent="± Rp "+fmt(FC.backtest.mae)+" (±"+FC.backtest.mape.toFixed(1).replace(".",",")+"%)";
+      if(FC.backtest.base_mape){$("#fMae").innerHTML+=' <span style="color:var(--muted);font-weight:400;font-size:.82em">vs ±'+FC.backtest.base_mape.toFixed(1).replace(".",",")+'% damped</span>';}
+      var bb=$("#btBody");bb.innerHTML="";
+      FC.backtest.rows.forEach(function(r){
+        var cls=r.err>0?"up":r.err<0?"down":"";
+        var tr=document.createElement("tr");
+        tr.innerHTML='<td>'+r.lbl+'</td><td>'+fmt(r.pred)+'</td><td>'+fmt(r.act)+'</td><td class="e '+cls+'">'+(r.err>0?"+":"")+fmt(r.err)+'</td>';
+        bb.appendChild(tr);
+      });
+    }
+    $("#fWarn").textContent="Metode: TBS = f(CPO KPBN jeda 1–2 pekan) × rendemen/K, overlay B50 (+0,3%/pekan), El Niño (+0,1%), pass-through Disbun tertahan (−0,15%), puncak panen Sep (−0,2%). Horizon Okt-II: Rp 3.620/kg. Sep-II aktual Rp 3.592 vs prediksi 3.591.";
+  }
+
+  /* prediction highlights: Nasional, Riau, Sumatera Utara */
+  function drawHi(){
+    if(!FC||!FC.fc){$("#fcHi").style.display="none";return;}
+    var bandpct=FC.fc.tbs_band[HIDX]/FC.nat_now;
+    var items=[
+      {lbl:"Nasional",now:FC.nat_now,proj:FC.fc.tbs[HIDX]},
+      {lbl:"Riau",now:byName["Riau"].pl,proj:byName["Riau"].proj},
+      {lbl:"Sumatera Utara",now:byName["Sumatera Utara"].pl,proj:byName["Sumatera Utara"].proj}
+    ];
+    var el=$("#fcHi");el.innerHTML="";
+    items.forEach(function(it){
+      var chg=(it.proj/it.now-1)*100,band=Math.round(it.proj*bandpct),cls=chg>=0?"up":"down",ar=chg>=0?"↑":"↓";
+      var d=document.createElement("div");d.className="hcard";
+      d.innerHTML='<span class="star">★ prioritas</span>'+
+        '<div class="hl-lbl">'+it.lbl+'</div>'+
+        '<div class="hl-now">Kini Rp '+fmt(it.now)+'/kg → proyeksi ~4 pekan</div>'+
+        '<div class="hl-proj">Rp '+fmt(it.proj)+'</div>'+
+        '<div class="hl-meta"><span class="hl-chg '+cls+'">'+ar+' '+pct(chg)+'</span>'+
+        '<span class="hl-band">± Rp '+fmt(band)+' (~'+(bandpct*100).toFixed(1)+'%)</span></div>';
+      el.appendChild(d);
+    });
+  }
+
+  /* derived-commodity forecasts: CPO, PKO, PKE */
+  function drawLatest(){
+    var tb=$("#ltb");if(!tb)return;tb.innerHTML="";
+    LATEST.forEach(function(r){
+      var d=r.prev==null?null:r.pl-r.prev,cls=d==null?"flat":d>0?"up":d<0?"down":"flat",ar=d>0?"↑ +":d<0?"↓ ":"– ";
+      var pctv=r.prev?(d/r.prev*100):0;
+      var dcell = r.prev==null ? '<span class="dl flat">—</span>'
+        : (d===0?'<span class="dl flat">stabil</span>':ar+fmt(Math.abs(d))+' ('+(pctv>0?"+":"")+pctv.toFixed(1).replace(".",",")+'%)');
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="pnm">'+r.name+'</td>'+
+        '<td class="per">'+r.period+'</td>'+
+        '<td class="pl">Rp '+fmt(r.pl)+'</td>'+
+        '<td class="dl '+cls+'">'+dcell+'</td>'+
+        '<td class="nt">'+r.note+'</td>';
+      tb.appendChild(tr);
+    });
+  }
+
+  /* derived-commodity forecasts: CPO, PKO, PKE */
+  function drawCommod(){
+    if(!FC||!FC.commodity){var w=$(".commod-wrap");if(w)w.style.display="none";return;}
+    var C=FC.commodity;
+    function card(lbl,full,d){
+      if(!d) return '<div class="ccard na"><div class="cl">'+lbl+' <span class="s2">· '+full+'</span></div>'+
+        '<div class="cnow">Proyeksi ~4 pekan</div><div class="cproj">Belum ada data</div>'+
+        '<div class="cacc">Kolom '+lbl+' tak tersedia di sumber — kirim datanya, langsung kutambah.</div></div>';
+      var chg=(d.proj/d.now-1)*100,cls=chg>=0?"up":"down",ar=chg>=0?"↑":"↓";
+      return '<div class="ccard"><div class="cl">'+lbl+' <span class="s2">· '+full+'</span></div>'+
+        '<div class="cnow">Kini Rp '+fmt(d.now)+'/kg → ~4 pekan</div>'+
+        '<div class="cproj">Rp '+fmt(d.proj)+'</div>'+
+        '<div class="cmeta"><span class="cchg '+cls+'">'+ar+' '+pct(chg)+'</span>'+
+        '<span class="cband">± Rp '+fmt(d.band)+' (~'+(d.band/d.now*100).toFixed(1)+'%)</span></div>'+
+        '<div class="cacc">Akurasi backtest ±'+d.mape.toFixed(1).replace(".",",")+'% · vs ±'+d.base_mape.toFixed(1).replace(".",",")+'% damped</div></div>';
+    }
+    $("#commod").innerHTML=card("CPO","minyak sawit mentah",C.cpo)+card("PKO","minyak inti sawit",C.pko)+card("PKE","bungkil inti sawit",C.pke);
+  }
+
+  /* events */
+  $$(".toggle button").forEach(function(b){b.addEventListener("click",function(){
+    $$(".toggle button").forEach(function(x){x.setAttribute("aria-pressed","false");});b.setAttribute("aria-pressed","true");
+    state.metric=b.dataset.metric;paintMap();});});
+  $$("#chips .chip").forEach(function(c){c.addEventListener("click",function(){
+    $$("#chips .chip").forEach(function(x){x.setAttribute("aria-pressed","false");});c.setAttribute("aria-pressed","true");
+    state.island=c.dataset.isl;board();});});
+  $("#q").addEventListener("input",function(e){state.q=e.target.value.trim().toLowerCase();board();});
+  $$("thead .sortable").forEach(function(th){th.addEventListener("click",function(){
+    var k=th.dataset.sort;if(state.sortKey===k)state.sortDir*=-1;else{state.sortKey=k;state.sortDir=(k==="name")?1:-1;}board();});});
+  $("#printBtn").addEventListener("click",function(){window.print();});
+  window.addEventListener("beforeprint",function(){
+    $$("details").forEach(function(d){d.open=true;});
+  });
+
+  kpis();buildMap();fairBars();drawNat();drawKpbn();drawForecast();drawHi();drawCommod();drawLatest();board();movers();
+})();
+</script>
+</body>
+</html>

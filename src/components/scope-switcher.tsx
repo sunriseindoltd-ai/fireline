@@ -48,7 +48,7 @@ export function ScopeSwitcher({
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? chains.filter((c) => c.name.toLowerCase().includes(s)) : chains;
+    return s ? chains.filter((c) => c.name.toLowerCase().includes(s) || groupLabel(c.name).toLowerCase().includes(s)) : chains;
   }, [chains, q]);
 
   function pick(id: string | null) {

@@ -26,6 +26,8 @@
   --color-elevated: #ffffff;
   --color-ink: #1d1d1f;
   --color-link: #3e5c4e;
+  /* PalmTrace wordmark (logo + name only; the rest of the theme stays neutral). */
+  --color-brand: #237a48;
   --color-link-soft: #eef3f0;
   --color-warn: #7a5716;
   --color-warn-bg: #f7f0e2;
@@ -432,6 +434,9 @@
   font: 600 17px var(--font-display);
   letter-spacing: -0.01em;
 }
+.login-home span {
+  color: var(--color-brand);
+}
 .login-card {
   align-self: center;
   width: min(380px, 100%);
@@ -568,6 +573,7 @@
 .app-brand .word {
   font: 600 16px var(--font-display);
   letter-spacing: -0.015em;
+  color: var(--color-brand);
 }
 .app-sep {
   color: var(--color-line);
@@ -843,9 +849,37 @@
   font-weight: 500;
   color: var(--color-link);
 }
+.kpi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+button.kpi-action {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+button.kpi-action:hover {
+  text-decoration: underline;
+}
 .noncomply-card {
   margin-top: 12px;
   scroll-margin-top: 16px;
+}
+.noncomply-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.noncomply-head .chart-note {
+  max-width: 62ch;
+}
+.nc-bar.yes i {
+  background: var(--color-comply);
 }
 /* One column grid shared by every row (subgrid) — per-row `auto` columns
    sized each row's count/link independently, so bars started and ended at
@@ -1116,6 +1150,241 @@
   line-height: 1.55;
 }
 
+/* ---------- documents / monitoring / price tabs ---------- */
+.extras-intro {
+  margin: -8px 0 24px;
+  max-width: 72ch;
+  color: var(--color-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.extras-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+}
+.extras-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.extras-card-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.extras-muted {
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.55;
+}
+.docs-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.doc-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: 0 0 0 1px transparent;
+  transition: box-shadow 0.15s ease;
+}
+.doc-card.on {
+  box-shadow: 0 0 0 1.5px var(--color-fg);
+}
+.doc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.doc-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-bg-2);
+  color: var(--color-fg-2);
+  flex: none;
+}
+.doc-id {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.doc-id b {
+  font-weight: 600;
+  font-size: 14px;
+}
+.doc-id .mono {
+  font-size: 11.5px;
+  color: var(--color-faint);
+}
+.doc-card h2 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.doc-card p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13.5px;
+}
+.doc-card .doc-meta {
+  margin-top: 8px;
+  color: var(--color-faint);
+  font-size: 12.5px;
+}
+.doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.doc-actions .btn-secondary {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.doc-actions .btn-secondary:disabled {
+  color: var(--color-muted);
+  border-color: var(--color-line-soft);
+}
+.doc-note {
+  color: var(--color-muted);
+  font-size: 13px;
+  padding: 0 4px;
+}
+.doc-viewer {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: min(80vh, 1100px);
+  min-height: 480px;
+}
+.doc-viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-line-soft);
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.doc-viewer iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: var(--color-bg-2);
+}
+.monitoring-layout {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.monitoring-map {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+.monitoring-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 32px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-2);
+  text-align: center;
+}
+.monitoring-empty p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--color-muted);
+  line-height: 1.55;
+}
+.report-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.report-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-line-soft);
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.report-list li:first-child {
+  border-top: 0;
+}
+.report-list b {
+  display: block;
+  color: var(--color-fg);
+  font-size: 14px;
+  font-weight: 600;
+}
+.price-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.price-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px 0;
+  max-width: 1160px;
+  width: 100%;
+  margin: 0 auto;
+}
+.price-head .eyebrow {
+  margin-bottom: 4px;
+}
+.price-head .extras-intro {
+  margin: 0;
+  font-size: 14px;
+}
+.price-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 70vh;
+  border: 0;
+  background: var(--color-bg-2);
+}
+@media (max-width: 900px) {
+  .docs-layout,
+  .monitoring-layout {
+    grid-template-columns: 1fr;
+  }
+  .doc-viewer {
+    height: 75vh;
+  }
+}
+
 /* ---------- group summary ---------- */
 .summary-head {
   display: flex;
@@ -1243,6 +1512,21 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.chart-legend .legend-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.chart-legend .legend-link:hover {
+  color: var(--color-fg);
+  text-decoration: underline;
 }
 .chart-legend i,
 .mitigation-legend i {
@@ -2381,6 +2665,23 @@
 }
 /* Tablet and phone: the page scrolls as a whole again, the header wraps the
    tabs onto their own row, and the map sits above its mill list. */
+/* Five tabs plus the admin's client picker don't fit one row below ~1180px:
+   the tabs move to a second row instead of pushing Sign out off-screen. */
+@media (max-width: 1180px) {
+  .app-header {
+    height: auto;
+    min-height: var(--header-h);
+    flex-wrap: wrap;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    row-gap: 6px;
+  }
+  .app-tabs {
+    order: 5;
+    margin-left: 0;
+    max-width: 100%;
+  }
+}
 @media (max-width: 860px) {
   .app {
     height: auto;
@@ -2404,9 +2705,30 @@
     order: 5;
     width: 100%;
     margin-left: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
   .app-tabs button {
-    flex: 1;
+    flex: 1 0 auto;
+    padding: 0 12px;
+  }
+  .price-frame {
+    min-height: 85vh;
+  }
+  /* The admin-only client picker sizes to its longest option
+     ("Bakrie Renewable Chemicals") and pushed Sign out off-screen. */
+  .app-actions {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .tenant-switch {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .tenant-switch select {
+    width: 100%;
+    min-width: 0;
+    text-overflow: ellipsis;
   }
   .app-main {
     overflow: visible;
@@ -2491,5 +2813,207 @@
   }
   html {
     scroll-behavior: auto;
+  }
+}
+
+/* ---------- ADM Soy workspace (soy-workspace.tsx, soy-map.tsx) ---------- */
+.soy-scope {
+  font: 600 15px var(--font-display);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.soy-plant-seg {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 16px;
+  border-radius: 18px;
+}
+.soy-plant-seg button {
+  flex: none;
+  min-height: 32px;
+}
+.soy-map-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.soy-map {
+  position: relative;
+  height: clamp(380px, 62vh, 620px);
+}
+/* Sized, not absolutely positioned: maplibre-gl.css sets the container to
+   position: relative, which would collapse an inset:0 box to zero height. */
+.soy-map-canvas {
+  width: 100%;
+  height: 100%;
+}
+.soy-table-wrap {
+  overflow-x: auto;
+}
+.soy-map-basemap {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--glass);
+  box-shadow: var(--shadow-2);
+}
+.soy-map-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 28px;
+  width: 232px;
+  padding: 12px 14px;
+}
+.soy-legend-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.soy-legend-ramp {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  height: 10px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.soy-legend-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-top: 3px;
+}
+.soy-legend-note {
+  margin: 6px 0 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+.soy-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+.soy-legend-item .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #1f6fd1;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-line);
+}
+.soy-legend-item .ring {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--color-fg-2);
+}
+.soy-map-status {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: var(--shadow-2);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.soy-map-status.error {
+  color: var(--color-danger);
+}
+.soy-charts {
+  margin-bottom: 12px;
+}
+.soy-table td,
+.soy-table th {
+  padding: 8px 10px;
+}
+.soy-table tbody tr {
+  cursor: default;
+}
+.soy-subhead {
+  margin-top: 18px !important;
+}
+.soy-compare .data-table tbody tr {
+  cursor: pointer;
+}
+.soy-pop {
+  font-size: 12.5px;
+}
+.soy-pop-k {
+  margin: 8px 0 1px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.soy-pop-k:first-child {
+  margin-top: 0;
+}
+.soy-pop-v {
+  margin: 0;
+  font-weight: 500;
+}
+.soy-pop-v.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.soy-pop-hist {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-template-rows: repeat(4, auto);
+  gap: 2px 10px;
+}
+.soy-pop-hist li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.soy-pop-hist span {
+  width: 30px;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+.soy-pop-hist i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+@media (max-width: 900px) {
+  .soy-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .soy-map-legend {
+    width: auto;
+    right: 12px;
+    bottom: 24px;
+  }
+  .soy-legend-note {
+    display: none;
+  }
+  .soy-map-status {
+    top: 56px;
+    white-space: normal;
+    width: calc(100% - 24px);
+    justify-content: center;
+    text-align: center;
+  }
+  .soy-scope {
+    display: none;
   }
 }

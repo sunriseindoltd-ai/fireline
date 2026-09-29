@@ -376,6 +376,25 @@ Plus Jakarta Sans). Brief warna: hindari warna Kanopi dan warna "berani".
   narasi lama menyebut C "verifikasi segera / ditahan" sehingga plot C — yang
   **patuh** — terbaca tidak patuh. Kolom "Pemantauan" dihapus.
 
+### 2026-09-28 — NAM & LTS, tab Dokumen/Monitoring/Harga sawit
+- **NAM & LTS** masuk: `Data Storage/NAM - Plot/OPI_NAM.gdb` (sudah dianalisis
+  user) → `ANALISIS\NAM_pipeline\07_export_to_kanopi.py` → `prepare-nam-plots.mjs`
+  (PlotID baru, NodeID dari mills.json). 47.530 plot, 5 mill, 0 plot >100 km.
+  DJAYA GLOBALINDO SENTOSA (PO1000004266) ditambahkan ke mills.json dari
+  UML.xlsx. Detail: `Data Storage/NAM - Plot (GeoJSON)/NAM_PIPELINE_NOTES.md`.
+- **Port** (user): SUNRISE — 12 mill PPKO Tandun → Dumai, sisanya Belawan;
+  NAM semua Belawan (`scripts/fix-sunrise-nam-ports.mjs`; SEI MERANTI (PN)
+  pindah Dumai → Belawan).
+- Tab baru per grup: **Monitoring** (placeholder "segera hadir"; laporan PDF =
+  link Google Drive dan layer deteksi diisi di `src/lib/monitoring.ts`),
+  **Dokumen** (SOP EL-SOP-EUDR-001 v1.1 EN+ID, netral klien, untuk semua
+  tenant; `/docs/…` wajib login, auditor hanya lihat; production: redirect ke
+  URL R2 presigned karena PDF > batas respons Vercel), **Harga sawit** (hanya
+  grup SUNRISE di ADM: admin/klien ADM + login `sunrise`; halaman dari
+  `Palm Oil Forecast/…/sunrise-poi.html` di-reskin oleh
+  `scripts/build-sunrise-price.mjs` → `src/content/sunrise-price.html`,
+  dijalankan ulang tiap harga diperbarui).
+
 ## Status saat ini (per 2026-09-23)
 
 - SJIM: 189/192 mill ke-ingest ke Kanopi (3 mill masih belum match).

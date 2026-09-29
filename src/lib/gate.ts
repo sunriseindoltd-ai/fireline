@@ -164,6 +164,10 @@ const TENANT_CLIENT_ACCOUNTS: readonly TenantClientAccount[] = [
   { user: "brc-1", tenant: "brc", salt: "ef9d74f3ed5fc11e9e359406e7588060", hash: "3f3df0df478eada0610272d7eb50500b5ef2785ccbe39c3279c4d3d3d1ac96b8" },
   { user: "brc-2", tenant: "brc", salt: "8b85646f05993acfaf5dba1f7b719b06", hash: "19a61c2fa8bb71c647c28d43a6a9ee4e4af4381023a05150493f0081c1221bef" },
   { user: "brc-3", tenant: "brc", salt: "19f77eb0c9ea53209b5644f0571e68bc", hash: "8726fc32a55ba3f5fda2970e569d142df7474cf8e46924db958d4961e4d2f04c" },
+  // ADM's soybean team: a workspace of its own, apart from ADM's palm one.
+  { user: "adm-soy-1", tenant: "adm-soy", salt: "8f783331bcdcaff39e7f98088d89efc4", hash: "94bfa396aad84c0b8db529c76e30b40406b0f0b0f1ddec3b5fdcd23889e3a1f0" },
+  { user: "adm-soy-2", tenant: "adm-soy", salt: "7d65b7491ceb28e00b30c6a8d030820c", hash: "070686272a3e826199ee978a3bbbc3d5ba2532c766ff3c2551b032232c1341ac" },
+  { user: "adm-soy-3", tenant: "adm-soy", salt: "63a589d4759318a2f8ef468fdcae8f67", hash: "2dd93dd377368bf49c244613d0311fcd29180a5bb045f175a4f260ddcb62d129" },
 ];
 
 function tenantClientAccount(user: string) {

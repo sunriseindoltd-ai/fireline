@@ -25,7 +25,7 @@ export type EudrSummaryResult = EudrSummary & {
   /** Per-mill counts for every requested mill that has stats — what the
    * "where are the non-compliant plots?" list is built from (ADM feedback 1:
    * "click EUDR Comply 92% → a location list with non-comply cases"). */
-  mills: { id: string; totalPlots: number; nonComply: number; areaHa: number }[];
+  mills: { id: string; totalPlots: number; comply: number; nonComply: number; areaHa: number }[];
 };
 
 const MITIGATION_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
@@ -143,7 +143,7 @@ export async function getEudrSummary(tenant: Tenant, millIds: string[]): Promise
     if (s) {
       addInto(summary, s);
       millsWithData++;
-      mills.push({ id: millId, totalPlots: s.totalPlots, nonComply: s.comply.no, areaHa: s.totalAreaHa });
+      mills.push({ id: millId, totalPlots: s.totalPlots, comply: s.comply.yes, nonComply: s.comply.no, areaHa: s.totalAreaHa });
     }
   }
   mills.sort((a, b) => b.nonComply - a.nonComply || b.totalPlots - a.totalPlots);
