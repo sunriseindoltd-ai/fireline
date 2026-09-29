@@ -2853,12 +2853,126 @@ button.kpi-action:hover {
 .soy-table-wrap {
   overflow-x: auto;
 }
-.soy-map-basemap {
+.soy-map-tools {
   position: absolute;
   top: 12px;
   left: 12px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  max-width: calc(100% - 72px);
+}
+.soy-map-basemap {
   background: var(--glass);
   box-shadow: var(--shadow-2);
+}
+.soy-layers {
+  padding: 0;
+  min-width: 210px;
+}
+.soy-layers summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  font-weight: 600;
+  font-size: 12.5px;
+  list-style: none;
+}
+.soy-layers summary::-webkit-details-marker {
+  display: none;
+}
+.soy-layers summary::after {
+  content: "›";
+  float: right;
+  color: var(--color-muted);
+  transform: rotate(90deg);
+}
+.soy-layers:not([open]) summary::after {
+  transform: none;
+}
+.soy-layers ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 10px;
+  display: grid;
+  gap: 4px;
+}
+.soy-layers label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.soy-layers input {
+  margin: 0;
+  accent-color: var(--color-brand);
+}
+.soy-layers em {
+  font-style: normal;
+  color: var(--color-muted);
+  font-size: 11.5px;
+}
+.soy-layers em.err {
+  color: var(--color-danger);
+}
+.soy-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.soy-swatch.elevators {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #1d1d1f;
+}
+.soy-swatch.flagged {
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px var(--color-line);
+}
+.soy-swatch.rail,
+.soy-swatch.rivers,
+.soy-swatch.roads {
+  height: 3px;
+  width: 14px;
+  border-radius: 2px;
+}
+.soy-swatch.roads {
+  box-shadow: 0 0 0 1px var(--color-line);
+}
+.soy-flag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: 11px;
+  font-weight: 500;
+}
+.soy-mini-kpis {
+  margin-bottom: 10px;
+}
+.soy-pop-kicker {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.soy-pop-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.soy-pop-warn {
+  margin: 10px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 .soy-map-legend {
   position: absolute;
@@ -3007,7 +3121,7 @@ button.kpi-action:hover {
     display: none;
   }
   .soy-map-status {
-    top: 56px;
+    top: 100px;
     white-space: normal;
     width: calc(100% - 24px);
     justify-content: center;
@@ -3016,4 +3130,11 @@ button.kpi-action:hover {
   .soy-scope {
     display: none;
   }
+}
+/* Long elevator/county names wrap instead of pushing the figures out of view. */
+.soy-table td:first-child {
+  white-space: normal;
+}
+.soy-table td.num {
+  white-space: nowrap;
 }

@@ -7,7 +7,9 @@ import { LangToggle } from "@/components/lang-toggle";
 import {
   SoyMap,
   type SoyBuffers,
+  type SoyElevator,
   type SoyFieldCollection,
+  type SoyFlagged,
   type SoyPlant,
 } from "@/components/soy-map";
 import { fetchWithRetry } from "@/lib/fetch-retry";
@@ -29,14 +31,26 @@ type SoyStats = {
   states: { state: string; name: string; fields: number; ha: number }[];
   topCounties: { county: string; state: string; fields: number; ha: number }[];
 };
+type SoyArea = {
+  id: string;
+  name: string;
+  plants: string[];
+  stats: SoyStats;
+  flagged: number;
+  elevators: number;
+};
 type SoyData = {
   source: string;
   bufferMiles: number;
-  plants: (SoyPlant & { stats: SoyStats })[];
+  plants: SoyPlant[];
+  areas: SoyArea[];
   overall: SoyStats;
   buffers: SoyBuffers;
+  elevators: SoyElevator[];
+  flagged: SoyFlagged[];
   cdlNames: Record<string, string>;
 };
+const AC_TO_HA = 0.40468564224;
 
 type FieldsState = {
   status: "idle" | "loading" | "error" | "ready";
@@ -45,10 +59,11 @@ type FieldsState = {
 
 /**
  * The ADM Soy workspace (tenant `adm-soy`): ADM's US crushing plants, their
- * 40-mile sourcing areas and the soybean fields inside — statistics and map
- * only for now, no EUDR analysis. Data: /data/soy.json (bundled, small) and
- * /data/fields/<plant>.geojson (the soy R2 bucket), both built by
- * scripts/prepare-adm-soy.py.
+ * 40-mile sourcing areas (Decatur West + East share one) and the soybean
+ * fields inside, plus ADM's grain elevators and flagged field points —
+ * statistics and map only for now, no EUDR analysis. Data: /data/soy.json
+ * (bundled, small), /data/fields/<area>.geojson and /data/layers/*.geojson
+ * (the soy R2 bucket), all built by scripts/prepare-adm-soy.py.
  */
 export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant }) {
   const { t, lang } = useI18n();
@@ -150,8 +165,15 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     );
   }
 
-  const plant = selected ? (data.plants.find((p) => p.id === selected) ?? null) : null;
-  const stats = plant ? plant.stats : data.overall;
+  const area = selected ? (data.areas.find((a) => a.id === selected) ?? null) : null;
+  const stats = area ? area.stats : data.overall;
+  const areaPlants = area ? data.plants.filter((p) => p.area === area.id) : data.plants;
+  const flaggedHere = area ? data.flagged.filter((f) => f.area === area.id) : data.flagged;
+  const elevatorsHere = area ? data.elevators.filter((e) => e.area === area.id) : data.elevators;
+  const flaggedChange = flaggedHere.reduce((sum, f) => sum + (f.changeAcres ?? 0), 0);
+  const byState = new Map<string, number>();
+  for (const f of flaggedHere) byState.set(f.state ?? "—", (byState.get(f.state ?? "—") ?? 0) + 1);
+  const flaggedByState = [...byState].sort((a, b) => b[1] - a[1]);
   const countF = (n: number) => formatCount(n, lang);
   const haF = (n: number) => formatHa(n, lang);
   const statesText = stats.states.map((s) => s.state).join(" · ");
@@ -173,9 +195,13 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
         <div className="page soy-page">
           <div className="summary-head">
             <div>
-              <h1>{plant ? plant.name : sc.title}</h1>
+              <h1>{area ? area.name : sc.title}</h1>
               <p className="summary-sub">
-                {plant ? plant.address : fill(sc.intro, { miles: data.bufferMiles })}
+                {area
+                  ? areaPlants
+                      .map((p) => (areaPlants.length > 1 ? p.name + ": " + p.address : p.address))
+                      .join(" · ")
+                  : fill(sc.intro, { miles: data.bufferMiles })}
               </p>
             </div>
           </div>
@@ -190,28 +216,22 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             >
               {sc.allPlants}
             </button>
-            {data.plants.map((p) => (
+            {data.areas.map((a) => (
               <button
-                key={p.id}
+                key={a.id}
                 type="button"
                 role="tab"
-                aria-selected={selected === p.id}
-                className={selected === p.id ? "on" : ""}
-                onClick={() => select(p.id)}
+                aria-selected={selected === a.id}
+                className={selected === a.id ? "on" : ""}
+                onClick={() => select(a.id)}
               >
-                {p.name}
+                {a.name}
               </button>
             ))}
           </div>
 
           <div className="kpi-row">
-            {!plant ? (
-              <KpiTile
-                value={countF(data.plants.length)}
-                label={sc.plantsKpi}
-                hint={sc.plantsHint}
-              />
-            ) : null}
+            <KpiTile value={countF(areaPlants.length)} label={sc.plantsKpi} hint={sc.plantsHint} />
             <KpiTile value={countF(stats.fields)} label={sc.fieldsKpi} hint={sc.fieldsHint} />
             <KpiTile
               value={haF(stats.ha)}
@@ -231,12 +251,14 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             <SoyMap
               plants={data.plants}
               buffers={data.buffers}
+              elevators={data.elevators}
+              flagged={data.flagged}
               selected={selected}
               fields={fields.fc}
               cdlNames={data.cdlNames}
               sc={sc}
               lang={lang}
-              onSelectPlant={(id) => select(id)}
+              onSelectArea={(id) => select(id)}
             />
             {!selected ? <p className="soy-map-status">{sc.mapPickPlant}</p> : null}
             {fields.status === "loading" ? (
@@ -399,7 +421,84 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             </div>
           </div>
 
-          {!plant ? (
+          <div className="chart-grid soy-charts">
+            <section className="chart-card">
+              <h3>{sc.flaggedTitle}</h3>
+              {flaggedHere.length ? (
+                <>
+                  <div className="kpi-row compact soy-mini-kpis">
+                    <KpiTile value={countF(flaggedHere.length)} label={sc.flaggedKpi} />
+                    <KpiTile
+                      value={fill(sc.acres, { n: formatCount(flaggedChange, lang) })}
+                      label={sc.flaggedChangeKpi}
+                      sub={haF(flaggedChange * AC_TO_HA)}
+                    />
+                  </div>
+                  <table className="data-table soy-table">
+                    <tbody>
+                      {flaggedByState.map(([st, n]) => (
+                        <tr key={st}>
+                          <td>{st}</td>
+                          <td className="num tabular-nums">{countF(n)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              ) : (
+                <p className="chart-note">{sc.none}</p>
+              )}
+              <p className="chart-note">
+                {fill(sc.flaggedNote, {
+                  inside: countF(data.flagged.filter((f) => f.area).length),
+                  n: countF(data.flagged.length),
+                })}
+              </p>
+            </section>
+
+            <section className="chart-card">
+              <h3>{sc.elevatorsTitle}</h3>
+              {elevatorsHere.length ? (
+                <div className="soy-table-wrap">
+                  <table className="data-table soy-table">
+                    <thead>
+                      <tr>
+                        <th>{sc.colName}</th>
+                        <th>{sc.colCity}</th>
+                        <th className="num">{sc.colCapacity}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {elevatorsHere.map((e, i) => (
+                        <tr key={(e.name ?? "") + i}>
+                          <td>
+                            {e.name ?? "—"}
+                            {e.locationMismatch ? (
+                              <span className="soy-flag">{sc.checkCoords}</span>
+                            ) : null}
+                          </td>
+                          <td>{[e.city, e.state].filter(Boolean).join(", ")}</td>
+                          <td className="num tabular-nums">
+                            {e.capacity == null ? "—" : countF(e.capacity)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="chart-note">{sc.none}</p>
+              )}
+              <p className="chart-note">
+                {fill(sc.elevatorsNote, {
+                  bad: countF(data.elevators.filter((e) => e.locationMismatch).length),
+                  n: countF(data.elevators.length),
+                })}
+              </p>
+            </section>
+          </div>
+
+          {!area ? (
             <section className="chart-card soy-compare">
               <h3>{sc.compareTitle}</h3>
               <div className="soy-table-wrap">
@@ -407,6 +506,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   <thead>
                     <tr>
                       <th>{sc.colPlant}</th>
+                      <th>{sc.colPlants}</th>
                       <th>{sc.colState}</th>
                       <th className="num">{sc.colFields}</th>
                       <th className="num">{sc.colArea}</th>
@@ -414,7 +514,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                     </tr>
                   </thead>
                   <tbody>
-                    {data.plants.map((p) => (
+                    {data.areas.map((p) => (
                       <tr
                         key={p.id}
                         tabIndex={0}
@@ -422,6 +522,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                         onKeyDown={(e) => e.key === "Enter" && select(p.id)}
                       >
                         <td>{p.name}</td>
+                        <td>{countF(p.plants.length)}</td>
                         <td>{p.stats.states.map((s) => s.state).join(" · ")}</td>
                         <td className="num tabular-nums">{countF(p.stats.fields)}</td>
                         <td className="num tabular-nums">{haF(p.stats.ha)}</td>

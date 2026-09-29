@@ -14,8 +14,10 @@ const bundled = import.meta.glob(
     "../../private-data/**/*.{json,geojson}",
     "!../../private-data/plots/**",
     "!../../private-data/tenants/*/plots/**",
-    // The soy tenant's field files (~20 MB per plant) live in its own R2 bucket.
+    // The soy tenant's field files (~20 MB per area) and context line layers
+    // (rail/rivers/roads, up to ~7 MB) live in its own R2 bucket.
     "!../../private-data/tenants/*/fields/**",
+    "!../../private-data/tenants/*/layers/**",
   ],
   {
     query: "?raw",
@@ -297,10 +299,11 @@ export async function serveKanopiData(request: Request): Promise<Response> {
     });
   }
 
-  // A soy plant's fields: `fields/<plant>.geojson` (+ .partN), only for the
-  // soy tenant. On disk under the tenant's folder; in R2 at the same relative
-  // path inside the soy bucket (a bucket of its own, so no tenant prefix).
-  if (rel.startsWith("fields/")) {
+  // A soy sourcing area's fields (`fields/<area>.geojson`, + .partN) and the
+  // soy context layers (`layers/<name>.geojson`), only for the soy tenant. On
+  // disk under the tenant's folder; in R2 at the same relative path inside the
+  // soy bucket (a bucket of its own, so no tenant prefix).
+  if (rel.startsWith("fields/") || rel.startsWith("layers/")) {
     if (!isSoyTenant(tenant) || !rel.endsWith(".geojson") || /\.part\d+\.geojson$/i.test(rel)) {
       return new Response("Not found", { status: 404 });
     }

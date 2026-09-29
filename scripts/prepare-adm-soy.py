@@ -8,18 +8,24 @@ soybean delivery into what the app reads.
                                fields planted with soybeans in 2025 that fall
                                within those buffers (CDL crop code per year)
   Output (private-data/tenants/adm-soy/):
-    soy.json                   plants, buffer polygons, per-plant and overall
-                               statistics (bundled into the app — small)
-    fields/<plant>.geojson     that plant's fields (+ .partN when large);
-                               never bundled — uploaded to the soy R2 bucket
-                               by scripts/upload-soy-fields-to-r2.mjs
+    soy.json                   plants, sourcing areas (buffer polygons +
+                               statistics), grain elevators and the flagged
+                               ("non-compliant") field points — bundled, small
+    fields/<area>.geojson      that area's fields (+ .partN when large)
+    layers/{rail,rivers,roads}.geojson   context layers (from USA_diaz/)
+                               fields/ and layers/ are never bundled — uploaded
+                               to the soy R2 bucket by
+                               scripts/upload-soy-fields-to-r2.mjs
 
-Every plant keeps its own sourcing area — Decatur (West) and Decatur (East)
-are ~1 km apart and their buffers nearly coincide, so most Decatur fields
-belong to both and appear under each (user decision, 2026-09-29). The
-"all plants" totals count each field once.
+  Also read: Non.gdb (Elevators_IL_Albers, Non_Points_Albers, USA_ADM1) and
+  USA_diaz/ (rail_3, river_stream_3, road_3). The flagged points carry
+  landowner names and tax addresses — personal data, deliberately NOT copied.
 
-A field belongs to a plant when its centroid is inside the buffer or, near
+Decatur (West) and Decatur (East) are ~1 km apart with near-identical
+buffers, so they form one "Decatur" sourcing area (union of both buffers)
+holding both plants (user decision, 2026-09-29).
+
+A field belongs to an area when its centroid is inside the buffer or, near
 the edge, when its polygon touches it (the delivery selected fields that
 way — 662 have their centroid just outside every buffer).
 
@@ -198,11 +204,78 @@ class Stats:
         }
 
 
+def area_of(plant_name):
+    return ("decatur", "Decatur") if plant_name.lower().startswith("decatur") else (slug(plant_name), plant_name)
+
+
+def write_split(path_base, feats):
+    """Writes feats as <base>.geojson (+ .partN.geojson), each under PART_BYTES."""
+    parts, cur_part, size = [], [], 0
+    for ft in feats:
+        n = len(json.dumps(ft, separators=(",", ":")))
+        if cur_part and size + n > PART_BYTES:
+            parts.append(cur_part)
+            cur_part, size = [], 0
+        cur_part.append(ft)
+        size += n
+    if cur_part:
+        parts.append(cur_part)
+    for i, chunk in enumerate(parts):
+        fname = f"{path_base}.geojson" if i == 0 else f"{path_base}.part{i + 1}.geojson"
+        with open(fname, "w", encoding="utf-8") as fh:
+            json.dump({"type": "FeatureCollection", "features": chunk}, fh, separators=(",", ":"))
+    return len(parts)
+
+
+def round_line(gi):
+    def line(pts):
+        out = []
+        for x, y in pts:
+            q = [round(x, COORD_DP), round(y, COORD_DP)]
+            if not out or out[-1] != q:
+                out.append(q)
+        return out if len(out) >= 2 else None
+
+    if gi["type"] == "LineString":
+        ln = line(gi["coordinates"])
+        return {"type": "LineString", "coordinates": ln} if ln else None
+    lines = [ln for ln in (line(c) for c in gi["coordinates"]) if ln]
+    if not lines:
+        return None
+    return {"type": "LineString", "coordinates": lines[0]} if len(lines) == 1 else {"type": "MultiLineString", "coordinates": lines}
+
+
+def export_lines(shp, out_path, props_of, wgs, generalize_deg=None):
+    feats = []
+    fields = [f.name for f in arcpy.ListFields(shp) if f.type not in ("Geometry", "OID")]
+    with arcpy.da.SearchCursor(shp, fields + ["SHAPE@"], spatial_reference=wgs) as cur:
+        for row in cur:
+            g = row[-1]
+            if g is None:
+                continue
+            if generalize_deg:
+                g = g.generalize(generalize_deg)
+            gi = round_line(g.__geo_interface__)
+            if gi:
+                feats.append({"type": "Feature", "geometry": gi, "properties": props_of(dict(zip(fields, row[:-1])))})
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump({"type": "FeatureCollection", "features": feats}, fh, separators=(",", ":"))
+    return len(feats), os.path.getsize(out_path)
+
+
+def clean(v):
+    if isinstance(v, str):
+        return v.strip() or None
+    return v
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=DEFAULT_SRC)
     args = ap.parse_args()
     wgs = arcpy.SpatialReference(4326)
+    non_gdb = os.path.join(args.src, "Non.gdb")
+    usa_dir = os.path.join(args.src, "USA_diaz")
 
     # Plants + their buffer polygons (already WGS84 in the delivery).
     plants = []
@@ -212,35 +285,44 @@ def main():
         for name, address, state, dist, geom, (cx, cy) in cur:
             if abs((dist or 0) - BUFFER_MILES) > 1e-6:
                 sys.exit(f"unexpected buffer distance {dist} for {name}")
-            plants.append({"id": slug(name), "name": name, "address": (address or "").replace(", Estados Unidos", ", United States"),
+            aid, _ = area_of(name)
+            plants.append({"id": slug(name), "name": name, "area": aid,
+                           "address": (address or "").replace(", Estados Unidos", ", United States"),
                            "state": state, "lat": round(cy, 6), "lon": round(cx, 6), "geom": geom})
-    print(f"[prepare-adm-soy] {len(plants)} plants: {', '.join(p['name'] for p in plants)}")
+    areas = []
+    for p in plants:
+        aid, aname = area_of(p["name"])
+        a = next((x for x in areas if x["id"] == aid), None)
+        if a is None:
+            areas.append({"id": aid, "name": aname, "plants": [p["id"]], "geom": p["geom"]})
+        else:
+            a["plants"].append(p["id"])
+            a["geom"] = a["geom"].union(p["geom"])
+    print(f"[prepare-adm-soy] {len(plants)} plants in {len(areas)} sourcing areas: "
+          + ", ".join(f"{a['name']} ({len(a['plants'])})" for a in areas))
 
-    per_plant = {p["id"]: [] for p in plants}
-    per_stats = {p["id"]: Stats() for p in plants}
+    def areas_of(geom, c):
+        hit = []
+        for a in areas:
+            d = min(haversine_km(c.Y, c.X, p["lat"], p["lon"]) for p in plants if p["area"] == a["id"])
+            if d <= BUFFER_KM - 2 or (d <= BUFFER_KM + 5 and not geom.disjoint(a["geom"])):
+                hit.append(a["id"])
+        return hit
+
+    per_area = {a["id"]: [] for a in areas}
+    per_stats = {a["id"]: Stats() for a in areas}
     overall = Stats()
     codes_seen = set()
-    edge_checks = 0
     orphans = 0
-    fields_path = os.path.join(args.src, "SOY_Crushingplant.shp")
     flds = ["CSBID", "CSBACRES", "CNTY", "STATEFIPS"] + [f"CDL{y}" for y in YEARS]
-    with arcpy.da.SearchCursor(fields_path, flds + ["SHAPE@"], spatial_reference=wgs) as cur:
+    with arcpy.da.SearchCursor(os.path.join(args.src, "SOY_Crushingplant.shp"), flds + ["SHAPE@"], spatial_reference=wgs) as cur:
         for row in cur:
             geom = row[-1]
             if geom is None:
                 continue
-            c = geom.trueCentroid
             cdl = [int(v) if v is not None else None for v in row[4:4 + len(YEARS)]]
             codes_seen.update(v for v in cdl if v is not None)
-            members = []
-            for p in plants:
-                d = haversine_km(c.Y, c.X, p["lat"], p["lon"])
-                if d <= BUFFER_KM - 2:
-                    members.append(p["id"])
-                elif d <= BUFFER_KM + 5:
-                    edge_checks += 1
-                    if not geom.disjoint(p["geom"]):
-                        members.append(p["id"])
+            members = areas_of(geom, geom.trueCentroid)
             if not members:
                 orphans += 1
                 continue
@@ -254,50 +336,99 @@ def main():
                 "cdl": ",".join("" if v is None else str(v) for v in cdl),
                 "soyYears": sum(1 for v in cdl if v in SOY),
             }}
-            for pid in members:
-                per_plant[pid].append(feature)
-                per_stats[pid].add(f)
+            for aid in members:
+                per_area[aid].append(feature)
+                per_stats[aid].add(f)
             overall.add(f)
-    print(f"[prepare-adm-soy] {overall.fields} fields; {edge_checks} edge polygon checks; {orphans} outside every buffer (skipped)")
+    print(f"[prepare-adm-soy] {overall.fields} fields; {orphans} outside every buffer (skipped)")
 
-    os.makedirs(os.path.join(OUT_DIR, "fields"), exist_ok=True)
-    for name in os.listdir(os.path.join(OUT_DIR, "fields")):
-        if name.endswith(".geojson"):
-            os.remove(os.path.join(OUT_DIR, "fields", name))
-    for p in plants:
-        feats = per_plant[p["id"]]
-        parts, cur_part, size = [], [], 0
-        for ft in feats:
-            s = len(json.dumps(ft, separators=(",", ":")))
-            if cur_part and size + s > PART_BYTES:
-                parts.append(cur_part)
-                cur_part, size = [], 0
-            cur_part.append(ft)
-            size += s
-        if cur_part:
-            parts.append(cur_part)
-        for i, chunk in enumerate(parts):
-            fname = f"{p['id']}.geojson" if i == 0 else f"{p['id']}.part{i + 1}.geojson"
-            with open(os.path.join(OUT_DIR, "fields", fname), "w", encoding="utf-8") as fh:
-                json.dump({"type": "FeatureCollection", "features": chunk}, fh, separators=(",", ":"))
-        print(f"[prepare-adm-soy] {p['name']}: {len(feats)} fields in {len(parts)} file(s)")
+    for sub in ("fields", "layers"):
+        os.makedirs(os.path.join(OUT_DIR, sub), exist_ok=True)
+        for name in os.listdir(os.path.join(OUT_DIR, sub)):
+            if name.endswith(".geojson"):
+                os.remove(os.path.join(OUT_DIR, sub, name))
+    for a in areas:
+        n = write_split(os.path.join(OUT_DIR, "fields", a["id"]), per_area[a["id"]])
+        print(f"[prepare-adm-soy] {a['name']}: {len(per_area[a['id']])} fields in {n} file(s)")
+
+    # State polygons, to check each elevator's point against the state it lists.
+    states = [(iso.replace("US-", ""), g) for iso, g in
+              arcpy.da.SearchCursor(os.path.join(non_gdb, "USA_ADM1"), ["shapeISO", "SHAPE@"], spatial_reference=wgs)]
+
+    def state_at(x, y):
+        pt = arcpy.PointGeometry(arcpy.Point(x, y), wgs)
+        return next((st for st, g in states if g.contains(pt)), None)
+
+    def area_at(x, y):
+        pt = arcpy.PointGeometry(arcpy.Point(x, y), wgs)
+        return next((a["id"] for a in areas if a["geom"].contains(pt)), None)
+
+    elevators = []
+    ef = ["Warehouse_Name", "Commodity", "City", "County_2", "State", "Address", "License_Number",
+          "License_Status", "License_Type", "Capacity", "SHAPE@XY"]
+    for r in arcpy.da.SearchCursor(os.path.join(non_gdb, "Elevators_IL_Albers"), ef, spatial_reference=wgs):
+        d = dict(zip(ef, r))
+        x, y = d["SHAPE@XY"]
+        at = state_at(x, y)
+        listed = clean(d["State"])
+        elevators.append({
+            "name": clean(d["Warehouse_Name"]), "commodity": clean(d["Commodity"]), "city": clean(d["City"]),
+            "county": clean(d["County_2"]), "state": listed, "address": clean(d["Address"]),
+            "license": clean(d["License_Number"]), "licenseStatus": clean(d["License_Status"]),
+            "licenseType": clean(d["License_Type"]), "capacity": d["Capacity"],
+            "lat": round(y, 6), "lon": round(x, 6), "pointState": at,
+            "locationMismatch": bool(at and listed and at != listed), "area": area_at(x, y),
+        })
+    print(f"[prepare-adm-soy] {len(elevators)} elevators, "
+          f"{sum(e['locationMismatch'] for e in elevators)} with the point outside their listed state")
+
+    flagged = []
+    nf = ["CSBID", "State", "County", "Change_Acr", "CSBACRES", "Total_acres", "CDL2024", "CDL2025", "Soy_2026", "SHAPE@XY"]
+    for r in arcpy.da.SearchCursor(os.path.join(non_gdb, "Non_Points_Albers"), nf, spatial_reference=wgs):
+        d = dict(zip(nf, r))
+        x, y = d["SHAPE@XY"]
+        flagged.append({
+            "id": str(d["CSBID"]), "state": clean(d["State"]), "county": clean(d["County"]),
+            "changeAcres": d["Change_Acr"], "fieldAcres": round(d["CSBACRES"], 2) if d["CSBACRES"] is not None else None,
+            "totalAcres": d["Total_acres"], "crop2024": clean(d["CDL2024"]), "crop2025": clean(d["CDL2025"]),
+            "soy2026": clean(d["Soy_2026"]), "lat": round(y, 6), "lon": round(x, 6), "area": area_at(x, y),
+        })
+    print(f"[prepare-adm-soy] {len(flagged)} flagged points, {sum(1 for f in flagged if f['area'])} inside a sourcing area")
+
+    lay = os.path.join(OUT_DIR, "layers")
+    n, b = export_lines(os.path.join(usa_dir, "rail_3.shp"), os.path.join(lay, "rail.geojson"),
+                        lambda d: {"owner": clean(d.get("RROWNER1")), "subdiv": clean(d.get("SUBDIV"))}, wgs)
+    print(f"[prepare-adm-soy] rail: {n} segments, {b / 1048576:.1f} MB")
+    n, b = export_lines(os.path.join(usa_dir, "river_stream_3.shp"), os.path.join(lay, "rivers.geojson"),
+                        lambda d: {"name": clean(d.get("Name")), "kind": clean(d.get("Feature"))}, wgs, generalize_deg=0.0001)
+    print(f"[prepare-adm-soy] rivers: {n} segments, {b / 1048576:.1f} MB")
+    n, b = export_lines(os.path.join(usa_dir, "road_3.shp"), os.path.join(lay, "roads.geojson"),
+                        lambda d: {"class": d.get("CLASS"), "name": clean(d.get("ROADNAME")) or clean(d.get("ROADNUM"))},
+                        wgs, generalize_deg=0.0001)
+    print(f"[prepare-adm-soy] roads: {n} segments, {b / 1048576:.1f} MB")
 
     buffers = {"type": "FeatureCollection", "features": [
-        {"type": "Feature", "properties": {"plant": p["id"]}, "geometry": round_geom(p["geom"].__geo_interface__)} for p in plants
+        {"type": "Feature", "properties": {"area": a["id"]}, "geometry": round_geom(a["geom"].__geo_interface__)} for a in areas
     ]}
     out = {
         "source": "USDA NASS Crop Sequence Boundaries 2018-2025 (fields planted with soybeans in 2025), delivered by ADM",
         "bufferMiles": BUFFER_MILES,
         "years": YEARS,
-        "plants": [{k: v for k, v in p.items() if k != "geom"} | {"stats": per_stats[p["id"]].to_json()} for p in plants],
+        "plants": [{k: v for k, v in p.items() if k != "geom"} for p in plants],
+        "areas": [{"id": a["id"], "name": a["name"], "plants": a["plants"], "stats": per_stats[a["id"]].to_json(),
+                   "flagged": sum(1 for f in flagged if f["area"] == a["id"]),
+                   "elevators": sum(1 for e in elevators if e["area"] == a["id"])} for a in areas],
         "overall": overall.to_json(),
         "buffers": buffers,
+        "elevators": elevators,
+        "flagged": flagged,
         "cdlNames": {str(c): CDL_NAMES.get(c, f"CDL code {c}") for c in sorted(codes_seen)},
     }
     with open(os.path.join(OUT_DIR, "soy.json"), "w", encoding="utf-8") as fh:
         json.dump(out, fh, separators=(",", ":"))
     unknown = sorted(c for c in codes_seen if c not in CDL_NAMES)
-    print(f"[prepare-adm-soy] soy.json written ({os.path.getsize(os.path.join(OUT_DIR, 'soy.json')) // 1024} KB); unnamed CDL codes: {unknown}")
+    print(f"[prepare-adm-soy] soy.json written ({os.path.getsize(os.path.join(OUT_DIR, 'soy.json')) // 1024} KB); "
+          f"unnamed CDL codes: {unknown}")
 
 
 if __name__ == "__main__":
