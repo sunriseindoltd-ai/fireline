@@ -80,6 +80,12 @@ type SupplierAccount = { user: string; group: string; salt: string; hash: string
  */
 const SUPPLIER_ACCOUNTS: readonly SupplierAccount[] = [
   {
+    user: "agrojaya",
+    group: "AGROJAYA",
+    salt: "64e62da60414fb34d2b70e29c27cb474",
+    hash: "453b222f930125d2ecba8f7bcd9ff47ad2e93fa2864c606326935e1b97ff4715",
+  },
+  {
     user: "bns",
     group: "BNS",
     salt: "e49e1d1000d1d143900d65f114a7f395",
@@ -191,7 +197,8 @@ export type DataScope = { groups?: readonly string[]; refineries?: readonly stri
 
 /** `null` (admin/client) means unrestricted — every group and refinery. */
 export function dataScopeForSession(session: GateSession): DataScope | null {
-  if (session.role === "auditor") return { refineries: ["Permata KIM"] };
+  // Auditor: Permata KIM, and the AGROJAYA group (user decision, 30 Sep 2026).
+  if (session.role === "auditor") return { refineries: ["Permata KIM"], groups: ["AGROJAYA"] };
   if (session.role === "supplier") {
     // An unknown supplier user already fails readGateSession; an empty
     // scope here just keeps this fail-closed on its own too.
