@@ -15,10 +15,13 @@
  *  - PULAU TIGA (Permata) and INDOMAS MITRA TEKNIK (YORGO): already in Kanopi;
  *    AGROJAYA gets its own copy of the row and plot file (each chain holds its
  *    own copy — tenants.ts / mills rule). None of their plots is >100 km out.
- *  - PT OKTA PALM OIL: not in UML.xlsx — listed without UML ID, coordinates or
- *    plots (like MARIO KASIH in BRC), so it stays out of the group figures.
+ *  - PT OKTA PALM OIL: not in UML.xlsx. The user gave its coordinates and a
+ *    non-UML ID from the unused 9-series, 900000000128 (the 8-series holds the
+ *    other non-UML mills); its plots were selected and re-identified the same
+ *    way (CEK_UML_NOTES.md §04, added later on 30 Sep).
  *
- * Identity (UML ID, names, group, coordinates) comes from UML.xlsx (30 Sep).
+ * Identity (UML ID, names, group, coordinates) comes from UML.xlsx (30 Sep),
+ * OKTA's from the user.
  * Idempotent: AGROJAYA rows and plot files are replaced on every run.
  * Afterwards: prepare-eudr-stats.mjs, then upload "__AGROJAYA__" to R2.
  *
@@ -74,6 +77,15 @@ const NEW_MILLS = [
     lat: 3.843117,
     lon: 98.233,
     file: "PO1000004545__SAWIT HULU.geojson",
+  },
+  {
+    umlId: "900000000128", // non-UML ID chosen by the user
+    millName: "OKTA PALM OIL",
+    groupName: "",
+    parentCompany: "OKTA PALM OIL",
+    lat: 3.5319381395273597,
+    lon: 98.80430935518075,
+    file: "900000000128__OKTA PALM OIL.geojson",
   },
 ];
 // Existing Kanopi mills AGROJAYA also buys from: row + plot file copied.
@@ -173,24 +185,6 @@ async function main() {
       `[prepare-agrojaya] ${src.millName}: copied ${files.length} plot file(s) from ${src.group}`,
     );
   }
-
-  rows.push({
-    id: idOf("OKTA PALM OIL"),
-    group: GROUP,
-    refinery: REFINERY,
-    millName: "OKTA PALM OIL",
-    umlId: "",
-    nodeId: "",
-    port: "",
-    traceability: "",
-    traceabilityRaw: "",
-    bufferKm: null,
-    groupName: "",
-    parentCompany: "OKTA PALM OIL",
-    lat: null,
-    lon: null,
-  });
-  console.log("[prepare-agrojaya] OKTA PALM OIL: listed without UML ID, coordinates or plots");
 
   await writeFile(MILLS, JSON.stringify([...kept, ...rows]));
   console.log(
