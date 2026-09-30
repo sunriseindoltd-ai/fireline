@@ -365,7 +365,11 @@ export function injectGrokPwaHead(html, ctx = {}) {
     host,
     documentTitle,
   );
-  let next = stripShareMetaTags(html);
+  // A page that sets its own share tags (the public pages, via src/lib/og.ts)
+  // keeps them; only pages without any get the site-wide fallback. Stripping
+  // them unconditionally lost every page's og:image (feedback 3, A-08).
+  const ownShareTags = /<meta\b[^>]*\bproperty\s*=\s*["']og:title["']/i.test(html);
+  let next = ownShareTags ? html : stripShareMetaTags(html);
 
   const missing = grokPwaHeadTags(appName)
     .filter(([key]) => {
@@ -375,10 +379,12 @@ export function injectGrokPwaHead(html, ctx = {}) {
     })
     .map(([, tag]) => tag);
 
-  next = insertAfterHeadOpen(
-    next,
-    grokOgHeadTags({ host, appName, site, documentTitle, cwd }).join(""),
-  );
+  if (!ownShareTags) {
+    next = insertAfterHeadOpen(
+      next,
+      grokOgHeadTags({ host, appName, site, documentTitle, cwd }).join(""),
+    );
+  }
 
   if (missing.length === 0) return next;
   return insertBeforeHeadClose(next, missing.join(""));

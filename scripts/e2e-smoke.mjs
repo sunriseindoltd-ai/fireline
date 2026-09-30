@@ -40,8 +40,9 @@ function supplierPassword(user) {
   if (process.env[envVar]) return process.env[envVar];
   try {
     const csv = readFileSync(path.join(process.cwd(), "artifacts", "akun-supplier.csv"), "utf8");
-    const row = csv.split(/\r?\n/).find((line) => line.startsWith(`${user},`));
-    if (row) return row.split(",")[1];
+    // Separator is ";" in the current file, "," in older ones.
+    const row = csv.split(/\r?\n/).find((line) => line.split(/[;,]/)[0] === user);
+    if (row) return row.split(/[;,]/)[1];
   } catch {}
   throw new Error(
     `No password for supplier account '${user}' — set ${envVar} or add artifacts/akun-supplier.csv`,
@@ -294,7 +295,31 @@ async function main() {
     `n=${brcCoverage.body?.millIds?.length}`,
   );
   check("BRC client sees no client switcher", (await brcPage.locator(".tenant-switch").count()) === 0);
+  // Feedback 3: village flows follow the tenant; the access-request inbox is admin-only.
+  const brcAdmFlows = await getJson(brcPage, "/village-flows", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ millIds: [ADOLINA_ID, PERMATA_ID] }),
+  });
+  check("BRC session gets no village flows for ADM mill ids", brcAdmFlows.body?.flows?.length === 0, `flows=${brcAdmFlows.body?.flows?.length}`);
+  const brcInbox = await getJson(brcPage, "/access-requests");
+  check("Client cannot read the access-request inbox", brcInbox.status === 403, `status=${brcInbox.status}`);
   await brcPage.close();
+
+  const admFlows = await getJson(page, "/village-flows", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ millIds: [PERMATA_ID] }),
+  });
+  check("ADM village flows for a Permata mill", admFlows.status === 200 && admFlows.body?.flows?.length > 0, `flows=${admFlows.body?.flows?.length}`);
+  const adminInbox = await getJson(page, "/access-requests");
+  check("Admin can read the access-request inbox", adminInbox.status === 200 && Array.isArray(adminInbox.body?.requests), `status=${adminInbox.status}`);
+  const badRequest = await getJson(page, "/contact-request", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "x", email: "not-an-email", organisation: "x", consent: true }),
+  });
+  check("Contact form rejects an invalid email (400)", badRequest.status === 400, `status=${badRequest.status}`);
 
   await page.goto(`${BASE}/app/portfolio`, { waitUntil: "networkidle" });
   await Promise.all([page.waitForEvent("load"), page.selectOption(".tenant-switch select", "brc")]);

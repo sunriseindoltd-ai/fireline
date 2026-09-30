@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { Carousel } from "@/components/carousel";
 import { KpiTile } from "@/components/kpi-tile";
+import { SupplyFlowSankey, type FlowMill } from "@/components/supply-flow-sankey";
 import { DATA_AS_OF } from "@/lib/data-meta";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { fill, formatCount, formatDate, formatHa, formatPct } from "@/lib/format";
@@ -45,6 +46,9 @@ type Props = {
   millNames?: Map<string, string>;
   /** Opens a mill's plots filtered to compliant or non-compliant ones. */
   onOpenPlots?: (millId: string, plots: PlotComplyFilter) => void;
+  /** Mill id → name/refinery/port: turns on the Village → Mill → Refinery →
+   * Port flow under the charts (group Summary only). */
+  flowMills?: Map<string, FlowMill>;
 };
 
 function WarningIcon() {
@@ -161,6 +165,7 @@ export function EudrSummaryView({
   onOpenMap,
   millNames,
   onOpenPlots,
+  flowMills,
 }: Props) {
   const [activePie, setActivePie] = useState<{ chart: string; index: number } | null>(null);
   const [listTab, setListTab] = useState<PlotComplyFilter | null>(null);
@@ -554,6 +559,7 @@ export function EudrSummaryView({
         <>
           {kpiCard}
           <div className="chart-grid">{chartCards}</div>
+          {variant === "chain" && flowMills ? <SupplyFlowSankey mills={flowMills} hideCoverageNote={hideCoverageNotice} /> : null}
           {canList ? (
             <ComplyList
               mills={summary.mills}

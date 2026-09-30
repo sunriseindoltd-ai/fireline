@@ -396,6 +396,17 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
       ),
     [chain, selectedRefinery, traceFilter],
   );
+  // The same search also steers the map (feedback 3, M-1) — debounced so
+  // the camera doesn't chase every keystroke.
+  const [mapQuery, setMapQuery] = useState("");
+  useEffect(() => {
+    const h = window.setTimeout(() => setMapQuery(query.trim().toLowerCase()), 350);
+    return () => window.clearTimeout(h);
+  }, [query]);
+  const matchMillIds = useMemo(
+    () => (selectedMillId || !mapQuery ? null : scopeMills.filter((m) => millHaystack(m).includes(mapQuery)).map((m) => m.id)),
+    [scopeMills, mapQuery, selectedMillId],
+  );
   const listMills = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q ? scopeMills.filter((m) => millHaystack(m).includes(q)) : scopeMills;
@@ -571,6 +582,17 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
   }
   const loginAgainHref = `/login?next=${encodeURIComponent(location.href)}`;
 
+  // Mills with a UML ID (the ones the summary counts), for the supply flow —
+  // above the early return below, like every hook here.
+  const summaryFlowMills = useMemo(() => {
+    const ref = selectedRefinery && chain?.refineries.includes(selectedRefinery) ? selectedRefinery : null;
+    return new Map(
+      (chain?.mills ?? [])
+        .filter((m) => m.umlId && (!ref || m.refinery === ref))
+        .map((m) => [m.id, { name: m.millName, refinery: m.refinery, port: m.port }]),
+    );
+  }, [chain, selectedRefinery]);
+
   if (!store.ready) {
     return (
       <div className="boot">
@@ -636,6 +658,11 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
           </nav>
         ) : null}
         <div className="app-actions">
+          {role === "admin" && !present ? (
+            <Link to="/app/requests" className="btn-text">
+              {t.requestsNav}
+            </Link>
+          ) : null}
           {role === "admin" && !present ? (
             <label className="tenant-switch">
               <span>{t.clientLabel}</span>
@@ -713,6 +740,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
               millIds={summaryMills.filter((m) => m.umlId).map((m) => m.id)}
               totalMills={summaryMills.length}
               millNames={new Map(summaryMills.map((m) => [m.id, m.millName]))}
+              flowMills={summaryFlowMills}
               variant="chain"
               hideCoverageNotice={present}
               onOpenMap={() => go({ tab: "data" })}
@@ -724,6 +752,8 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
             <div className="mapview-map">
               <ChainMap
                 millGeom={viewMillGeom}
+                millTotal={mapMills.length}
+                matchMillIds={matchMillIds}
                 areas={viewAreas}
                 plots={viewPlots}
                 forest={forestCover}
@@ -899,10 +929,16 @@ function MillList({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && query.trim() && mills.length === 1) onSelect(mills[0]!.id);
+            }}
             placeholder={t.searchMills}
             aria-label={t.searchMills}
           />
         </label>
+        {query.trim() && mills.length === 1 ? (
+          <p className="search-hint">{t.searchEnterHint.replace("{mill}", mills[0]!.millName)}</p>
+        ) : null}
         <div className="seg" role="group" aria-label={t.viewMode}>
           {(["all", "village", "buffer"] as const).map((k) => (
             <button
@@ -916,6 +952,19 @@ function MillList({
             </button>
           ))}
         </div>
+        {/* What the dot on each row means (feedback 3, M-3). */}
+        {coveredIds ? (
+          <p className="mill-list-key">
+            <span>
+              <span className="dot-status on" aria-hidden="true" />
+              {t.statusReady}
+            </span>
+            <span>
+              <span className="dot-status" aria-hidden="true" />
+              {t.statusMaster}
+            </span>
+          </p>
+        ) : null}
       </div>
       <div className="panel-body">
         {mills.length === 0 ? (

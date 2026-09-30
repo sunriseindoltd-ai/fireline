@@ -38,15 +38,23 @@ test("injects before </head>", () => {
   assert.ok(out.indexOf("manifest") < out.indexOf("</head>"));
 });
 
-test("platform chrome overwrites share-card metas and always sets og:title", () => {
+// Kanopi: a page's own share tags win (src/lib/og.ts on the public pages —
+// feedback 3, A-08); the site-wide card only fills pages that set none.
+test("a page's own share-card metas are kept, not overwritten", () => {
   const html =
     '<html><head><title>Hello World</title><meta property="og:title" content="Old"><meta name="twitter:card" content="summary"></head></html>';
   const out = injectGrokPwaHead(html, { appName: "Wild Race", cwd: EMPTY_CWD });
+  assert.match(out, /property="og:title" content="Old"/);
+  assert.match(out, /name="twitter:card" content="summary"/);
+  assert.equal(out.split('name="twitter:card"').length - 1, 1);
+  assert.equal(out.split('property="og:title"').length - 1, 1);
+});
+
+test("pages without share metas get the site card and og:title", () => {
+  const html = "<html><head><title>Hello World</title></head></html>";
+  const out = injectGrokPwaHead(html, { appName: "Wild Race", cwd: EMPTY_CWD });
   assert.match(out, /name="twitter:card" content="summary_large_image"/);
   assert.match(out, /property="og:title" content="Hello World"/);
-  assert.doesNotMatch(out, /content="Old"/);
-  assert.doesNotMatch(out, /content="summary"/);
-  assert.equal(out.split('name="twitter:card"').length - 1, 1);
   assert.equal(out.split('property="og:title"').length - 1, 1);
   assert.doesNotMatch(out, /property="og:image"/);
 });

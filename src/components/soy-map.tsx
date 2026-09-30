@@ -85,8 +85,9 @@ const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf"
 const EMPTY_FC = { type: "FeatureCollection" as const, features: [] };
 const AC_TO_HA = 0.40468564224;
 
-/** Context line layers, fetched from the soy bucket the first time they're
- * switched on (rail ~1 MB, rivers ~6 MB, roads ~7 MB). */
+/** Context layers, fetched from the soy bucket the first time they're
+ * switched on. Rail and rivers come from the client's ADM_SOY.gdb since
+ * 30 Sep 2026 (rivers are NHD river-area polygons); roads from USA_diaz. */
 type LineLayer = "rail" | "rivers" | "roads";
 type LayerKey = "fields" | "elevators" | "flagged" | LineLayer;
 const LINE_LAYERS: LineLayer[] = ["roads", "rivers", "rail"];
@@ -290,6 +291,13 @@ export function SoyMap({
               ["match", ["get", "class"], [1, 2], 3, 1.4],
             ] as never,
           },
+        });
+        map.addLayer({
+          id: "rivers-fill",
+          type: "fill",
+          source: "rivers",
+          layout: { visibility: "none" },
+          paint: { "fill-color": SWATCH.rivers, "fill-opacity": 0.75 },
         });
         map.addLayer({
           id: "rivers",
@@ -534,7 +542,7 @@ export function SoyMap({
     map.setLayoutProperty("elevators", "visibility", vis(on.elevators));
     map.setLayoutProperty("flagged", "visibility", vis(on.flagged));
     map.setLayoutProperty("roads", "visibility", vis(on.roads));
-    map.setLayoutProperty("rivers", "visibility", vis(on.rivers));
+    for (const id of ["rivers", "rivers-fill"]) map.setLayoutProperty(id, "visibility", vis(on.rivers));
     for (const id of ["rail", "rail-casing"]) map.setLayoutProperty(id, "visibility", vis(on.rail));
     for (const l of LINE_LAYERS) {
       if (!on[l] || lineState[l] !== "idle") continue;

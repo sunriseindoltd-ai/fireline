@@ -117,7 +117,7 @@ function SiteHeader({ signedIn, product }: { signedIn: boolean; product?: Produc
                 <path d="M4 8h16M4 16h16" strokeLinecap="round" />
               )}
             </svg>
-            <span className="sr-only">Menu</span>
+            <span className="sr-only">{s.menuToggle}</span>
           </button>
         </div>
       </div>

@@ -16,20 +16,26 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as KontakRouteImport } from './routes/kontak'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MethodRouteImport } from './routes/method'
+import { Route as MethodologyRouteImport } from './routes/methodology'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
 import { Route as PalmRouteImport } from './routes/palm'
 import { Route as SoyRouteImport } from './routes/soy'
 import { Route as TentangRouteImport } from './routes/tentang'
+import { Route as AccessRequestsIndexRouteImport } from './routes/access-requests/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppPortfolioRouteImport } from './routes/app/portfolio'
+import { Route as AppRequestsRouteImport } from './routes/app/requests'
+import { Route as ContactRequestIndexRouteImport } from './routes/contact-request/index'
 import { Route as CoverageIndexRouteImport } from './routes/coverage/index'
 import { Route as DataSplatRouteImport } from './routes/data/$'
 import { Route as DocsSplatRouteImport } from './routes/docs/$'
 import { Route as EudrSummaryIndexRouteImport } from './routes/eudr-summary/index'
 import { Route as MarketSunrisePriceRouteImport } from './routes/market/sunrise-price'
+import { Route as VillageFlowsIndexRouteImport } from './routes/village-flows/index'
 import { Route as AppGroupIndexRouteImport } from './routes/app/$group/index'
 import { Route as AppGroupDataRouteImport } from './routes/app/$group/data'
 import { Route as AppGroupDocsRouteImport } from './routes/app/$group/docs'
+import { Route as AppGroupDocumentsRouteImport } from './routes/app/$group/documents'
 import { Route as AppGroupMonitoringRouteImport } from './routes/app/$group/monitoring'
 import { Route as AppGroupPriceRouteImport } from './routes/app/$group/price'
 
@@ -68,6 +74,11 @@ const MethodRoute = MethodRouteImport.update({
   path: '/method',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MethodologyRoute = MethodologyRouteImport.update({
+  id: '/methodology',
+  path: '/methodology',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MetodologiRoute = MetodologiRouteImport.update({
   id: '/metodologi',
   path: '/metodologi',
@@ -88,6 +99,11 @@ const TentangRoute = TentangRouteImport.update({
   path: '/tentang',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccessRequestsIndexRoute = AccessRequestsIndexRouteImport.update({
+  id: '/access-requests/',
+  path: '/access-requests/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -97,6 +113,16 @@ const AppPortfolioRoute = AppPortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRequestsRoute = AppRequestsRouteImport.update({
+  id: '/requests',
+  path: '/requests',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const ContactRequestIndexRoute = ContactRequestIndexRouteImport.update({
+  id: '/contact-request/',
+  path: '/contact-request/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const CoverageIndexRoute = CoverageIndexRouteImport.update({
   id: '/coverage/',
@@ -123,6 +149,11 @@ const MarketSunrisePriceRoute = MarketSunrisePriceRouteImport.update({
   path: '/market/sunrise-price',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VillageFlowsIndexRoute = VillageFlowsIndexRouteImport.update({
+  id: '/village-flows/',
+  path: '/village-flows/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppGroupIndexRoute = AppGroupIndexRouteImport.update({
   id: '/$group/',
   path: '/$group/',
@@ -136,6 +167,11 @@ const AppGroupDataRoute = AppGroupDataRouteImport.update({
 const AppGroupDocsRoute = AppGroupDocsRouteImport.update({
   id: '/$group/docs',
   path: '/$group/docs',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppGroupDocumentsRoute = AppGroupDocumentsRouteImport.update({
+  id: '/$group/documents',
+  path: '/$group/documents',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppGroupMonitoringRoute = AppGroupMonitoringRouteImport.update({
@@ -157,19 +193,25 @@ export interface FileRoutesByFullPath {
   '/kontak': typeof KontakRoute
   '/login': typeof LoginRoute
   '/method': typeof MethodRoute
+  '/methodology': typeof MethodologyRoute
   '/metodologi': typeof MetodologiRoute
   '/palm': typeof PalmRoute
   '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/requests': typeof AppRequestsRoute
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
+  '/access-requests/': typeof AccessRequestsIndexRoute
   '/app/': typeof AppIndexRoute
+  '/contact-request/': typeof ContactRequestIndexRoute
   '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
+  '/village-flows/': typeof VillageFlowsIndexRoute
   '/app/$group/data': typeof AppGroupDataRoute
   '/app/$group/docs': typeof AppGroupDocsRoute
+  '/app/$group/documents': typeof AppGroupDocumentsRoute
   '/app/$group/monitoring': typeof AppGroupMonitoringRoute
   '/app/$group/price': typeof AppGroupPriceRoute
   '/app/$group/': typeof AppGroupIndexRoute
@@ -181,19 +223,25 @@ export interface FileRoutesByTo {
   '/kontak': typeof KontakRoute
   '/login': typeof LoginRoute
   '/method': typeof MethodRoute
+  '/methodology': typeof MethodologyRoute
   '/metodologi': typeof MetodologiRoute
   '/palm': typeof PalmRoute
   '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/requests': typeof AppRequestsRoute
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
+  '/access-requests': typeof AccessRequestsIndexRoute
   '/app': typeof AppIndexRoute
+  '/contact-request': typeof ContactRequestIndexRoute
   '/coverage': typeof CoverageIndexRoute
   '/eudr-summary': typeof EudrSummaryIndexRoute
+  '/village-flows': typeof VillageFlowsIndexRoute
   '/app/$group/data': typeof AppGroupDataRoute
   '/app/$group/docs': typeof AppGroupDocsRoute
+  '/app/$group/documents': typeof AppGroupDocumentsRoute
   '/app/$group/monitoring': typeof AppGroupMonitoringRoute
   '/app/$group/price': typeof AppGroupPriceRoute
   '/app/$group': typeof AppGroupIndexRoute
@@ -207,19 +255,25 @@ export interface FileRoutesById {
   '/kontak': typeof KontakRoute
   '/login': typeof LoginRoute
   '/method': typeof MethodRoute
+  '/methodology': typeof MethodologyRoute
   '/metodologi': typeof MetodologiRoute
   '/palm': typeof PalmRoute
   '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/requests': typeof AppRequestsRoute
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
+  '/access-requests/': typeof AccessRequestsIndexRoute
   '/app/': typeof AppIndexRoute
+  '/contact-request/': typeof ContactRequestIndexRoute
   '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
+  '/village-flows/': typeof VillageFlowsIndexRoute
   '/app/$group/data': typeof AppGroupDataRoute
   '/app/$group/docs': typeof AppGroupDocsRoute
+  '/app/$group/documents': typeof AppGroupDocumentsRoute
   '/app/$group/monitoring': typeof AppGroupMonitoringRoute
   '/app/$group/price': typeof AppGroupPriceRoute
   '/app/$group/': typeof AppGroupIndexRoute
@@ -234,19 +288,25 @@ export interface FileRouteTypes {
     | '/kontak'
     | '/login'
     | '/method'
+    | '/methodology'
     | '/metodologi'
     | '/palm'
     | '/soy'
     | '/tentang'
     | '/app/portfolio'
+    | '/app/requests'
     | '/data/$'
     | '/docs/$'
     | '/market/sunrise-price'
+    | '/access-requests/'
     | '/app/'
+    | '/contact-request/'
     | '/coverage/'
     | '/eudr-summary/'
+    | '/village-flows/'
     | '/app/$group/data'
     | '/app/$group/docs'
+    | '/app/$group/documents'
     | '/app/$group/monitoring'
     | '/app/$group/price'
     | '/app/$group/'
@@ -258,19 +318,25 @@ export interface FileRouteTypes {
     | '/kontak'
     | '/login'
     | '/method'
+    | '/methodology'
     | '/metodologi'
     | '/palm'
     | '/soy'
     | '/tentang'
     | '/app/portfolio'
+    | '/app/requests'
     | '/data/$'
     | '/docs/$'
     | '/market/sunrise-price'
+    | '/access-requests'
     | '/app'
+    | '/contact-request'
     | '/coverage'
     | '/eudr-summary'
+    | '/village-flows'
     | '/app/$group/data'
     | '/app/$group/docs'
+    | '/app/$group/documents'
     | '/app/$group/monitoring'
     | '/app/$group/price'
     | '/app/$group'
@@ -283,19 +349,25 @@ export interface FileRouteTypes {
     | '/kontak'
     | '/login'
     | '/method'
+    | '/methodology'
     | '/metodologi'
     | '/palm'
     | '/soy'
     | '/tentang'
     | '/app/portfolio'
+    | '/app/requests'
     | '/data/$'
     | '/docs/$'
     | '/market/sunrise-price'
+    | '/access-requests/'
     | '/app/'
+    | '/contact-request/'
     | '/coverage/'
     | '/eudr-summary/'
+    | '/village-flows/'
     | '/app/$group/data'
     | '/app/$group/docs'
+    | '/app/$group/documents'
     | '/app/$group/monitoring'
     | '/app/$group/price'
     | '/app/$group/'
@@ -309,6 +381,7 @@ export interface RootRouteChildren {
   KontakRoute: typeof KontakRoute
   LoginRoute: typeof LoginRoute
   MethodRoute: typeof MethodRoute
+  MethodologyRoute: typeof MethodologyRoute
   MetodologiRoute: typeof MetodologiRoute
   PalmRoute: typeof PalmRoute
   SoyRoute: typeof SoyRoute
@@ -316,8 +389,11 @@ export interface RootRouteChildren {
   DataSplatRoute: typeof DataSplatRoute
   DocsSplatRoute: typeof DocsSplatRoute
   MarketSunrisePriceRoute: typeof MarketSunrisePriceRoute
+  AccessRequestsIndexRoute: typeof AccessRequestsIndexRoute
+  ContactRequestIndexRoute: typeof ContactRequestIndexRoute
   CoverageIndexRoute: typeof CoverageIndexRoute
   EudrSummaryIndexRoute: typeof EudrSummaryIndexRoute
+  VillageFlowsIndexRoute: typeof VillageFlowsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -371,6 +447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MethodRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/methodology': {
+      id: '/methodology'
+      path: '/methodology'
+      fullPath: '/methodology'
+      preLoaderRoute: typeof MethodologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/metodologi': {
       id: '/metodologi'
       path: '/metodologi'
@@ -399,6 +482,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TentangRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/access-requests/': {
+      id: '/access-requests/'
+      path: '/access-requests'
+      fullPath: '/access-requests/'
+      preLoaderRoute: typeof AccessRequestsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/': {
       id: '/app/'
       path: '/'
@@ -412,6 +502,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/portfolio'
       preLoaderRoute: typeof AppPortfolioRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/app/requests': {
+      id: '/app/requests'
+      path: '/requests'
+      fullPath: '/app/requests'
+      preLoaderRoute: typeof AppRequestsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/contact-request/': {
+      id: '/contact-request/'
+      path: '/contact-request'
+      fullPath: '/contact-request/'
+      preLoaderRoute: typeof ContactRequestIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/coverage/': {
       id: '/coverage/'
@@ -448,6 +552,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketSunrisePriceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/village-flows/': {
+      id: '/village-flows/'
+      path: '/village-flows'
+      fullPath: '/village-flows/'
+      preLoaderRoute: typeof VillageFlowsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/$group/': {
       id: '/app/$group/'
       path: '/$group'
@@ -469,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppGroupDocsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/$group/documents': {
+      id: '/app/$group/documents'
+      path: '/$group/documents'
+      fullPath: '/app/$group/documents'
+      preLoaderRoute: typeof AppGroupDocumentsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/$group/monitoring': {
       id: '/app/$group/monitoring'
       path: '/$group/monitoring'
@@ -488,9 +606,11 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteRouteChildren {
   AppPortfolioRoute: typeof AppPortfolioRoute
+  AppRequestsRoute: typeof AppRequestsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppGroupDataRoute: typeof AppGroupDataRoute
   AppGroupDocsRoute: typeof AppGroupDocsRoute
+  AppGroupDocumentsRoute: typeof AppGroupDocumentsRoute
   AppGroupMonitoringRoute: typeof AppGroupMonitoringRoute
   AppGroupPriceRoute: typeof AppGroupPriceRoute
   AppGroupIndexRoute: typeof AppGroupIndexRoute
@@ -498,9 +618,11 @@ interface AppRouteRouteChildren {
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppPortfolioRoute: AppPortfolioRoute,
+  AppRequestsRoute: AppRequestsRoute,
   AppIndexRoute: AppIndexRoute,
   AppGroupDataRoute: AppGroupDataRoute,
   AppGroupDocsRoute: AppGroupDocsRoute,
+  AppGroupDocumentsRoute: AppGroupDocumentsRoute,
   AppGroupMonitoringRoute: AppGroupMonitoringRoute,
   AppGroupPriceRoute: AppGroupPriceRoute,
   AppGroupIndexRoute: AppGroupIndexRoute,
@@ -518,6 +640,7 @@ const rootRouteChildren: RootRouteChildren = {
   KontakRoute: KontakRoute,
   LoginRoute: LoginRoute,
   MethodRoute: MethodRoute,
+  MethodologyRoute: MethodologyRoute,
   MetodologiRoute: MetodologiRoute,
   PalmRoute: PalmRoute,
   SoyRoute: SoyRoute,
@@ -525,8 +648,11 @@ const rootRouteChildren: RootRouteChildren = {
   DataSplatRoute: DataSplatRoute,
   DocsSplatRoute: DocsSplatRoute,
   MarketSunrisePriceRoute: MarketSunrisePriceRoute,
+  AccessRequestsIndexRoute: AccessRequestsIndexRoute,
+  ContactRequestIndexRoute: ContactRequestIndexRoute,
   CoverageIndexRoute: CoverageIndexRoute,
   EudrSummaryIndexRoute: EudrSummaryIndexRoute,
+  VillageFlowsIndexRoute: VillageFlowsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

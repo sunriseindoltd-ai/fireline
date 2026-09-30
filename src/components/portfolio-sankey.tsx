@@ -5,6 +5,13 @@ import { useI18n } from "@/lib/i18n";
 import { groupLabel, type Chain } from "@/lib/ledger";
 
 type Mode = "trace" | "coverage";
+
+/** Shortens a label to what fits in `px` at the chart's 12px type; the
+ * node's tooltip and <title> keep the full name. */
+function fitLabel(label: string, px: number) {
+  const max = Math.max(8, Math.floor(px / 6.4));
+  return label.length > max ? `${label.slice(0, max - 1)}…` : label;
+}
 type Kind = "group" | "refinery" | "end";
 type N = { id: string; label: string; kind: Kind; chainId: string | null; tone?: string };
 type L = { source: string; target: string; value: number };
@@ -103,6 +110,8 @@ export function PortfolioSankey({
       ]);
     return {
       height,
+      // Room between columns, for fitting labels (feedback 3, A-06).
+      colGap: (width - 300) / 2,
       ...layout({ nodes: [...nodes.values()].map((d) => ({ ...d })), links: [...links.values()].map((d) => ({ ...d })) }),
     };
   }, [chains, coveredIds, mode, endMeta, width]);
@@ -207,7 +216,12 @@ export function PortfolioSankey({
                 className={`sankey-node ${clickable ? "clickable" : ""}`}
                 opacity={on ? 1 : 0.3}
                 onPointerEnter={() => setHover(n.id)}
-                onPointerMove={(e) => showTip(e, `${n.label}: ${formatCount(n.value, lang)} ${t.mills}`)}
+                onPointerMove={(e) =>
+                  showTip(
+                    e,
+                    `${n.label}: ${formatCount(n.value, lang)} ${t.mills}${n.id === "end:unknown" ? ` — ${t.sankeyUnknownNote}` : ""}`,
+                  )
+                }
                 onPointerLeave={() => {
                   setHover(null);
                   setTip(null);
@@ -227,6 +241,7 @@ export function PortfolioSankey({
                   }
                 }}
               >
+                <title>{`${n.label}: ${formatCount(n.value, lang)} ${t.mills}`}</title>
                 <rect x={n.x0} y={n.y0} width={n.x1 - n.x0} height={Math.max(1, n.y1 - n.y0)} rx={2} fill={fillColor} />
                 <text
                   x={labelLeft ? n.x0 - 8 : n.kind === "end" ? n.x1 + 8 : n.x1 + 6}
@@ -235,7 +250,7 @@ export function PortfolioSankey({
                   textAnchor={labelLeft ? "end" : "start"}
                   className={`sankey-label ${n.kind}`}
                 >
-                  {n.label.length > 26 ? `${n.label.slice(0, 25)}…` : n.label}
+                  {fitLabel(n.label, n.kind === "refinery" ? graph.colGap - 24 : 138)}
                   {n.kind !== "refinery" ? <tspan className="sankey-count"> {formatCount(n.value, lang)}</tspan> : null}
                 </text>
               </g>
@@ -248,6 +263,9 @@ export function PortfolioSankey({
           </div>
         ) : null}
       </div>
+      {mode === "trace" && graph.nodes.some((n) => n.id === "end:unknown") ? (
+        <p className="chart-note flow-footnote">{t.sankeyUnknownNote}</p>
+      ) : null}
     </section>
   );
 }

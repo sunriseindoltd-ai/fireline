@@ -1,4 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { ogMeta } from "@/lib/og";
+import { BrandMark } from "@/components/brand-mark";
 import { SiteLayout } from "@/components/site/site-chrome";
 import { brandCopy } from "@/lib/brand-copy";
 import { COMING_SOON, PRODUCTS } from "@/lib/brand";
@@ -21,6 +23,12 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: brandCopy.en.uTitleMeta },
       { name: "description", content: brandCopy.en.uDescMeta },
+      ...ogMeta({
+        title: brandCopy.en.uTitleMeta,
+        description: brandCopy.en.uDescMeta,
+        path: "/",
+        image: "trace",
+      }),
     ],
   }),
   component: UmbrellaHome,
@@ -60,6 +68,7 @@ function UmbrellaHome() {
       body: b.palmBody,
       img: "/img/palm-card-900.jpg",
       alt: b.palmCardAlt,
+      shotAlt: b.palmShotAlt,
     },
     {
       ...PRODUCTS.soy,
@@ -67,6 +76,7 @@ function UmbrellaHome() {
       body: b.soyBody,
       img: "/img/soy/elevator-900.jpg",
       alt: b.soyCardAlt,
+      shotAlt: b.soyShotAlt,
     },
   ];
 
@@ -92,6 +102,30 @@ function UmbrellaHome() {
             </Link>
           </div>
         </div>
+        {/* The products themselves, one click from the first screen
+            (feedback 3, A-07) — sample-data stills, as on /palm and /soy. */}
+        <figure className="umbrella-shots">
+          <div className="umbrella-shots-row">
+            {products.map((p) => (
+              <Link key={p.id} to={p.path} className="umbrella-shot" data-product={p.id}>
+                <img
+                  src={`/img/hero/${p.id}-${lang}.jpg`}
+                  alt={p.shotAlt}
+                  width={1280}
+                  height={800}
+                  fetchPriority="high"
+                  decoding="async"
+                />
+                <span className="umbrella-shot-chip">
+                  <BrandMark product={p.id} size={16} />
+                  {p.name}
+                  <span aria-hidden="true">›</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+          <figcaption>{b.heroShotsNote}</figcaption>
+        </figure>
       </section>
 
       <section className="section" id="products">

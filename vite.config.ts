@@ -14,6 +14,9 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    // Raw GIS drops and image sources aren't app code; watching them crashed
+    // the dev server on a locked file (a zip being extracted, EBUSY).
+    watch: { ignored: ["**/Data Storage/**", "**/picture assets/**", "**/.dev-inbox/**"] },
   },
   preview: {
     host: "127.0.0.1",

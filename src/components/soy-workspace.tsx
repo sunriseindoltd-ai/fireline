@@ -19,6 +19,10 @@ import type { GateRole } from "@/lib/gate";
 import { gateLogout, gateSwitchTenant } from "@/lib/gate-actions";
 import { useI18n } from "@/lib/i18n";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/soy-copy";
+import { SoyCorridorView, SoySupplyView } from "@/components/soy-supply";
+import type { SupplyData } from "@/lib/soy-supply";
+import { soySupplyCopy } from "@/lib/soy-supply-copy";
+import { usePersistentState } from "@/lib/use-persistent";
 import { TENANTS, type Tenant } from "@/lib/tenants";
 
 type SoyStats = {
@@ -58,17 +62,28 @@ type FieldsState = {
   fc: SoyFieldCollection | null;
 };
 
+type SoyView = "supply" | "corridor" | "areas";
+
 /**
- * The ADM Soy workspace (tenant `adm-soy`): ADM's US crushing plants, their
- * 40-mile sourcing areas (Decatur West + East share one) and the soybean
- * fields inside, plus ADM's grain elevators and flagged field points —
- * statistics and map only for now, no EUDR analysis. Data: /data/soy.json
- * (bundled, small), /data/fields/<area>.geojson and /data/layers/*.geojson
- * (the soy R2 bucket), all built by scripts/prepare-adm-soy.py.
+ * The ADM Soy workspace (tenant `adm-soy`), three views:
+ *  - "supply": the Quincy supply chain from the client's ADM_SOY.gdb —
+ *    crushing plant, ADM and third-party elevators with their catchments,
+ *    compliant and non-compliant fields at true size (soy-supply.tsx);
+ *  - "corridor": compliant soybean area near rail and the main river system;
+ *  - "areas": the earlier view — ADM's crushing plants, their 40-mile
+ *    sourcing areas and the 2025 soybean fields inside.
+ * Data: /data/supply.json and /data/soy.json (bundled), fields and layers
+ * from the soy R2 bucket (scripts/prepare-adm-soy-supply.py and
+ * prepare-adm-soy.py).
  */
 export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant }) {
   const { t, lang } = useI18n();
   const sc = soyCopy[lang];
+  const ssc = soySupplyCopy[lang];
+  const [viewStored, setView] = usePersistentState<SoyView>("soytrace.view", "supply");
+  const view: SoyView = viewStored === "corridor" || viewStored === "areas" ? viewStored : "supply";
+  const [supply, setSupply] = useState<SupplyData | null>(null);
+  const [supplyError, setSupplyError] = useState(false);
   const navigate = useNavigate();
   const [data, setData] = useState<SoyData | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -84,6 +99,12 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       )
       .then(setData)
       .catch(() => setLoadError(true));
+    void fetchWithRetry("/data/supply.json")
+      .then((res) =>
+        res.ok ? (res.json() as Promise<SupplyData>) : Promise.reject(new Error(String(res.status))),
+      )
+      .then(setSupply)
+      .catch(() => setSupplyError(true));
   }, []);
 
   const loadFields = useCallback((plant: string | null) => {
@@ -152,6 +173,48 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     </header>
   );
 
+  const viewTabs = (
+    <div className="soy-views seg" role="tablist" aria-label={ssc.viewsLabel}>
+      {(["supply", "corridor", "areas"] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          role="tab"
+          aria-selected={view === v}
+          className={view === v ? "on" : ""}
+          onClick={() => setView(v)}
+        >
+          {v === "supply" ? ssc.viewSupply : v === "corridor" ? ssc.viewCorridor : ssc.viewAreas}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view !== "areas") {
+    return (
+      <div className="app" data-product="soy">
+        {header}
+        <main className="app-main">
+          <div className="page soy-page">
+            {viewTabs}
+            {supply && data ? (
+              view === "supply" ? (
+                <SoySupplyView data={supply} cdlNames={data.cdlNames} c={ssc} sc={sc} lang={lang} />
+              ) : (
+                <SoyCorridorView data={supply} cdlNames={data.cdlNames} c={ssc} sc={sc} lang={lang} />
+              )
+            ) : (
+              <div className="boot">
+                <BrandMark size={32} product="soy" />
+                <span>{supplyError || loadError ? ssc.loadError : t.loading}</span>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (!data) {
     return (
       <div className="app" data-product="soy">
@@ -194,6 +257,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       {header}
       <main className="app-main">
         <div className="page soy-page">
+          {viewTabs}
           <div className="summary-head">
             <div>
               <h1>{area ? area.name : sc.title}</h1>

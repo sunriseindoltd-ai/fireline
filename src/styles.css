@@ -274,6 +274,11 @@
   color: var(--color-muted);
   border: 1px solid transparent;
 }
+.search-hint {
+  margin: -2px 2px 0;
+  color: var(--color-muted);
+  font-size: 12px;
+}
 .search-field:focus-within {
   background: var(--color-surface);
   border-color: var(--color-link);
@@ -1018,6 +1023,9 @@ button.kpi-action:hover {
 .sankey-box path {
   transition: stroke-opacity 0.15s ease;
 }
+.flow-footnote {
+  margin-top: 8px;
+}
 .sankey-tip {
   position: absolute;
   pointer-events: none;
@@ -1754,6 +1762,111 @@ button.kpi-action:hover {
 .dot-status.on {
   background: var(--color-comply);
 }
+/* Access requests inbox (feedback 3, A-15). */
+.requests-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+.requests-head {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-bottom: 20px;
+}
+.requests-head h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+.request-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.request-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1, 0 1px 2px rgb(0 0 0 / 0.06));
+}
+.request-card.closed {
+  opacity: 0.7;
+}
+.request-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.request-top h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.request-top h2 span {
+  font-weight: 400;
+  color: var(--color-fg-2);
+}
+.request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.request-status select {
+  padding: 6px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font: 500 13px var(--font-sans);
+}
+.request-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+.request-facts dt {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.request-facts dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+.request-message {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-2);
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.request-reply {
+  justify-self: start;
+}
+.mill-list-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 2px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+.mill-list-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .back-link {
   justify-self: start;
   display: inline-flex;
@@ -2085,6 +2198,44 @@ button.kpi-action:hover {
   border-color: rgb(255 255 255 / 0.2);
   border-top-color: #fff;
 }
+/* Basemap imagery that won't load (feedback 3, A-01) — sits above the
+   basemap chip so "Switch to …" is next to the regular switcher. */
+.map-tile-notice {
+  position: absolute;
+  left: 12px;
+  bottom: 74px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 10px 12px;
+  background: var(--glass);
+  color: var(--color-fg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: saturate(1.4) blur(14px);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.map-tile-notice-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+.map-tile-notice button {
+  padding: 4px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font: 500 12px var(--font-sans);
+  cursor: pointer;
+}
+.map-tile-notice button:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
 .map-empty {
   position: absolute;
   inset: 0;
@@ -2105,6 +2256,45 @@ button.kpi-action:hover {
 }
 .swatch.round {
   border-radius: 50%;
+}
+/* Canvas key while the Layers card is closed (feedback 3, M-3). */
+.map-mini-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 40px;
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  max-width: 220px;
+  padding: 8px 10px;
+  background: var(--glass);
+  color: var(--color-fg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: saturate(1.4) blur(14px);
+  font-size: 11.5px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.map-mini-legend p {
+  margin: 0;
+  color: var(--color-muted);
+}
+.map-mini-legend ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.map-mini-legend ul + ul {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-line-soft);
+}
+.map-mini-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .map-loading-overlay {
   position: absolute;
@@ -3137,6 +3327,184 @@ button.kpi-action:hover {
 }
 .soy-table td.num {
   white-space: nowrap;
+}
+
+/* ---------- SoyTrace supply chain + rail & river views (soy-supply*.tsx) ---------- */
+.soy-views {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 20px;
+  border-radius: 18px;
+}
+.soy-views button {
+  flex: none;
+  min-height: 34px;
+  font-weight: 600;
+}
+.supply-scope {
+  margin-bottom: 4px;
+}
+.supply-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: -6px 0 16px;
+  font-size: 13.5px;
+  color: var(--color-fg-2);
+}
+.supply-map-bar,
+.supply-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.supply-map-bar {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.supply-controls {
+  margin: 0 0 16px;
+}
+.supply-controls .seg + span {
+  margin-left: 8px;
+}
+.supply-map .soy-map-legend {
+  width: 250px;
+}
+.soy-legend-item .sq {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.soy-legend-item .dot.adm {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #1d1d1f, 0 0 0 1px var(--color-line);
+}
+.soy-pop-btn {
+  margin-top: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font: 500 12px var(--font-sans);
+  cursor: pointer;
+}
+.soy-pop-btn:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+.soy-page .data-table tbody tr[tabindex] {
+  cursor: pointer;
+}
+.soy-page .data-table tbody tr.on td {
+  background: var(--color-brand-soft);
+}
+.soy-cell-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.soy-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-bg-2);
+  color: var(--color-muted);
+  font-size: 11px;
+  vertical-align: 1px;
+}
+.soy-table-wrap.short {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.soy-table-wrap.tall {
+  max-height: 420px;
+  overflow-y: auto;
+}
+.supply-tp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+.supply-tp-tools .search-field {
+  flex: 1 1 220px;
+}
+.supply-tp-tools .search-field input {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  font: 400 14px var(--font-sans);
+  outline: none;
+}
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-fg-2);
+}
+.scale-table td:first-child {
+  min-width: 180px;
+}
+.scale-bar {
+  display: block;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: #3b8757;
+  overflow: hidden;
+}
+.scale-bar i {
+  display: block;
+  height: 100%;
+  margin-left: auto;
+  background: #c9695e;
+}
+.scale-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.scale-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.scale-legend i + i,
+.scale-legend i:not(:first-child) {
+  margin-left: 10px;
+}
+.supply-notes ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-fg-2);
+}
+.supply-notes {
+  margin-bottom: 12px;
+}
+.supply-wide {
+  margin-bottom: 12px;
+}
+.supply-body {
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 /* ---------- Per-product brand colour (brand.ts) ----------

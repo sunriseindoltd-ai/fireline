@@ -82,6 +82,49 @@ for (const [from, to] of Object.entries(COLOR_MAP)) {
   html = html.replace(new RegExp(from, "gi"), to);
 }
 html = html.replace(/<title>[^<]*<\/title>/, "<title>Palm Oil Price · PalmTrace</title>");
+html = labelDates(html);
+
+/**
+ * The page carries two different periods (feedback 3, A-03): the weekly
+ * price (header, KPIs, snapshot table — provinces that already set this
+ * week's price) and the 22-province ranking, which uses Disbun's last
+ * consolidated release and lags by weeks. The source said "Ranking Sep-II"
+ * in the header and put the older release date in a banner above the
+ * snapshot table it doesn't describe. Name each period where it applies.
+ * Best effort: when the source changes wording, warn and leave it as is,
+ * so the weekly refresh never fails on labels alone.
+ */
+function labelDates(page) {
+  const warn = (what) => console.warn(`[build-sunrise-price] label fix skipped: ${what} not found`);
+  const hero = page.match(/(<div class="period"><span class="d"><\/span><span>)Ranking ([^·<]+?) · ([^·<]+?) · (diperbarui [^<]+)(<\/span><\/div>)/);
+  const release = page.match(/<div class="lbanner">Ranking 22 provinsi di bawah = periode <b>([^<]+)<\/b>[^<]*<\/div>/);
+  const latest = page.match(/var LATEST=(\[[\s\S]*?\]);/);
+  if (!hero) warn("header period");
+  if (!release) warn("22-province release banner");
+  if (!hero || !release) return page;
+  const [, open, week, range, updated, close] = hero;
+  const releasePeriod = release[1];
+  let out = page.replace(
+    hero[0],
+    `${open}Harga pekan ${week.trim()} · ${range.trim()} · ${updated.trim()}${close}` +
+      `\n  <div class="period" style="display:flex;margin-top:6px"><span class="d" style="background:var(--faint)"></span><span>Ranking 22 provinsi: rilis konsolidasi Disbun periode ${releasePeriod}</span></div>`,
+  );
+  let n = null;
+  try {
+    n = latest ? JSON.parse(latest[1]).length : null;
+  } catch {
+    /* leave the count out */
+  }
+  out = out.replace(
+    release[0],
+    `<div class="lbanner">${n ? `${n} provinsi` : "Provinsi"} yang sudah menetapkan harga pekan ini (periode per baris). ` +
+      `Ranking lengkap 22 provinsi di bagian berikutnya memakai rilis konsolidasi Disbun terakhir, periode <b>${releasePeriod}</b>.</div>`,
+  );
+  const boardNote = /(<div class="note" id="boardNote">)([^<]*)(<\/div>)/;
+  if (boardNote.test(out)) out = out.replace(boardNote, `$1Rilis konsolidasi Disbun · periode ${releasePeriod} · $2$3`);
+  else warn("ranking note");
+  return out;
+}
 
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, html);

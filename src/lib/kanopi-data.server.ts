@@ -307,7 +307,11 @@ export async function serveKanopiData(request: Request): Promise<Response> {
     if (!isSoyTenant(tenant) || !rel.endsWith(".geojson") || /\.part\d+\.geojson$/i.test(rel)) {
       return new Response("Not found", { status: 404 });
     }
-    const result = await loadPlotFeatureCollection(stored, r2Soy, rel);
+    // Supply-chain files (fields/cells/*, fields/noncomply, layers/*) are
+    // single objects; only the per-area field files of the older view come
+    // in parts — skip the part probe (an extra R2 request) for the rest.
+    const single = rel.startsWith("fields/cells/") || rel === "fields/noncomply.geojson" || rel.startsWith("layers/");
+    const result = single ? await loadPlotRel(stored, r2Soy, rel) : await loadPlotFeatureCollection(stored, r2Soy, rel);
     if (!result.ok) {
       return new Response("Upstream storage error", { status: result.reason === "not-found" ? 404 : 502 });
     }

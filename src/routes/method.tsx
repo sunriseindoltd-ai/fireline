@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ogMeta } from "@/lib/og";
 import { SiteLayout } from "@/components/site/site-chrome";
 import { JRC_LAYER } from "@/lib/data-meta";
 import { useI18n } from "@/lib/i18n";
@@ -18,6 +19,13 @@ export const Route = createFileRoute("/method")({
         content:
           "How Earthline tests palm supply chains for EUDR: a binary plot verdict (deforestation-free and legal), village risk, mitigation categories A–F, baselines, alert validation and geometry rules.",
       },
+      ...ogMeta({
+        title: "Methodology · PalmTrace by Earthline",
+        description:
+          "How Earthline tests palm supply chains for EUDR: a binary plot verdict (deforestation-free and legal), village risk, mitigation categories A–F, baselines, alert validation and geometry rules.",
+        path: "/method",
+        image: "palm",
+      }),
     ],
   }),
   component: MethodPage,

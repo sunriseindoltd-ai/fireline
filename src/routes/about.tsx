@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ogMeta } from "@/lib/og";
 import { SiteLayout } from "@/components/site/site-chrome";
 import { useI18n } from "@/lib/i18n";
 import { EARTHLINE } from "@/lib/site-copy";
@@ -16,6 +17,13 @@ export const Route = createFileRoute("/about")({
         name: "description",
         content: "Why Earthline built PalmTrace, who operates it, and how access to the workspace is granted.",
       },
+      ...ogMeta({
+        title: "About · PalmTrace by Earthline",
+        description:
+          "Why Earthline built PalmTrace, who operates it, and how access to the workspace is granted.",
+        path: "/about",
+        image: "palm",
+      }),
     ],
   }),
   component: AboutPage,

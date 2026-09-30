@@ -20,6 +20,11 @@
  *
  * Re-run this whenever scripts/prepare-plots.mjs output changes.
  *
+ * Also writes `village-stats.json` beside it: each mill's plot area per
+ * village, for the group Summary's Village → Mill → Refinery → Port flow
+ * (feedback 3, A-06). Kept out of eudr-stats.json — it's ~20k rows and only
+ * that one chart reads it.
+ *
  * Usage: node scripts/prepare-eudr-stats.mjs
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -133,6 +138,23 @@ function accumulate(stats, p, isBns) {
   }
 }
 
+// A village is named by its name + sub-district + district where the plot
+// carries them — the ID columns follow different schemes per delivery (BPS
+// codes, Permata's "ID-AC02-…"), so the same village would otherwise split
+// in two when a group mixes deliveries. The ID is only the fallback.
+function text(v) {
+  const s = String(v ?? "").trim();
+  return s && s !== "null" ? s : "";
+}
+function villageOf(p) {
+  const name = text(p.Village) || text(p.Village_Admin);
+  const sub = text(p.SubDistric) || text(p.SubDistrict);
+  const district = text(p.District);
+  const id = (text(p.village_id_bps) || text(p.ID_BPS_2020) || text(p.ID_Village) || text(p.ID)).replace(/\.0$/, "");
+  if (name) return { key: [name, sub, district].map((x) => x.toLowerCase()).join("|"), name, district, id };
+  return id ? { key: `id:${id}`, name: "", district, id } : null;
+}
+
 async function main() {
   // `--tenant brc` builds another client's stats from its own plot folder
   // (private-data/tenants/<id>/); without it, ADM's at the root as before.
@@ -160,23 +182,54 @@ async function main() {
   }
 
   const out = {};
+  const villageNames = {};
+  const villageMills = {};
+  // id → named key, learnt from plots that carry both; a plot with only the
+  // id is folded into that village afterwards.
+  const idToKey = new Map();
   for (const [millId, millFiles] of filesByMillId) {
     const stats = emptyStats();
     const isBns = millId.includes("__BNS__");
+    const byVillage = new Map();
     for (const file of millFiles) {
       const fc = JSON.parse(await readFile(path.join(plotsDir, file), "utf8"));
       for (const feature of fc.features ?? []) {
-        accumulate(stats, feature.properties ?? {}, isBns);
+        const p = feature.properties ?? {};
+        accumulate(stats, p, isBns);
+        const v = villageOf(p);
+        const key = v ? v.key : "";
+        byVillage.set(key, (byVillage.get(key) ?? 0) + hectarage(p));
+        if (v && !villageNames[key]) villageNames[key] = [v.name || `#${v.id}`, v.district];
+        if (v?.name && v.id && !idToKey.has(v.id)) idToKey.set(v.id, v.key);
       }
     }
     out[millId] = stats;
+    villageMills[millId] = byVillage;
   }
+  for (const [millId, byVillage] of Object.entries(villageMills)) {
+    const merged = new Map();
+    for (const [k, ha] of byVillage) {
+      const named = k.startsWith("id:") ? idToKey.get(k.slice(3)) : undefined;
+      merged.set(named ?? k, (merged.get(named ?? k) ?? 0) + ha);
+    }
+    villageMills[millId] = [...merged]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, ha]) => [k, Math.round(ha * 1000) / 1000]);
+  }
+  const used = new Set(Object.values(villageMills).flatMap((rows) => rows.map(([k]) => k)));
+  for (const k of Object.keys(villageNames)) if (!used.has(k)) delete villageNames[k];
 
   const outPath = path.join(tenantDir, "eudr-stats.json");
   const json = JSON.stringify(out);
   await writeFile(outPath, json);
   console.log(
     `[prepare-eudr-stats] ${filesByMillId.size} mill(s) from ${files.length} file(s) -> ${path.relative(ROOT, outPath)} (${(json.length / 1024).toFixed(1)} KB)`,
+  );
+  const vPath = path.join(tenantDir, "village-stats.json");
+  const vJson = JSON.stringify({ names: villageNames, mills: villageMills });
+  await writeFile(vPath, vJson);
+  console.log(
+    `[prepare-eudr-stats] ${Object.keys(villageNames).length} village(s) -> ${path.relative(ROOT, vPath)} (${(vJson.length / 1024).toFixed(1)} KB)`,
   );
 }
 

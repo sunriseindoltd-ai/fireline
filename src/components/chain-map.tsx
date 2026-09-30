@@ -118,6 +118,12 @@ const BASEMAPS: Record<BasemapId, Basemap> = {
 };
 
 const DEFAULT_BASEMAP: BasemapId = "esri";
+// Skeleton: gone this long after the style loads even if imagery is still
+// arriving, and at the latest after TILE_TIMEOUT_MS; by then, no basemap
+// tile at all (or this many failed ones) shows the retry notice.
+const REVEAL_AFTER_LOAD_MS = 2500;
+const TILE_TIMEOUT_MS = 8000;
+const TILE_ERRORS_BEFORE_NOTICE = 4;
 // Esri and Google first — the imagery Earthline's team works on day to day
 // (feedback 2, Doc 2 §3); OSM as the schematic fallback; the dated
 // Sentinel-2 pair last, for before/after-cutoff comparison.
@@ -284,6 +290,12 @@ export type ChainMapLabels = {
 
 type Props = {
   millGeom: Fc | null;
+  /** Every mill in the view, with or without coordinates — the loader says
+   * "n of total" when some can't be placed (feedback 3, A-01). */
+  millTotal?: number;
+  /** Mills matching the side list's search (feedback 3, M-1): the map dims
+   * the rest and zooms to these. Null when there's no search. */
+  matchMillIds?: string[] | null;
   areas: Fc | null;
   plots: Fc | null;
   /** JRC forest cover — null until first switched on (it's ~20 MB). */
@@ -377,6 +389,8 @@ function mapLabels(t: Copy): ChainMapLabels {
 // still read on top of dark canopy imagery — every outline also gets a dark
 // halo underneath. Mirrors the data tokens in styles.css.
 const TRACE_COLORS = { village: "#a9d6c3", buffer: "#e6cf9a", unknown: "#c9ccd1" };
+// Mill points with no traceability class (millColorExpression's fallback).
+const MILL_UNKNOWN_COLOR = "#e8eef4";
 const COMPLY_COLORS = { yes: "#9ed7b1", no: "#f0a197" };
 const RISK_COLORS = { low: "#a9d6c3", medium: "#ecc98a", high: "#f0a197" };
 const MIT_COLORS: Record<string, string> = {
@@ -461,9 +475,9 @@ function millColorExpression(distinctRefineries: string[]): any {
   if (distinctRefineries.length > 1) {
     const stops: unknown[] = [];
     distinctRefineries.forEach((r) => stops.push(r, refineryColorFor(r, distinctRefineries)));
-    return ["match", ["get", "_refinery"], ...stops, "#e8eef4"];
+    return ["match", ["get", "_refinery"], ...stops, MILL_UNKNOWN_COLOR];
   }
-  return ["match", ["get", "_trace"], "village", TRACE_COLORS.village, "buffer", TRACE_COLORS.buffer, "#e8eef4"];
+  return ["match", ["get", "_trace"], "village", TRACE_COLORS.village, "buffer", TRACE_COLORS.buffer, MILL_UNKNOWN_COLOR];
 }
 
 type ColorBy = "trace" | "comply" | "risk" | "mitigation" | "type";
@@ -788,6 +802,7 @@ function buildPlotDetail(
 type MaplibreGlNamespace = {
   Popup: typeof import("maplibre-gl").Popup;
   Marker: typeof import("maplibre-gl").Marker;
+  LngLatBounds: typeof import("maplibre-gl").LngLatBounds;
 };
 
 /** Flies the map to a plot feature's bounds and selects it (opens/updates
@@ -893,6 +908,8 @@ function pointInGeometry(
 
 export function ChainMap({
   millGeom,
+  millTotal,
+  matchMillIds = null,
   areas,
   plots,
   forest,
@@ -933,6 +950,22 @@ export function ChainMap({
   // layers after the fact (the lazily-fetched JRC layer) key on it.
   const [mapReady, setMapReady] = useState(0);
   const [tilesReady, setTilesReady] = useState(false);
+  // Basemap tiles that error out (or never arrive) used to leave the
+  // skeleton up forever, since it waited for MapLibre's "idle" (feedback 3,
+  // A-01/M-4). Now the skeleton goes on load or after a timeout, and this
+  // flags a basemap that still has nothing to show.
+  const [tileTrouble, setTileTrouble] = useState(false);
+  const tileStatsRef = useRef({ ok: 0, err: 0 });
+  const tileTimerRef = useRef<number | undefined>(undefined);
+  const armTileWatch = () => {
+    tileStatsRef.current = { ok: 0, err: 0 };
+    setTileTrouble(false);
+    window.clearTimeout(tileTimerRef.current);
+    tileTimerRef.current = window.setTimeout(() => {
+      if (tileStatsRef.current.ok === 0) setTileTrouble(true);
+    }, TILE_TIMEOUT_MS);
+  };
+  useEffect(() => () => window.clearTimeout(tileTimerRef.current), []);
 
   const [colorBy, setColorBy] = useState<ColorBy>("comply");
   const colorByRef = useRef(colorBy);
@@ -943,6 +976,10 @@ export function ChainMap({
   const basemap: BasemapId = basemapStored in BASEMAPS ? basemapStored : DEFAULT_BASEMAP;
   const basemapRef = useRef(basemap);
   basemapRef.current = basemap;
+  // The basemap the current map instance is showing — set when the map is
+  // built and on every swap, so a reload doesn't re-add the same tiles (and
+  // reset the tile-trouble watch) for nothing.
+  const appliedBasemapRef = useRef<BasemapId | null>(null);
   const [basemapMenuOpen, setBasemapMenuOpen] = useState(false);
   const [visible, setVisible] = useState({ mills: true, plots: true, areas: true });
   const visibleRef = useRef(visible);
@@ -1026,11 +1063,36 @@ export function ChainMap({
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
       mapRef.current = map as unknown as MapHandle;
+      appliedBasemapRef.current = basemapRef.current;
       // Dev only: lets scripts/capture-showcase.mjs hide canvas-drawn labels
       // (mill names) before taking the public product screenshots.
       if (import.meta.env.DEV) (window as unknown as { __palmtraceMap?: unknown }).__palmtraceMap = map;
-      map.once("idle", () => {
+      const reveal = () => {
         if (!cancelled) setTilesReady(true);
+      };
+      map.once("idle", reveal);
+      // "idle" waits for every tile and glyph request — one hung request kept
+      // the skeleton up for good. Once the style has loaded the data layers
+      // draw regardless of the imagery, so cap the wait.
+      map.once("load", () => window.setTimeout(reveal, REVEAL_AFTER_LOAD_MS));
+      window.setTimeout(reveal, TILE_TIMEOUT_MS);
+      armTileWatch();
+      const isBasemapSource = (id: unknown) => typeof id === "string" && id.startsWith("sat");
+      map.on("data", (e) => {
+        const ev = e as { dataType?: string; sourceId?: string; tile?: unknown };
+        if (ev.dataType !== "source" || !ev.tile || !isBasemapSource(ev.sourceId)) return;
+        tileStatsRef.current.ok += 1;
+        setTileTrouble(false);
+      });
+      map.on("error", (e) => {
+        const ev = e as { sourceId?: string; tile?: unknown };
+        if (!ev.tile || !isBasemapSource(ev.sourceId)) return;
+        const stats = tileStatsRef.current;
+        stats.err += 1;
+        if (stats.ok === 0 && stats.err >= TILE_ERRORS_BEFORE_NOTICE) {
+          setTileTrouble(true);
+          reveal();
+        }
       });
 
       map.on("load", () => {
@@ -1413,6 +1475,32 @@ export function ChainMap({
     if (map.getLayer("plots-selected-line")) map.setFilter("plots-selected-line", filter);
   }, [selectedPlot]);
 
+  // The side list's search drives the map too (feedback 3, M-1): matches
+  // stay bright, the rest fade, and the camera goes to the matches.
+  useEffect(() => {
+    const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
+    const maplibregl = maplibreRef.current;
+    if (!map || !mapReady || !maplibregl || !map.getLayer("mills")) return;
+    const dim = (on: number, off: number) =>
+      matchMillIds ? ["case", ["in", ["get", "_id"], ["literal", matchMillIds]], on, off] : on;
+    map.setPaintProperty("mills", "circle-opacity", dim(1, 0.25));
+    map.setPaintProperty("mills", "circle-stroke-opacity", dim(1, 0.25));
+    map.setPaintProperty("mills-icon", "icon-opacity", dim(1, 0.25));
+    map.setPaintProperty("mills-label", "text-opacity", dim(1, 0));
+    if (!matchMillIds || !millGeom) return;
+    const ids = new Set(matchMillIds);
+    const hits = millGeom.features.filter((f) => ids.has(String(f.properties?._id)));
+    if (hits.length === 0) return;
+    if (hits.length === 1) {
+      const [lng, lat] = (hits[0]!.geometry as { coordinates: [number, number] }).coordinates;
+      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 10), duration: 700 });
+      return;
+    }
+    const bounds = new maplibregl.LngLatBounds();
+    for (const f of hits) bounds.extend((f.geometry as { coordinates: [number, number] }).coordinates);
+    fitBoundsClamped(map, bounds, { padding: 80, minZoom: 3, maxZoom: 10, duration: 700 });
+  }, [matchMillIds, mapReady, millGeom]);
+
   // Basemap switch — live-swap the raster source's tiles instead of
   // map.setStyle(), which would wipe every custom layer added since load.
   // Keyed on mapReady too, so a stored basemap that differs from the one
@@ -1421,6 +1509,9 @@ export function ChainMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const mlMap = map as unknown as import("maplibre-gl").Map;
+    if (appliedBasemapRef.current === basemap) return;
+    appliedBasemapRef.current = basemap;
+    armTileWatch();
     setBasemap(mlMap, basemap);
     // Picking a dated layer while zoomed out past where it serves tiles
     // would otherwise look like nothing happened (only the Esri underlay
@@ -1449,6 +1540,18 @@ export function ChainMap({
   }, [visible]);
 
   const entries = useMemo(() => legendEntries(colorBy, plots, labels, typeNames), [colorBy, plots, labels, typeNames]);
+  // Key for the traceability colours of mill points and areas (feedback 3,
+  // M-3) — only the classes actually on the map.
+  const traceKey = useMemo(() => {
+    const seen = new Set<string>();
+    for (const f of millGeom?.features ?? []) seen.add(String(f.properties?._trace ?? ""));
+    for (const f of areas?.features ?? []) seen.add(String(f.properties?._kind ?? ""));
+    const out: { label: string; color: string }[] = [];
+    if (seen.has("village")) out.push({ label: labels.legendVillage, color: TRACE_COLORS.village });
+    if (seen.has("buffer")) out.push({ label: labels.legendBuffer, color: TRACE_COLORS.buffer });
+    if ([...seen].some((v) => v !== "village" && v !== "buffer")) out.push({ label: t.traceUnknown, color: MILL_UNKNOWN_COLOR });
+    return out;
+  }, [millGeom, areas, labels, t]);
   const searchResults = useMemo(() => matchingPlots(plots, plotQuery), [plots, plotQuery]);
   const hasPlots = !!plots && plots.features.length > 0;
 
@@ -1514,6 +1617,14 @@ export function ChainMap({
   const bm = BASEMAPS[basemap];
   const datedWindow = bm.year === 2020 ? t.s2Window2020 : bm.year === 2026 ? t.s2Window2026 : "";
   const millCount = millGeom?.features.length ?? 0;
+  const loadingText =
+    millTotal != null && millTotal > millCount
+      ? t.mapLoadingPartial
+          .replace("{n}", formatCount(millCount, lang))
+          .replace("{total}", formatCount(millTotal, lang))
+      : t.mapLoading.replace("{n}", formatCount(millCount, lang));
+  // The one to offer when the current basemap won't load: another provider.
+  const fallbackBasemap: BasemapId = basemap === "esri" ? "google" : "esri";
 
   return (
     <div className="map-wrap">
@@ -1523,7 +1634,28 @@ export function ChainMap({
         // basemap tiles arrive (feedback 2, §4.7).
         <div className="map-skeleton" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
-          <span>{t.mapLoading.replace("{n}", formatCount(millCount, lang))}</span>
+          <span>{loadingText}</span>
+        </div>
+      ) : null}
+      {tilesReady && tileTrouble ? (
+        <div className="map-tile-notice" role="status">
+          <span>{t.mapTilesTrouble}</span>
+          <span className="map-tile-notice-actions">
+            <button
+              type="button"
+              onClick={() => {
+                const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
+                if (!map) return;
+                armTileWatch();
+                setBasemap(map, basemap);
+              }}
+            >
+              {t.mapTilesRetry}
+            </button>
+            <button type="button" onClick={() => setBasemapState(fallbackBasemap)}>
+              {t.mapTilesSwitch.replace("{name}", BASEMAPS[fallbackBasemap].label)}
+            </button>
+          </span>
         </div>
       ) : null}
       <div className="map-panels">
@@ -1701,6 +1833,19 @@ export function ChainMap({
                     {labels.legendAreas}
                   </label>
                 ) : null}
+                {distinctRefineries.length <= 1 && traceKey.length ? (
+                  <>
+                    <p className="map-layers-sub">{t.traceKeyTitle}</p>
+                    <ul className="map-legend-list">
+                      {traceKey.map((k) => (
+                        <li key={k.label} className="map-legend-static">
+                          <i className="swatch round" style={{ background: k.color }} />
+                          <span>{k.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
                 {distinctRefineries.length > 1 ? (
                   <>
                     <p className="map-layers-sub">{labels.millsByRefinery}</p>
@@ -1737,6 +1882,45 @@ export function ChainMap({
           ) : null}
         </div>
       </div>
+
+      {/* Mini key on the canvas while the Layers card is closed (feedback 3,
+          M-3): mill colours, then the plot colours once plots are on. */}
+      {!panelOpen && (visible.mills || (hasPlots && visible.plots)) ? (
+        <div className="map-mini-legend" aria-label={t.legendTitle}>
+          {visible.mills ? (
+            distinctRefineries.length > 1 ? (
+              <ul>
+                {distinctRefineries.slice(0, 6).map((r) => (
+                  <li key={r}>
+                    <i className="swatch round" style={{ background: refineryColorFor(r, distinctRefineries) }} />
+                    {r}
+                  </li>
+                ))}
+                {distinctRefineries.length > 6 ? <li>+{formatCount(distinctRefineries.length - 6, lang)}</li> : null}
+              </ul>
+            ) : (
+              <ul>
+                {traceKey.map((k) => (
+                  <li key={k.label}>
+                    <i className="swatch round" style={{ background: k.color }} />
+                    {k.label}
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
+          {hasPlots && visible.plots ? (
+            <ul>
+              {entries.map((e) => (
+                <li key={e.value}>
+                  <i className="swatch" style={{ background: e.color }} />
+                  {e.label}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Always-visible basemap chip (feedback 2, Doc 2 §4.1) — the switcher
           used to live at the bottom of the Layers panel and vanished

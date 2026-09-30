@@ -27,6 +27,8 @@ dist/
 attachments/
 artifacts/
 screenshots/
+# Contact-form requests saved without R2 (local dev) — personal data.
+.dev-inbox/
 
 # OS/editor cruft.
 .DS_Store

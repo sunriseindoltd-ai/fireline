@@ -157,3 +157,64 @@ export async function getEudrSummary(tenant: Tenant, millIds: string[]): Promise
 export async function millIdsWithStats(tenant: Tenant): Promise<Set<string>> {
   return new Set(Object.keys(await millStats(tenant)));
 }
+
+// Plot area per village per mill (scripts/prepare-eudr-stats.mjs →
+// village-stats.json), for the group Summary's Village → Mill → Refinery →
+// Port flow (feedback 3, A-06). Separate from eudr-stats.json: it's ~20k
+// rows and only that chart reads it.
+type VillageStats = { names: Record<string, [string, string]>; mills: Record<string, [string, number][]> };
+
+const villageLoader = import.meta.glob(
+  ["../../private-data/village-stats.json", "../../private-data/tenants/*/village-stats.json"],
+  { query: "?raw", eager: false, import: "default" },
+) as Record<string, () => Promise<string>>;
+
+const villageCache = new Map<Tenant, VillageStats>();
+async function villageStats(tenant: Tenant): Promise<VillageStats> {
+  const cached = villageCache.get(tenant);
+  if (cached) return cached;
+  const suffix = `/private-data/${tenantPrefix(tenant)}village-stats.json`;
+  const key = Object.keys(villageLoader).find((k) => k.replace(/\\/g, "/").endsWith(suffix));
+  const stats = JSON.parse(key ? await villageLoader[key]!() : '{"names":{},"mills":{}}') as VillageStats;
+  villageCache.set(tenant, stats);
+  return stats;
+}
+
+export type VillageFlows = {
+  /** The largest villages by plot area across the requested mills. */
+  villages: { key: string; name: string; district: string; ha: number }[];
+  /** Area from a village (a key above, "other" for every smaller village,
+   * "none" for plots outside any village) into a mill. */
+  flows: { village: string; millId: string; ha: number }[];
+  /** Distinct villages in the requested mills, before the top-N cut. */
+  villageCount: number;
+};
+
+/** Village → mill plot area for the given mills, top `topN` villages kept by name. */
+export async function getVillageFlows(tenant: Tenant, millIds: string[], topN = 12): Promise<VillageFlows> {
+  const stats = await villageStats(tenant);
+  const ids = [...new Set(millIds)].filter((id) => stats.mills[id]);
+  const totals = new Map<string, number>();
+  for (const id of ids) {
+    for (const [k, ha] of stats.mills[id]!) if (k) totals.set(k, (totals.get(k) ?? 0) + ha);
+  }
+  const top = [...totals].sort((a, b) => b[1] - a[1]).slice(0, topN);
+  const topKeys = new Set(top.map(([k]) => k));
+  const flows: VillageFlows["flows"] = [];
+  for (const id of ids) {
+    const bucket = new Map<string, number>();
+    for (const [k, ha] of stats.mills[id]!) {
+      const v = !k ? "none" : topKeys.has(k) ? k : "other";
+      bucket.set(v, (bucket.get(v) ?? 0) + ha);
+    }
+    for (const [village, ha] of bucket) if (ha > 0) flows.push({ village, millId: id, ha });
+  }
+  return {
+    villages: top.map(([key, ha]) => {
+      const [name, district] = stats.names[key] ?? ["", ""];
+      return { key, name, district, ha };
+    }),
+    flows,
+    villageCount: totals.size,
+  };
+}

@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { ogMeta } from "@/lib/og";
 import { useState } from "react";
 import { getGateSession } from "@/lib/gate-actions";
 import { useI18n } from "@/lib/i18n";
@@ -30,6 +31,13 @@ export const Route = createFileRoute("/palm")({
         content:
           "PalmTrace checks palm supply chains plot by plot against the EUDR cutoff of 31 December 2020, and keeps the evidence in one place your buyers can follow.",
       },
+      ...ogMeta({
+        title: "PalmTrace by Earthline — every plot behind every mill",
+        description:
+          "PalmTrace checks palm supply chains plot by plot against the EUDR cutoff of 31 December 2020, and keeps the evidence in one place your buyers can follow.",
+        path: "/palm",
+        image: "palm",
+      }),
     ],
   }),
   component: Landing,
@@ -179,6 +187,28 @@ function Landing() {
             <h2>{s.showcaseTitle}</h2>
           </header>
           <ProductShowcase />
+
+          {/* Stock photograph (Pexels licence). */}
+          <div className="split">
+            <figure className="split-media">
+              <img
+                src="/img/palm/plantation-1600.jpg"
+                srcSet="/img/palm/plantation-900.jpg 900w, /img/palm/plantation-1600.jpg 1600w"
+                sizes="(max-width: 860px) 100vw, 640px"
+                alt={s.splitAlt}
+                width={1600}
+                height={1067}
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>{s.splitCaption}</figcaption>
+            </figure>
+            <div className="split-copy">
+              <p className="section-eyebrow">{s.splitEyebrow}</p>
+              <h2>{s.splitTitle}</h2>
+              <p>{s.splitBody}</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -472,7 +502,8 @@ function Landing() {
         </div>
       </section>
 
-      <section className="section close alt">
+      {/* Stock photograph (Pexels licence) as a quiet background for the ask. */}
+      <section className="section close close-photo" data-bg="canopy">
         <div className="wrap narrow">
           <h2>{s.closeTitle}</h2>
           <p>{s.closeBody}</p>

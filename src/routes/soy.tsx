@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { ogMeta } from "@/lib/og";
 import { SiteLayout } from "@/components/site/site-chrome";
 import { ProductShowcase } from "@/components/site/product-showcase";
 import { brandCopy } from "@/lib/brand-copy";
@@ -20,6 +21,12 @@ export const Route = createFileRoute("/soy")({
     meta: [
       { title: brandCopy.en.sTitleMeta },
       { name: "description", content: brandCopy.en.sDescMeta },
+      ...ogMeta({
+        title: brandCopy.en.sTitleMeta,
+        description: brandCopy.en.sDescMeta,
+        path: "/soy",
+        image: "soy",
+      }),
     ],
   }),
   component: SoyLanding,
@@ -133,8 +140,8 @@ function SoyLanding() {
           <div className="split">
             <figure className="split-media">
               <img
-                src="/img/soy/elevator-1600.jpg"
-                srcSet="/img/soy/elevator-900.jpg 900w, /img/soy/elevator-1600.jpg 1600w"
+                src="/img/soy/context-map-1600.jpg"
+                srcSet="/img/soy/context-map-900.jpg 900w, /img/soy/context-map-1600.jpg 1600w"
                 sizes="(max-width: 860px) 100vw, 640px"
                 alt={b.sSplitAlt}
                 width={1600}

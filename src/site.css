@@ -289,6 +289,61 @@
   font-size: 12.5px;
   color: var(--color-muted);
 }
+/* Umbrella hero: one still per product, each a way in (feedback 3, A-07). */
+.umbrella-shots {
+  margin: clamp(40px, 6vw, 72px) auto 0;
+  width: min(1240px, 100% - 24px);
+}
+.umbrella-shots-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(12px, 2vw, 24px);
+}
+.umbrella-shot {
+  position: relative;
+  display: block;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--color-bg-2);
+  box-shadow: var(--shadow-2);
+  transition: transform 0.2s ease;
+}
+.umbrella-shot:hover {
+  transform: translateY(-3px);
+}
+.umbrella-shot > img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+.umbrella-shot-chip {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  backdrop-filter: saturate(1.4) blur(14px);
+  box-shadow: var(--shadow-2);
+  color: var(--color-brand);
+  font: 600 14px var(--font-sans);
+}
+.umbrella-shots figcaption {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+@media (max-width: 720px) {
+  .umbrella-shots-row {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* proof bar */
 .proof {
@@ -1379,6 +1434,112 @@
 .contact-form .btn-dark {
   justify-self: start;
 }
+/* Contact form fields added for the stored request (feedback 3, A-15). */
+.contact-form label.check {
+  align-items: flex-start;
+  line-height: 1.45;
+}
+.contact-form label.check input {
+  flex: none;
+  margin-top: 1px;
+}
+.contact-form .optional {
+  font-weight: 400;
+  color: var(--color-faint);
+}
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;  align-items: end;
+}
+.choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.choice-group legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font: 500 14px var(--font-sans);
+  color: var(--color-fg-2);
+}
+.contact-form label.chip-check {
+  display: inline-flex;
+  position: relative;
+}
+.contact-form label.chip-check input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.chip-check span {
+  padding: 8px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font: 500 14px var(--font-sans);
+  color: var(--color-fg-2);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.chip-check input:checked + span {
+  border-color: var(--color-ink);
+  background: var(--color-ink);
+  color: #fff;
+}
+.chip-check input:focus-visible + span {
+  box-shadow: var(--focus);
+}
+.contact-form label.hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.field-error {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--color-danger);
+}
+.form-error {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 14px;
+}
+.form-error p {
+  margin: 0;
+}
+.contact-sent {
+  align-content: start;
+  padding: 28px;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-2);
+}
+.contact-sent h2 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.contact-sent p {
+  margin: 0;
+  color: var(--color-fg-2);
+}
+@media (max-width: 560px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
 .form-note {
   margin: 0;
   font-size: 13.5px;
@@ -1717,5 +1878,22 @@ a.product-card:focus-visible {
     background:
       linear-gradient(180deg, rgb(28 20 8 / 0.62) 0%, rgb(28 20 8 / 0.72) 100%),
       url("/img/soy/harvest-960.jpg") center 70% / cover no-repeat;
+  }
+}
+/* PalmTrace's closing ask over an aerial palm canopy (stock, Pexels licence),
+   with a deep green wash instead of SoyTrace's warm one. */
+.section.close.close-photo[data-bg="canopy"] {
+  background:
+    linear-gradient(180deg, rgb(6 26 16 / 0.55) 0%, rgb(6 26 16 / 0.7) 100%),
+    url("/img/palm/canopy-1920.jpg") center / cover no-repeat;
+}
+.close-photo .soon {
+  color: rgb(255 255 255 / 0.7);
+}
+@media (max-width: 760px) {
+  .section.close.close-photo[data-bg="canopy"] {
+    background:
+      linear-gradient(180deg, rgb(6 26 16 / 0.55) 0%, rgb(6 26 16 / 0.7) 100%),
+      url("/img/palm/canopy-960.jpg") center / cover no-repeat;
   }
 }
