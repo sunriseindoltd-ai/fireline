@@ -4,7 +4,7 @@ import appCss from "../styles.css?url";
 
 // Product name first, firm second (feedback 2, Doc 3 §2) — and never the
 // internal code name.
-const APP_NAME = "PalmTrace by Earthline";
+const APP_NAME = "Earthline Trace";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -13,7 +13,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: APP_NAME },
       { name: "theme-color", content: "#FFFFFF" },
-      { name: "application-name", content: "PalmTrace" },
+      { name: "application-name", content: "Earthline Trace" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

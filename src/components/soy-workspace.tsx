@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandMark } from "@/components/brand-mark";
+import { PRODUCTS } from "@/lib/brand";
 import { KpiTile } from "@/components/kpi-tile";
 import { LangToggle } from "@/components/lang-toggle";
 import {
@@ -123,8 +124,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const header = (
     <header className="app-header">
       <span className="app-brand">
-        <BrandMark size={22} />
-        <span className="word">{t.app}</span>
+        <BrandMark size={22} product="soy" />
+        <span className="word">{PRODUCTS.soy.name}</span>
       </span>
       <span className="app-sep" aria-hidden="true">
         /
@@ -153,11 +154,11 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
 
   if (!data) {
     return (
-      <div className="app">
+      <div className="app" data-product="soy">
         {header}
         <main className="app-main">
           <div className="boot">
-            <BrandMark size={32} />
+            <BrandMark size={32} product="soy" />
             <span>{loadError ? sc.loadError : t.loading}</span>
           </div>
         </main>
@@ -189,7 +190,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   }));
 
   return (
-    <div className="app">
+    <div className="app" data-product="soy">
       {header}
       <main className="app-main">
         <div className="page soy-page">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 
-const SLIDES = ["portfolio", "summary", "map", "plots"] as const;
+const PALM_SLIDES = ["portfolio", "summary", "map", "plots"] as const;
 const INTERVAL_MS = 6000;
 
 /**
@@ -10,9 +10,20 @@ const INTERVAL_MS = 6000;
  * active tab fills as its time runs out. Pauses on hover/focus, can be
  * paused outright, and doesn't auto-advance for reduced-motion users.
  * Screens are captured from the real workspace with names, places and
- * figures replaced (scripts/capture-showcase.mjs).
+ * figures replaced (scripts/capture-showcase.mjs for PalmTrace,
+ * scripts/capture-soy-showcase.mjs for SoyTrace). Without props it shows
+ * PalmTrace's four screens; another product passes its own.
  */
-export function ProductShowcase() {
+export function ProductShowcase({
+  slides: custom,
+  dir = "/img/showcase",
+  note,
+}: {
+  slides?: { key: string; title: string; body: string }[];
+  /** Folder holding `<key>-<lang>.jpg` for each slide. */
+  dir?: string;
+  note?: string;
+} = {}) {
   const { s, lang } = useI18n();
   const [index, setIndex] = useState(0);
   const [hovered, setHovered] = useState(false);
@@ -34,8 +45,9 @@ export function ProductShowcase() {
     return () => clearTimeout(id);
   }, [index, running]);
 
-  const titles = [s.sc1Title, s.sc2Title, s.sc3Title, s.sc4Title];
-  const bodies = [s.sc1Body, s.sc2Body, s.sc3Body, s.sc4Body];
+  const SLIDES = custom?.map((x) => x.key) ?? PALM_SLIDES;
+  const titles = custom?.map((x) => x.title) ?? [s.sc1Title, s.sc2Title, s.sc3Title, s.sc4Title];
+  const bodies = custom?.map((x) => x.body) ?? [s.sc1Body, s.sc2Body, s.sc3Body, s.sc4Body];
 
   return (
     <div
@@ -67,7 +79,7 @@ export function ProductShowcase() {
         {SLIDES.map((key, i) => (
           <img
             key={key}
-            src={`/img/showcase/${key}-${lang}.jpg`}
+            src={`${dir}/${key}-${lang}.jpg`}
             alt={titles[i]}
             loading={i === 0 ? "eager" : "lazy"}
             decoding="async"
@@ -75,11 +87,16 @@ export function ProductShowcase() {
             aria-hidden={i !== index}
           />
         ))}
-        <button type="button" className="showcase-pause" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
+        <button
+          type="button"
+          className="showcase-pause"
+          onClick={() => setPaused((p) => !p)}
+          aria-pressed={paused}
+        >
           {paused ? s.showcasePlay : s.showcasePause}
         </button>
       </div>
-      <p className="showcase-note">{s.showcaseNote}</p>
+      <p className="showcase-note">{note ?? s.showcaseNote}</p>
     </div>
   );
 }

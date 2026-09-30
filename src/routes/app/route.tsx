@@ -19,7 +19,7 @@ export const Route = createFileRoute("/app")({
     }
     return session;
   },
-  head: () => ({ meta: [{ title: "Workspace · PalmTrace" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Workspace · Earthline Trace" }, { name: "robots", content: "noindex" }] }),
   component: AppShell,
 });
 

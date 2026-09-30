@@ -3138,3 +3138,21 @@ button.kpi-action:hover {
 .soy-table td.num {
   white-space: nowrap;
 }
+
+/* ---------- Per-product brand colour (brand.ts) ----------
+   PalmTrace and the Earthline Trace umbrella use --color-brand (green);
+   SoyTrace swaps it for amber wherever its pages, login or workspace set
+   data-product="soy". The site footer always speaks for the umbrella. */
+[data-product="soy"] {
+  --color-brand: #8a5a12;
+  --color-brand-soft: #f6eedf;
+}
+[data-product="soy"] .site-footer {
+  --color-brand: #237a48;
+}
+.product-card[data-product="soy"] .product-card-status.live {
+  background: var(--color-brand-soft);
+}
+.product-card[data-product="soy"] .product-card-link {
+  color: var(--color-brand);
+}

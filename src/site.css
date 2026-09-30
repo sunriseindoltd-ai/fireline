@@ -1537,3 +1537,185 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Earthline Trace umbrella page (routes/index.tsx) ---------- */
+.four {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 36px);
+}
+.product-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.product-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 28px 26px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-2);
+  color: var(--color-fg);
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+a.product-card:hover {
+  background: var(--color-bg-3);
+  transform: translateY(-2px);
+}
+a.product-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.product-card h3 {
+  margin: 14px 0 2px;
+  font: 700 clamp(1.6rem, 1.3rem + 1vw, 2rem) var(--font-display);
+  letter-spacing: -0.03em;
+  color: var(--color-brand);
+}
+.product-card.soon h3 {
+  color: var(--color-muted);
+}
+.product-card p {
+  margin: 0 0 10px;
+  color: var(--color-fg-2);
+  line-height: 1.5;
+}
+.product-card .product-card-tag {
+  font-weight: 500;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+.product-card-status {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-bg);
+  color: var(--color-muted);
+}
+.product-card-status.live {
+  background: var(--color-link-soft);
+  color: var(--color-brand);
+}
+.product-card-link {
+  margin-top: auto;
+  padding-top: 8px;
+  font-weight: 600;
+  color: var(--color-link);
+}
+.site-nav > a.site-nav-umbrella {
+  color: var(--color-muted);
+}
+@media (max-width: 1000px) {
+  .four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 860px) {
+  .product-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .four {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Product cards: a picture across the top of each card. */
+.product-card-media {
+  display: block;
+  width: calc(100% + 52px);
+  max-width: none;
+  margin: -28px -26px 18px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.product-card-media.placeholder {
+  background: var(--color-bg-3);
+}
+
+/* Photo + text side by side (SoyTrace "From the field to the elevator"). */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 72px);
+  margin-top: clamp(56px, 8vw, 96px);
+}
+.split-media {
+  margin: 0;
+}
+.split-media img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--radius-xl);
+}
+.split-media figcaption {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+.split-copy h2 {
+  margin: 0 0 16px;
+  max-width: 16ch;
+  font-size: clamp(1.8rem, 1.2rem + 2.2vw, 2.8rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+.split-copy p:not(.section-eyebrow) {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--color-fg-2);
+}
+@media (max-width: 860px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* SoyTrace's closing ask over a harvest photograph (stock, Pixabay licence):
+   the photo is only a background here, darkened with a warm wash so the
+   white text and buttons read. */
+.section.close.close-photo {
+  position: relative;
+  color: #fff;
+  background:
+    linear-gradient(180deg, rgb(28 20 8 / 0.62) 0%, rgb(28 20 8 / 0.72) 100%),
+    url("/img/soy/harvest-1920.jpg") center 70% / cover no-repeat;
+}
+.close-photo h2 {
+  color: #fff;
+}
+.close-photo p {
+  color: rgb(255 255 255 / 0.86);
+}
+.close-photo .btn-dark {
+  background: #fff;
+  color: #1d1d1f;
+}
+.close-photo .btn-dark:hover {
+  background: rgb(255 255 255 / 0.88);
+}
+.close-photo .btn-link {
+  color: #fff;
+}
+@media (max-width: 760px) {
+  .section.close.close-photo {
+    background:
+      linear-gradient(180deg, rgb(28 20 8 / 0.62) 0%, rgb(28 20 8 / 0.72) 100%),
+      url("/img/soy/harvest-960.jpg") center 70% / cover no-repeat;
+  }
+}

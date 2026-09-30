@@ -24,7 +24,7 @@ export const Route = createFileRoute("/about")({
 function AboutPage() {
   const { s } = useI18n();
   return (
-    <SiteLayout>
+    <SiteLayout product="palm">
       <article className="page">
         <header className="page-hero">
           <div className="wrap narrow">

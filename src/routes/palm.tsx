@@ -10,13 +10,14 @@ import { CompareSlider } from "@/components/site/compare-slider";
 import { ProductShowcase } from "@/components/site/product-showcase";
 
 /**
- * Layer 1 — the product's front door (feedback 2, B-04 / Doc 3 §5.1), in
+ * PalmTrace's landing at /palm (the Earthline Trace umbrella page is /). Layer
+ * 1 — the product's front door (feedback 2, B-04 / Doc 3 §5.1), in
  * the quiet, light register of the references the team rated best. One job
  * per section: promise → proof → problem and a look inside → how it works →
  * what's inside → who it's for → versus the usual way → questions → the
  * rest of Earthline → ask. No portfolio figures and no client names.
  */
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/palm")({
   loader: async () => {
     const session = await getGateSession();
     return { signedIn: session.ok };
@@ -104,7 +105,7 @@ function Landing() {
       {s.openWorkspace}
     </Link>
   ) : (
-    <Link to="/contact" search={{ early: true }} className="btn-dark lg">
+    <Link to="/contact" search={{ early: true, product: "palm" }} className="btn-dark lg">
       {s.requestAccess}
     </Link>
   );
@@ -119,7 +120,7 @@ function Landing() {
   ];
 
   return (
-    <SiteLayout signedIn={signedIn}>
+    <SiteLayout signedIn={signedIn} product="palm">
       <section className="hero">
         <div className="wrap hero-copy">
           <p className="hero-eyebrow">{s.heroEyebrow}</p>
@@ -477,7 +478,7 @@ function Landing() {
           <p>{s.closeBody}</p>
           <div className="cta-row center">
             {primary}
-            <Link to="/contact" className="btn-link">
+            <Link to="/contact" search={{ product: "palm" }} className="btn-link">
               {s.closeSecondary} <span aria-hidden="true">›</span>
             </Link>
           </div>

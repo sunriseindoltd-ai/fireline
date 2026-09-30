@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { SiteLayout } from "@/components/site/site-chrome";
+import { isProductId, withBrand, type ProductId } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n";
 import { EARTHLINE } from "@/lib/site-copy";
 
-type ContactSearch = { early?: boolean };
+type ContactSearch = { early?: boolean; product?: ProductId };
 
 /**
  * Contact + Early Access request (feedback 2, Doc 3 §5.5). There is no mail
@@ -15,11 +16,16 @@ type ContactSearch = { early?: boolean };
 export const Route = createFileRoute("/contact")({
   validateSearch: (search: Record<string, unknown>): ContactSearch => ({
     early: [true, 1, "1", "true"].includes(search.early as never) ? true : undefined,
+    product: isProductId(search.product) ? search.product : undefined,
   }),
   head: () => ({
     meta: [
-      { title: "Contact · PalmTrace by Earthline" },
-      { name: "description", content: "Request Early Access to PalmTrace or contact Earthline in Jakarta." },
+      { title: "Contact · Earthline Trace" },
+      {
+        name: "description",
+        content:
+          "Request early access to Earthline Trace — PalmTrace, SoyTrace — or contact Earthline in Jakarta.",
+      },
     ],
   }),
   component: ContactPage,
@@ -27,7 +33,10 @@ export const Route = createFileRoute("/contact")({
 
 function ContactPage() {
   const { s } = useI18n();
-  const { early } = Route.useSearch();
+  const { early, product } = Route.useSearch();
+  // Copy names PalmTrace; it now names whichever product the visitor came from
+  // (or Earthline Trace from the umbrella page).
+  const b = (text: string) => withBrand(text, product);
   const [name, setName] = useState("");
   const [org, setOrg] = useState("");
   const [role, setRole] = useState("");
@@ -36,12 +45,12 @@ function ContactPage() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const subject = wantsAccess ? s.cSubjectEarly : s.cSubject;
+    const subject = b(wantsAccess ? s.cSubjectEarly : s.cSubject);
     const body = [
       `${s.cName}: ${name}`,
       `${s.cOrg}: ${org}`,
       role ? `${s.cRole}: ${role}` : "",
-      wantsAccess ? `✓ ${s.cEarly}` : "",
+      wantsAccess ? `✓ ${b(s.cEarly)}` : "",
       "",
       message,
     ]
@@ -51,23 +60,33 @@ function ContactPage() {
   }
 
   return (
-    <SiteLayout>
+    <SiteLayout product={product}>
       <article className="page">
         <header className="page-hero">
           <div className="wrap narrow">
             <h1>{s.cTitle}</h1>
-            <p className="lead">{s.cLead}</p>
+            <p className="lead">{b(s.cLead)}</p>
           </div>
         </header>
         <div className="wrap contact-grid">
           <form className="contact-form" onSubmit={onSubmit}>
             <label>
               {s.cName}
-              <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+                required
+              />
             </label>
             <label>
               {s.cOrg}
-              <input value={org} onChange={(e) => setOrg(e.target.value)} autoComplete="organization" required />
+              <input
+                value={org}
+                onChange={(e) => setOrg(e.target.value)}
+                autoComplete="organization"
+                required
+              />
             </label>
             <label>
               {s.cRole}
@@ -84,8 +103,12 @@ function ContactPage() {
               <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5} />
             </label>
             <label className="check">
-              <input type="checkbox" checked={wantsAccess} onChange={(e) => setWantsAccess(e.target.checked)} />
-              {s.cEarly}
+              <input
+                type="checkbox"
+                checked={wantsAccess}
+                onChange={(e) => setWantsAccess(e.target.checked)}
+              />
+              {b(s.cEarly)}
             </label>
             <button type="submit" className="btn-dark lg">
               {s.cSend}
@@ -112,7 +135,12 @@ function ContactPage() {
                 </dd>
               </div>
             </dl>
-            <a className="text-link" href={EARTHLINE.mapsHref} target="_blank" rel="noopener noreferrer">
+            <a
+              className="text-link"
+              href={EARTHLINE.mapsHref}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {s.cDirections} ↗
             </a>
             <a className="text-link" href={EARTHLINE.site} rel="noopener">

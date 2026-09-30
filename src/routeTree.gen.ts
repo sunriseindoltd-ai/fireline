@@ -17,6 +17,8 @@ import { Route as KontakRouteImport } from './routes/kontak'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MethodRouteImport } from './routes/method'
 import { Route as MetodologiRouteImport } from './routes/metodologi'
+import { Route as PalmRouteImport } from './routes/palm'
+import { Route as SoyRouteImport } from './routes/soy'
 import { Route as TentangRouteImport } from './routes/tentang'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppPortfolioRouteImport } from './routes/app/portfolio'
@@ -69,6 +71,16 @@ const MethodRoute = MethodRouteImport.update({
 const MetodologiRoute = MetodologiRouteImport.update({
   id: '/metodologi',
   path: '/metodologi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PalmRoute = PalmRouteImport.update({
+  id: '/palm',
+  path: '/palm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoyRoute = SoyRouteImport.update({
+  id: '/soy',
+  path: '/soy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TentangRoute = TentangRouteImport.update({
@@ -146,6 +158,8 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/method': typeof MethodRoute
   '/metodologi': typeof MetodologiRoute
+  '/palm': typeof PalmRoute
+  '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/data/$': typeof DataSplatRoute
@@ -168,6 +182,8 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/method': typeof MethodRoute
   '/metodologi': typeof MetodologiRoute
+  '/palm': typeof PalmRoute
+  '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/data/$': typeof DataSplatRoute
@@ -192,6 +208,8 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/method': typeof MethodRoute
   '/metodologi': typeof MetodologiRoute
+  '/palm': typeof PalmRoute
+  '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/data/$': typeof DataSplatRoute
@@ -217,6 +235,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/method'
     | '/metodologi'
+    | '/palm'
+    | '/soy'
     | '/tentang'
     | '/app/portfolio'
     | '/data/$'
@@ -239,6 +259,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/method'
     | '/metodologi'
+    | '/palm'
+    | '/soy'
     | '/tentang'
     | '/app/portfolio'
     | '/data/$'
@@ -262,6 +284,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/method'
     | '/metodologi'
+    | '/palm'
+    | '/soy'
     | '/tentang'
     | '/app/portfolio'
     | '/data/$'
@@ -286,6 +310,8 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MethodRoute: typeof MethodRoute
   MetodologiRoute: typeof MetodologiRoute
+  PalmRoute: typeof PalmRoute
+  SoyRoute: typeof SoyRoute
   TentangRoute: typeof TentangRoute
   DataSplatRoute: typeof DataSplatRoute
   DocsSplatRoute: typeof DocsSplatRoute
@@ -350,6 +376,20 @@ declare module '@tanstack/react-router' {
       path: '/metodologi'
       fullPath: '/metodologi'
       preLoaderRoute: typeof MetodologiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/palm': {
+      id: '/palm'
+      path: '/palm'
+      fullPath: '/palm'
+      preLoaderRoute: typeof PalmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/soy': {
+      id: '/soy'
+      path: '/soy'
+      fullPath: '/soy'
+      preLoaderRoute: typeof SoyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tentang': {
@@ -479,6 +519,8 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MethodRoute: MethodRoute,
   MetodologiRoute: MetodologiRoute,
+  PalmRoute: PalmRoute,
+  SoyRoute: SoyRoute,
   TentangRoute: TentangRoute,
   DataSplatRoute: DataSplatRoute,
   DocsSplatRoute: DocsSplatRoute,
