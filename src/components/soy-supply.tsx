@@ -217,7 +217,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
       </div>
       <ScopeTabs scope={scope} setScope={setScope} data={data} c={c} />
 
-      <div className="kpi-row">
+      <div className="kpi-row soy-supply-kpis">
         <KpiTile value={countF(k.compliant.fields)} label={c.kpiFields} hint={c.kpiFieldsHint} />
         <KpiTile
           value={haF(k.compliant.acres)}
@@ -298,7 +298,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
           )}
         </section>
 
-        <section className="chart-card">
+        <section className="chart-card soy-nc-use">
           <h3>{c.ncWhyTitle}</h3>
           <p className="chart-note">{c.ncWhyIntro}</p>
           <h3 className="soy-subhead">{c.ncUseTitle}</h3>
@@ -399,7 +399,7 @@ function FacilityTable({
     URL.revokeObjectURL(url);
   }
   return (
-    <section className="chart-card supply-wide">
+    <section className="chart-card supply-wide soy-fac">
       <div className="soy-fac-head">
         <div>
           <h3>{c.facTitle}</h3>

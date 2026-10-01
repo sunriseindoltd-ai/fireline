@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 export type TourStep = {
   /** CSS selector of the element the step points at; none = a centred card. */
   target?: string;
+  /** Workspace tab the step needs open (the tour switches to it). */
+  tab?: string;
   title: string;
   body: string;
 };
@@ -46,10 +48,13 @@ export function SoyTour({
   steps,
   labels,
   onClose,
+  onStep,
 }: {
   steps: TourStep[];
   labels: { next: string; back: string; skip: string; done: string; stepOf: string };
   onClose: () => void;
+  /** Called on every step (the workspace opens the step's tab). */
+  onStep?: (step: TourStep) => void;
 }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -58,14 +63,25 @@ export function SoyTour({
   const cardRef = useRef<HTMLDivElement>(null);
   const step = steps[i]!;
   const last = i === steps.length - 1;
+  const scrolledFor = useRef(-1);
+
+  useEffect(() => {
+    onStep?.(step);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i]);
 
   const measure = useCallback(() => {
     setVw(window.innerWidth);
     setVh(window.innerHeight);
     const el = step.target ? document.querySelector(step.target) : null;
+    // Bring the element into view once per step (summary sections sit below the fold).
+    if (el && scrolledFor.current !== i) {
+      scrolledFor.current = i;
+      el.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+    }
     const r = el?.getBoundingClientRect();
     setRect(r && r.width > 0 && r.height > 0 ? r : null);
-  }, [step.target]);
+  }, [step.target, i]);
 
   useLayoutEffect(() => {
     measure();

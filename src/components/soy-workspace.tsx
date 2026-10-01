@@ -127,7 +127,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     if (tourChecked.current || !supply || !data) return;
     tourChecked.current = true;
     if (present || !tourPending()) return;
-    setTab("map");
+    setTab("summary");
     setTourOpen(true);
   }, [supply, data, present, setTab]);
 
@@ -220,10 +220,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             className="tour-help"
             aria-label={ssc.tourReplay}
             title={ssc.tourReplay}
-            onClick={() => {
-              setTab("map");
-              setTourOpen(true);
-            }}
+            onClick={() => setTourOpen(true)}
           >
             ?
           </button>
@@ -243,6 +240,9 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       onClose={() => {
         markTourDone();
         setTourOpen(false);
+      }}
+      onStep={(st) => {
+        if (st.tab === "map" || st.tab === "summary") setTab(st.tab);
       }}
     />
   ) : null;
