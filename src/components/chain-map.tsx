@@ -16,7 +16,7 @@ import {
 } from "@/lib/plot-filters";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-type BasemapId = "esri" | "google" | "osm" | "s2-2020" | "s2-2026";
+export type BasemapId = "esri" | "google" | "osm" | "s2-2020" | "s2-2026";
 
 type Basemap = {
   label: string;
@@ -74,7 +74,7 @@ const S2_ATTRIBUTION = "Contains modified Copernicus Sentinel data · Microsoft 
 // this pattern without notice. Included here at the user's explicit request
 // after being told about that risk; Esri and OSM below are both genuinely
 // free-to-use services with no such caveat.
-const BASEMAPS: Record<BasemapId, Basemap> = {
+export const BASEMAPS: Record<BasemapId, Basemap> = {
   esri: {
     label: "Esri World Imagery",
     tiles: [
@@ -117,7 +117,7 @@ const BASEMAPS: Record<BasemapId, Basemap> = {
   },
 };
 
-const DEFAULT_BASEMAP: BasemapId = "esri";
+export const DEFAULT_BASEMAP: BasemapId = "esri";
 // Skeleton: gone this long after the style loads even if imagery is still
 // arriving, and at the latest after TILE_TIMEOUT_MS; by then, no basemap
 // tile at all (or this many failed ones) shows the retry notice.
@@ -127,7 +127,7 @@ const TILE_ERRORS_BEFORE_NOTICE = 4;
 // Esri and Google first — the imagery Earthline's team works on day to day
 // (feedback 2, Doc 2 §3); OSM as the schematic fallback; the dated
 // Sentinel-2 pair last, for before/after-cutoff comparison.
-const BASEMAP_ORDER: BasemapId[] = ["esri", "google", "osm", "s2-2020", "s2-2026"];
+export const BASEMAP_ORDER: BasemapId[] = ["esri", "google", "osm", "s2-2020", "s2-2026"];
 
 // MapLibre's `text-field` needs a `glyphs` URL (an SDF font/glyph server)
 // configured in the style spec to render anything at all — without one,
@@ -175,7 +175,7 @@ function basemapParts(id: BasemapId) {
   return { sources, layers };
 }
 
-function basemapStyle(id: BasemapId) {
+export function basemapStyle(id: BasemapId) {
   const { sources, layers } = basemapParts(id);
   return { version: 8 as const, glyphs: GLYPHS_URL, sources, layers };
 }
@@ -186,10 +186,13 @@ function basemapStyle(id: BasemapId) {
  * style load and require re-adding them all. Re-inserts "sat" at the
  * bottom of the layer stack — wherever the first custom layer currently
  * is — so switching basemap never covers up the data layers on top of it. */
-function setBasemap(map: import("maplibre-gl").Map, id: BasemapId) {
-  const beforeId = ["forest-fill", "areas-fill", "plots-halo", "plots-fill", "mills"].find((l) =>
-    map.getLayer(l),
-  );
+export function setBasemap(
+  map: import("maplibre-gl").Map,
+  id: BasemapId,
+  // The map's lowest data layers, in order — SoyTrace passes its own.
+  firstLayers: string[] = ["forest-fill", "areas-fill", "plots-halo", "plots-fill", "mills"],
+) {
+  const beforeId = firstLayers.find((l) => map.getLayer(l));
   for (const layer of ["sat", "sat-fill", "sat-under"]) {
     if (map.getLayer(layer)) map.removeLayer(layer);
     if (map.getSource(layer)) map.removeSource(layer);

@@ -36,6 +36,14 @@ export function formatHa(n: number, lang: Lang): string {
   return `${formatLarge(n, lang)} ha`;
 }
 
+/** Acres (SoyTrace's US data): one decimal below 10, whole numbers above. */
+export function formatAcres(n: number, lang: Lang): string {
+  if (!Number.isFinite(n)) return "—";
+  const unit = lang === "id" ? "acre" : "acres";
+  if (Math.abs(n) < 10) return `${n.toLocaleString(locale(lang), { maximumFractionDigits: 1 })} ${unit}`;
+  return `${formatLarge(n, lang)} ${unit}`;
+}
+
 export function formatPct(part: number, whole: number, lang: Lang): string {
   if (whole <= 0) return "—";
   const pct = (part / whole) * 100;

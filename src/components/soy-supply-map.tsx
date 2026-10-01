@@ -1,22 +1,29 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BASEMAPS, BASEMAP_ORDER, DEFAULT_BASEMAP, basemapStyle, setBasemap, type BasemapId } from "@/components/chain-map";
 import type { Lang } from "@/lib/copy";
-import { fill, formatCount, formatHa } from "@/lib/format";
+import { fill, formatAcres, formatCount, formatHa } from "@/lib/format";
 import { SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyGroupOf } from "@/lib/soy-copy";
-import type { SoySupplyCopy } from "@/lib/soy-supply-copy";
+import { formatSharePct, type SoySupplyCopy } from "@/lib/soy-supply-copy";
 import {
   AC_TO_HA,
   BAND_COLORS,
   FIELD_COLOR,
-  FLAG,
   NC_COLOR,
   NC_INK,
+  NC_MARK,
   PLANT_COLOR,
   RAIL_COLOR,
   RIVER_COLOR,
   TP_COLOR,
+  arc,
   circle,
   circleBounds,
-  tierBit,
+  groupOf,
+  inScope,
+  pct,
+  levelOf,
+  scopeBounds,
+  unitParts,
   type Band,
   type Basis,
   type Catchment,
@@ -24,39 +31,102 @@ import {
   type SupplyData,
   type SupplyFieldProps,
 } from "@/lib/soy-supply";
+import { usePersistentState } from "@/lib/use-persistent";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-type Feature = { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, unknown> };
-type FC = { type: "FeatureCollection"; features: Feature[] };
+export type SoyFeature = {
+  type: "Feature";
+  geometry: { type: string; coordinates: unknown };
+  properties: Record<string, unknown>;
+};
+type FC = { type: "FeatureCollection"; features: SoyFeature[] };
 const EMPTY: FC = { type: "FeatureCollection", features: [] };
 
 export type SupplyMapMode = "supply" | "corridor";
 export type SupplyColorBy = "status" | "years";
+/** What the map has loaded for the current scope — the field table's rows. */
+export type ScopeFields = {
+  fields: SoyFeature[];
+  nc: SoyFeature[];
+  /** The scope is one catchment and all its fields are loaded. */
+  complete: boolean;
+  loading: boolean;
+  failed?: boolean;
+  /** The scope these fields belong to (the view may already show another). */
+  scope: string | null;
+};
+export type MapFocus = { bbox?: [[number, number], [number, number]]; center?: [number, number]; zoom?: number; nonce: number };
+
 type LayerKey = "fields" | "nc" | "rings" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads";
 type Remote = "rail" | "rivers" | "corridors" | "roads";
 const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads"];
-
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
   supply: { fields: true, nc: true, rings: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false },
   corridor: { fields: true, nc: false, rings: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false },
 };
-const FIELDS_MIN_ZOOM = 9;
-const MAX_CELLS = 24;
-const GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
-const TILES = {
-  imagery: {
-    tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-    attribution: "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-    maxzoom: 18,
-  },
-  map: { tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], attribution: "© OpenStreetMap contributors" },
-};
+const DATA_FLOOR = ["direct-area", "grid", "corridors", "rivers", "fields"];
+// Soybean density: coarse cells in supply.json, finer ones (layers/grid.json)
+// take over as the map zooms in.
+const GRID_LAYERS = ["grid", "grid-1", "grid-2", "grid-3"];
+type GridRow = number[];
+function gridFC(rows: GridRow[], d: number): FC {
+  return {
+    type: "FeatureCollection",
+    features: rows.map(([gx, gy, a, cov, r10, v10, e10, share]) => ({
+      type: "Feature",
+      properties: { a, cov, r10, v10, e10, p: share ?? 0 },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[gx! * d, gy! * d], [(gx! + 1) * d, gy! * d], [(gx! + 1) * d, (gy! + 1) * d], [gx! * d, (gy! + 1) * d], [gx! * d, gy! * d]]], // prettier-ignore
+      },
+    })),
+  };
+}
+/** Share of a grid cell under these soybean fields (%) at each colour step. */
+const GRID_STEPS = [1, 5, 10, 20, 35];
+let fineGrid: { deg: number; minZoom: number; rows: GridRow[] }[] | null = null;
+let gridLevels: Promise<{ deg: number; minZoom: number; rows: GridRow[] }[]> | null = null;
 
-// Kept across view switches and remounts: the same cells and layers are
-// never fetched twice in one visit.
-const cellCache = new Map<string, Feature[]>();
+// Kept across tab switches and remounts: nothing is fetched twice per visit.
+const unitCache = new Map<string, SoyFeature[]>();
+const unitInflight = new Map<string, Promise<SoyFeature[]>>();
+
+/** One catchment's fields (fields/units/<id>.geojson), like a PalmTrace mill's plot file. */
+export function loadUnit(id: string): Promise<SoyFeature[]> {
+  const hit = unitCache.get(id);
+  if (hit) return Promise.resolve(hit);
+  let pr = unitInflight.get(id);
+  if (!pr) {
+    pr = fetch(`/data/fields/units/${encodeURIComponent(id)}.geojson`)
+      .then((res) => (res.ok ? (res.json() as Promise<FC>) : Promise.reject(new Error(String(res.status)))))
+      .then((fc) => {
+        for (const f of fc.features) addCenter(f);
+        unitCache.set(id, fc.features);
+        return fc.features;
+      })
+      .finally(() => unitInflight.delete(id));
+    unitInflight.set(id, pr);
+  }
+  return pr;
+}
 const remoteCache = new Map<string, FC>();
 let ncCache: FC | null = null;
+let ncInflight: Promise<FC> | null = null;
+
+export function loadNonCompliant(): Promise<FC> {
+  if (ncCache) return Promise.resolve(ncCache);
+  ncInflight ??= fetch("/data/fields/noncomply.geojson")
+    .then((res) => (res.ok ? (res.json() as Promise<FC>) : Promise.reject(new Error(String(res.status)))))
+    .then((fc) => {
+      for (const f of fc.features) addCenter(f);
+      ncCache = fc;
+      return fc;
+    })
+    .finally(() => {
+      ncInflight = null;
+    });
+  return ncInflight;
+}
 
 function esc(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -64,7 +134,7 @@ function esc(s: string) {
 function row(k: string, v: string, mono = false) {
   return `<p class="soy-pop-k">${esc(k)}</p><p class="soy-pop-v${mono ? " mono" : ""}">${esc(v)}</p>`;
 }
-function centerOf(g: Feature["geometry"]): [number, number] | null {
+export function bboxOf(g: SoyFeature["geometry"]): [[number, number], [number, number]] | null {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity; // prettier-ignore
   const walk = (c: unknown): void => {
     if (Array.isArray(c) && typeof c[0] === "number") {
@@ -76,38 +146,35 @@ function centerOf(g: Feature["geometry"]): [number, number] | null {
     } else if (Array.isArray(c)) c.forEach(walk);
   };
   walk(g.coordinates);
-  return Number.isFinite(minX) ? [(minX + maxX) / 2, (minY + maxY) / 2] : null;
+  return Number.isFinite(minX) ? [[minX, minY], [maxX, maxY]] : null; // prettier-ignore
 }
+/** Stores a feature's centre as _x/_y once (scope tests, table, focus). */
+function addCenter(f: SoyFeature) {
+  if (f.properties._x != null) return;
+  const b = f.geometry.type === "Point" ? null : bboxOf(f.geometry);
+  const [x, y] = b ? [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2] : (f.geometry.coordinates as [number, number]);
+  f.properties._x = x;
+  f.properties._y = y;
+}
+const center = (f: SoyFeature) => [Number(f.properties._x), Number(f.properties._y)] as const;
 
-/** Value used for the distance colouring, per basis (999 = no data). */
 function distanceExpr(basis: Basis) {
   const r = ["coalesce", ["get", "r"], 999];
   const v = ["coalesce", ["get", "v"], 999];
   return basis === "rail" ? r : basis === "river" ? v : ["min", r, v];
 }
 function bandColorExpr(basis: Basis) {
-  return [
-    "step",
-    distanceExpr(basis),
-    BAND_COLORS.b5,
-    5.0001,
-    BAND_COLORS.b10,
-    10.0001,
-    BAND_COLORS.b20,
-    20.0001,
-    BAND_COLORS.far,
-    998,
-    BAND_COLORS.none,
-  ];
+  return ["step", distanceExpr(basis), BAND_COLORS.b5, 5.0001, BAND_COLORS.b10, 10.0001, BAND_COLORS.b20, 20.0001, BAND_COLORS.far, 998, BAND_COLORS.none]; // prettier-ignore
 }
 
 /**
- * SoyTrace's supply-chain map (Quincy plant, ADM and third-party elevators,
- * their catchments, compliant and non-compliant fields) and, in "corridor"
- * mode, the same with rail, rivers and 5/10-mile bands, fields coloured by
- * distance. Zoomed out, a density grid stands in for the ~390k fields; from
- * zoom 9 the fields load by 0.25° cell. Non-compliant fields always keep
- * their real outline — zoomed out they're marked by small dots only.
+ * SoyTrace's map, in PalmTrace's portfolio → group → mill order: Quincy with
+ * everything (level 1, soybean density only), one supplier type — the direct
+ * Quincy catchment (0–40, 40–80, 0–80 mi), ADM elevators, or third
+ * parties — with only its circles (level 2), and one catchment with its
+ * fields (level 3, one file, like a mill's plots). All radii are statute
+ * miles. "corridor" mode adds rail, rivers and 5/10-mile bands and shades the
+ * fields by distance.
  */
 export function SoySupplyMap({
   data,
@@ -121,6 +188,11 @@ export function SoySupplyMap({
   catchments,
   c,
   lang,
+  onScopeFields,
+  selectedField,
+  onSelectField,
+  focus,
+  toolsSlot,
 }: {
   data: SupplyData;
   mode: SupplyMapMode;
@@ -133,12 +205,19 @@ export function SoySupplyMap({
   catchments: Map<string, Catchment>;
   c: SoySupplyCopy;
   lang: Lang;
+  onScopeFields?: (s: ScopeFields) => void;
+  selectedField?: string | null;
+  onSelectField?: (f: SoyFeature | null) => void;
+  focus?: MapFocus | null;
+  toolsSlot?: ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
   const popupRef = useRef<import("maplibre-gl").Popup | null>(null);
   const [ready, setReady] = useState(false);
-  const [basemap, setBasemap] = useState<"imagery" | "map">("imagery");
+  const [bmStored, setBm] = usePersistentState<BasemapId>("soytrace.basemap", DEFAULT_BASEMAP);
+  const basemap: BasemapId = bmStored in BASEMAPS ? bmStored : DEFAULT_BASEMAP;
+  const [bmOpen, setBmOpen] = useState(false);
   const [on, setOn] = useState<Record<LayerKey, boolean>>(DEFAULTS[mode]);
   const [remote, setRemote] = useState<Record<Remote, "idle" | "loading" | "ready" | "error">>({
     rail: "idle",
@@ -146,17 +225,18 @@ export function SoySupplyMap({
     corridors: "idle",
     roads: "idle",
   });
-  const [cellState, setCellState] = useState<{ zoomOk: boolean; loading: number; failed: boolean }>({
-    zoomOk: false,
-    loading: 0,
-    failed: false,
-  });
+  // ADM's ask: in the area zoomed in, the soybean acreage, the deforested
+  // acreage and the share of one in the other.
+  const [inView, setInView] = useState<{ total: number; defo: number; ncAcres: number; ncFields: number; approx: boolean; one: boolean } | null>(null);
+  const [unitState, setUnitState] = useState<{ level: number; loading: boolean; failed: boolean }>({ level: 1, loading: false, failed: false });
   const [layersOpen, setLayersOpen] = useState(true);
   useEffect(() => {
     if (window.matchMedia("(max-width: 640px)").matches) setLayersOpen(false);
   }, []);
-  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on });
-  live.current = { data, onSelect, cdlNames, catchments, c, lang, on };
+  const [ncLoaded, setNcLoaded] = useState<FC | null>(ncCache);
+  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded });
+  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded };
+  const refreshRef = useRef<() => void>(() => undefined);
 
   // ------------------------------------------------------------------ build
   useEffect(() => {
@@ -168,18 +248,7 @@ export function SoySupplyMap({
       const q80 = data.rings.find((r) => r.id === "q80");
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: {
-          version: 8,
-          glyphs: GLYPHS_URL,
-          sources: {
-            imagery: { type: "raster", tileSize: 256, ...TILES.imagery },
-            map: { type: "raster", tileSize: 256, ...TILES.map },
-          },
-          layers: [
-            { id: "imagery", type: "raster", source: "imagery" },
-            { id: "map", type: "raster", source: "map", layout: { visibility: "none" } },
-          ],
-        },
+        style: basemapStyle(basemap) as never,
         bounds: circleBounds(data.plant.lon, data.plant.lat, (q80?.radiusM ?? 150000) * 2.2),
         fitBoundsOptions: { padding: 30 },
         attributionControl: { compact: true },
@@ -189,55 +258,63 @@ export function SoySupplyMap({
 
       map.on("load", () => {
         if (!map) return;
-        const pt = (lon: number, lat: number, props: object): Feature => ({
+        const pt = (lon: number, lat: number, props: object): SoyFeature => ({
           type: "Feature",
           properties: props as Record<string, unknown>,
           geometry: { type: "Point", coordinates: [lon, lat] },
         });
-        const ring = (lon: number, lat: number, r: number, props: object): Feature => ({
+        const ring = (lon: number, lat: number, r: number, props: object): SoyFeature => ({
           type: "Feature",
           properties: props as Record<string, unknown>,
           geometry: { type: "Polygon", coordinates: [circle(lon, lat, r)] },
         });
-        const d = data.gridDeg;
-        const grid: FC = {
-          type: "FeatureCollection",
-          features: data.grid.map(([gx, gy, a, cov, r10, v10, e10]) => ({
-            type: "Feature",
-            properties: { a, cov, r10, v10, e10 },
-            geometry: {
-              type: "Polygon",
-              coordinates: [[[gx * d, gy * d], [(gx + 1) * d, gy * d], [(gx + 1) * d, (gy + 1) * d], [gx * d, (gy + 1) * d], [gx * d, gy * d]]], // prettier-ignore
-            },
-          })),
-        };
-        map.addSource("grid", { type: "geojson", data: grid as never });
+        map.addSource("grid", { type: "geojson", data: gridFC(data.grid, data.gridDeg) as never });
+        for (const id of GRID_LAYERS.slice(1)) map.addSource(id, { type: "geojson", data: EMPTY as never });
         map.addSource("fields", { type: "geojson", data: EMPTY as never });
         map.addSource("nc", { type: "geojson", data: EMPTY as never });
         map.addSource("nc-pts", { type: "geojson", data: EMPTY as never });
         for (const r of REMOTE) map.addSource(r, { type: "geojson", data: EMPTY as never });
         map.addSource("rings", {
           type: "geojson",
+          data: { type: "FeatureCollection", features: data.rings.map((r) => ring(data.plant.lon, data.plant.lat, r.radiusM, { id: r.id })) } as never,
+        });
+        const r40 = data.rings.find((r) => r.id === "q40")!.radiusM;
+        const r80 = data.rings.find((r) => r.id === "q80")!.radiusM;
+        // The area of the chosen direct catchment: 0–40 mi disc, 40–80 mi ring, 0–80 mi disc.
+        const disc40 = circle(data.plant.lon, data.plant.lat, r40);
+        const disc80 = circle(data.plant.lon, data.plant.lat, r80);
+        map.addSource("direct-area", {
+          type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: data.rings.map((r) => ring(data.plant.lon, data.plant.lat, r.radiusM, { id: r.id })),
+            features: [
+              { type: "Feature", properties: { id: "q40" }, geometry: { type: "Polygon", coordinates: [disc40] } },
+              { type: "Feature", properties: { id: "q80r" }, geometry: { type: "Polygon", coordinates: [disc80, [...disc40].reverse()] } },
+              { type: "Feature", properties: { id: "q80" }, geometry: { type: "Polygon", coordinates: [disc80] } },
+            ],
+          } as never,
+        });
+        // Radius labels on each circle, due north of the plant.
+        map.addSource("ring-pt", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: data.rings.map((r) => {
+              const at = arc(data.plant.lon, data.plant.lat, r.radiusM, 0, 0, 1)[0]!;
+              return pt(at[0]!, at[1]!, { id: r.id, name: fill(live.current.c.ringMiles, { n: r.nm }) });
+            }),
           } as never,
         });
         map.addSource("adm-catch", {
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: data.admElevators
-              .filter((e) => e.radiusM)
-              .map((e) => ring(e.lon, e.lat, e.radiusM!, { id: e.id })),
+            features: data.admElevators.filter((e) => e.radiusM).map((e) => ring(e.lon, e.lat, e.radiusM!, { id: e.id })),
           } as never,
         });
         map.addSource("tp-catch", {
           type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: data.thirdParty.map((e) => ring(e.lon, e.lat, e.radiusM, { id: e.id, core: e.core })),
-          } as never,
+          data: { type: "FeatureCollection", features: data.thirdParty.map((e) => ring(e.lon, e.lat, e.radiusM, { id: e.id, core: e.core })) } as never,
         });
         map.addSource("plant", {
           type: "geojson",
@@ -245,22 +322,47 @@ export function SoySupplyMap({
         });
         map.addSource("adm", {
           type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: data.admElevators.map((e) => pt(e.lon, e.lat, { id: e.id, name: e.city ?? e.name })),
-          } as never,
+          data: { type: "FeatureCollection", features: data.admElevators.map((e) => pt(e.lon, e.lat, { id: e.id, name: e.city ?? e.name })) } as never,
         });
         map.addSource("tp", {
           type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: data.thirdParty.map((e) => pt(e.lon, e.lat, { id: e.id, name: e.company ?? "", core: e.core })),
-          } as never,
+          data: { type: "FeatureCollection", features: data.thirdParty.map((e) => pt(e.lon, e.lat, { id: e.id, name: e.company ?? "", core: e.core })) } as never,
         });
 
-        map.addLayer({ id: "grid", type: "fill", source: "grid", maxzoom: FIELDS_MIN_ZOOM, paint: { "fill-opacity": 0.72 } });
-        // Bands only from zoom 6.5: zoomed out they blanket the 7 states and
-        // hide the density shading underneath.
+        map.addLayer({
+          id: "direct-area",
+          type: "fill",
+          source: "direct-area",
+          filter: ["==", ["get", "id"], "__none__"],
+          paint: { "fill-color": "#ffffff", "fill-opacity": 0.14 },
+        });
+        for (const id of GRID_LAYERS) map.addLayer({ id, type: "fill", source: id, paint: { "fill-opacity": 0.72 } });
+        // Finer grids once the map is zoomed in past the coarse cells.
+        const loadFineGrid = () => {
+          if (!map || map.getZoom() < 5.8) return;
+          map.off("zoomend", loadFineGrid);
+          gridLevels ??= fetch("/data/layers/grid.json")
+            .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+            .then((j: { levels: { deg: number; minZoom: number; rows: GridRow[] }[] }) => j.levels);
+          gridLevels
+            .then((levels) => {
+              if (!map || cancelled) return;
+              levels.forEach((lv, i) => {
+                const id = GRID_LAYERS[i + 1]!;
+                (map!.getSource(id) as import("maplibre-gl").GeoJSONSource | undefined)?.setData(gridFC(lv.rows, lv.deg) as never);
+                map!.setLayerZoomRange(id, lv.minZoom, levels[i + 1]?.minZoom ?? 24);
+              });
+              map.setLayerZoomRange("grid", 0, levels[0]!.minZoom);
+              fineGrid = levels;
+              measure();
+            })
+            .catch(() => {
+              gridLevels = null;
+            });
+        };
+        map.on("zoomend", loadFineGrid);
+        loadFineGrid();
+        // Bands only from zoom 6.5: zoomed out they blanket the 7 states.
         map.addLayer({
           id: "corridors",
           type: "fill",
@@ -287,7 +389,7 @@ export function SoySupplyMap({
           layout: { visibility: "none" },
           paint: { "line-color": RIVER_COLOR, "line-width": ["case", ["get", "m"], 1.2, 0.6] as never },
         });
-        map.addLayer({ id: "fields", type: "fill", source: "fields", minzoom: FIELDS_MIN_ZOOM, paint: { "fill-opacity": 0.78 } });
+        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.8 } });
         map.addLayer({
           id: "fields-line",
           type: "line",
@@ -313,7 +415,7 @@ export function SoySupplyMap({
           minzoom: 8,
           layout: { visibility: "none" },
           filter: ["!=", ["get", "u"], "X"],
-          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1.6, 12, 4] as never, "line-opacity": 0.75 },
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 12, 4] as never, "line-opacity": 0.75 },
         });
         map.addLayer({
           id: "rail",
@@ -339,22 +441,12 @@ export function SoySupplyMap({
           source: "adm-catch",
           paint: { "line-color": "#ffffff", "line-width": 1.3, "line-dasharray": [3, 2], "line-opacity": 0.9 },
         });
-        map.addLayer({
-          id: "rings",
-          type: "line",
-          source: "rings",
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": 2.2,
-            "line-dasharray": ["literal", [1, 0]] as never,
-            "line-opacity": 0.95,
-          },
-        });
+        map.addLayer({ id: "rings", type: "line", source: "rings", paint: { "line-color": "#ffffff", "line-width": 2.2, "line-opacity": 0.95 } });
         map.addLayer({
           id: "nc-fill",
           type: "fill",
           source: "nc",
-          minzoom: FIELDS_MIN_ZOOM,
+          minzoom: 9,
           filter: ["!=", ["geometry-type"], "Point"],
           paint: { "fill-color": NC_COLOR, "fill-opacity": 0.9 },
         });
@@ -362,26 +454,54 @@ export function SoySupplyMap({
           id: "nc-line",
           type: "line",
           source: "nc",
-          minzoom: FIELDS_MIN_ZOOM,
+          minzoom: 9,
           filter: ["!=", ["geometry-type"], "Point"],
           paint: { "line-color": NC_INK, "line-width": 1.2 },
+        });
+        // Zoomed out: a hollow red ring with a white rim — easy to spot over
+        // the green fields, yet clearly a location marker rather than a disc
+        // whose size could be read as area. From zoom 11 the true outline
+        // takes over (points delivered without a polygon keep the marker).
+        const fadeOut = ["interpolate", ["linear"], ["zoom"], 10.5, 1, 11.5, ["case", ["get", "po"], 1, 0]];
+        const ringR = ["interpolate", ["linear"], ["zoom"], 4, 3.2, 8, 5, 11, 6.5];
+        map.addLayer({
+          id: "nc-halo",
+          type: "circle",
+          source: "nc-pts",
+          paint: {
+            "circle-radius": ringR as never,
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 3, 9, 4.5] as never,
+            "circle-stroke-opacity": fadeOut as never,
+          },
         });
         map.addLayer({
           id: "nc-dot",
           type: "circle",
           source: "nc-pts",
           paint: {
-            // Small and unoutlined: a marker for where a field is, not a
-            // symbol whose size could be read as its area.
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 1.3, 8, 2, 11, 3] as never,
-            "circle-color": NC_COLOR,
-            "circle-stroke-color": NC_INK,
-            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0, 9, 0.6] as never,
-            // Polygon markers fade out once the true outline is legible;
-            // point-only records stay.
-            "circle-opacity": ["interpolate", ["linear"], ["zoom"], 10.5, 1, 11.5, ["case", ["get", "po"], 1, 0]] as never,
-            "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 10.5, 1, 11.5, ["case", ["get", "po"], 1, 0]] as never,
+            "circle-radius": ringR as never,
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": NC_MARK,
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 1.6, 9, 2.4] as never,
+            "circle-stroke-opacity": fadeOut as never,
           },
+        });
+        // The selected field (table row or click).
+        map.addLayer({
+          id: "sel-line",
+          type: "line",
+          source: "fields",
+          filter: ["==", ["get", "id"], "__none__"],
+          paint: { "line-color": "#ffffff", "line-width": 3 },
+        });
+        map.addLayer({
+          id: "sel-nc-line",
+          type: "line",
+          source: "nc",
+          filter: ["==", ["get", "id"], "__none__"],
+          paint: { "line-color": "#ffffff", "line-width": 3 },
         });
         map.addLayer({
           id: "tp",
@@ -428,6 +548,10 @@ export function SoySupplyMap({
             paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.78)", "text-halo-width": 1.4 },
           });
         label("tp-label", "tp", 8, 11);
+        label("ring-label", "ring-pt", 0, 12.5);
+        map.setLayoutProperty("ring-label", "text-variable-anchor", ["bottom"]);
+        map.setLayoutProperty("ring-label", "text-radial-offset", 0.4);
+        map.setLayoutProperty("ring-label", "visibility", "none");
         label("adm-label", "adm", 5.5, 12);
         label("plant-label", "plant", 0, 13.5);
 
@@ -452,24 +576,19 @@ export function SoySupplyMap({
           if (!map) return;
           const layers = ["plant", "adm", "tp", "nc-dot", "nc-fill", "fields"].filter((l) => map!.getLayer(l));
           const hit = map.queryRenderedFeatures(e.point, { layers })[0];
-          if (!hit) return;
-          const { data: dt, c: cc, lang: l, catchments: cm, cdlNames: names } = live.current;
+          const { data: dt, c: cc, lang: l, catchments: cm, cdlNames: names, onSelectField: pick } = live.current;
+          if (!hit) {
+            pick?.(null);
+            return;
+          }
           const loc = l === "id" ? "id-ID" : "en-US";
-          const num = (n: number | null | undefined, digits = 1) =>
-            n == null ? "—" : n.toLocaleString(loc, { maximumFractionDigits: digits });
-          const acresHa = (a: number | null | undefined) =>
-            a == null ? "—" : `${formatHa(a * AC_TO_HA, l)} · ${fill(cc.acres, { n: num(a) })}`;
+          const num = (n: number | null | undefined, digits = 1) => (n == null ? "—" : n.toLocaleString(loc, { maximumFractionDigits: digits }));
+          const acresHa = (a: number | null | undefined) => (a == null ? "—" : `${formatAcres(a, l)} · ${formatHa(a * AC_TO_HA, l)}`);
           const mi = (n: number | null | undefined) => (n == null ? cc.noNetworkData : fill(cc.milesShort, { n: num(n) }));
           const catchLine = (id: string) => {
             const k = cm.get(id);
             if (!k) return "";
-            return row(
-              cc.catchmentStats,
-              fill(cc.soyInCatch, {
-                area: formatHa(k.compliant.acres * AC_TO_HA, l),
-                nc: formatCount(k.nonCompliant.fields, l),
-              }),
-            );
+            return row(cc.catchmentStats, fill(cc.soyInCatch, { area: formatAcres(k.compliant.acres, l), nc: formatCount(k.nonCompliant.fields, l) }));
           };
           const btn = (id: string) => (cm.has(id) ? `<button type="button" class="soy-pop-btn" data-select="${esc(id)}">${esc(cc.selectCatchment)}</button>` : "");
           const lid = hit.layer.id;
@@ -481,7 +600,8 @@ export function SoySupplyMap({
               `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popPlant)}</p><p class="soy-pop-title">${esc(p.name)}</p>
               ${row(cc.location, [p.city, p.state].filter(Boolean).join(", "))}
               ${row(cc.toRail, mi(p.railMi))}${row(cc.toRiver, mi(p.riverMi))}
-              ${catchLine("q40")}${catchLine("q80")}</div>`,
+              ${catchLine("q40")}${catchLine("q80")}${btn("q40")}</div>`,
+              "q40",
             );
             return;
           }
@@ -514,6 +634,14 @@ export function SoySupplyMap({
             );
             return;
           }
+          // A field: the detail card when the view has one, else a popup.
+          const src = lid === "fields" ? "fields" : "nc";
+          const full = findFeature(src, String(hit.properties?.id ?? ""));
+          if (pick && full) {
+            popupRef.current?.remove();
+            pick(full);
+            return;
+          }
           const history = (cdl: string) =>
             `<ul class="soy-pop-hist">${String(cdl)
               .split(",")
@@ -523,31 +651,13 @@ export function SoySupplyMap({
                 return `<li><span>${2018 + i}</span><i style="background:${SOY_GROUP_COLORS[soyGroupOf(n)]}"></i>${esc(name)}</li>`;
               })
               .join("")}</ul>`;
-          const tiers = (f: number) =>
-            [
-              f & FLAG.q40 ? cc.scopeQ40 : f & FLAG.q80 ? cc.scopeQ80 : null,
-              f & FLAG.adm ? cc.scopeAdm : null,
-              f & FLAG.tp ? cc.scopeTp : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || "—";
-          if (lid === "nc-dot" || lid === "nc-fill") {
+          if (src === "nc") {
             const p = hit.properties as unknown as NcProps;
-            const before =
-              p.b === "treed" ? cc.ncBeforeTreed : p.b === "natural" ? cc.ncBeforeNatural : p.b === "crop" ? cc.ncBeforeCrop : cc.unknown;
             open(
               e.lngLat,
               `<div class="soy-pop"><p class="soy-pop-kicker">${esc(p.po ? cc.popNcPoint : cc.popNc)}</p>
-              ${row(cc.fieldId, String(p.id), true)}
-              ${row(cc.location, [p.n, p.s].filter(Boolean).join(", ") || "—")}
-              ${row(cc.fieldArea, acresHa(Number(p.a)))}
+              ${row(cc.fieldId, String(p.id), true)}${row(cc.fieldArea, acresHa(Number(p.a)))}
               ${row(cc.changedArea, acresHa(p.ch == null ? null : Number(p.ch)))}
-              ${p.po ? "" : row(cc.before, before)}
-              ${p.po || p.y == null ? "" : row(cc.firstCrop, String(p.y))}
-              ${row(cc.crops2425, `${p.c24 ?? "—"} → ${p.c25 ?? "—"}`)}
-              ${row(cc.soy2026, p.s26 ?? "—")}
-              ${row(cc.memberOf, tiers(Number(p.f)))}
-              ${Number(p.f) & FLAG.dual ? `<p class="soy-pop-warn">${esc(cc.alsoCompliant)}</p>` : ""}
               ${p.po ? "" : `<p class="soy-pop-k">${esc(cc.history)}</p>${history(String(p.c))}`}</div>`,
             );
             return;
@@ -556,82 +666,117 @@ export function SoySupplyMap({
           open(
             e.lngLat,
             `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popField)}</p>
-            ${row(cc.fieldId, String(p.id), true)}
-            ${row(cc.area, acresHa(Number(p.a)))}
-            ${row(cc.location, [p.n, p.s].filter(Boolean).join(", "))}
-            ${row(cc.memberOf, tiers(Number(p.f)))}
-            ${row(cc.toRail, mi(p.r == null ? null : Number(p.r)))}
-            ${row(cc.toRiver, mi(p.v == null ? null : Number(p.v)))}
+            ${row(cc.fieldId, String(p.id), true)}${row(cc.area, acresHa(Number(p.a)))}
+            ${row(cc.toRail, mi(p.r == null ? null : Number(p.r)))}${row(cc.toRiver, mi(p.v == null ? null : Number(p.v)))}
             <p class="soy-pop-k">${esc(cc.history)}</p>${history(String(p.c))}</div>`,
           );
         });
 
-        // Field cells in view, from zoom 9.
-        let wanted = new Set<string>();
-        let inflight = 0;
-        const available = new Set(live.current.data.cells.map(([x, y]) => `${x}_${y}`));
-        const push = () => {
+        // ------------------------------------------------ field loading
+        let shown: SoyFeature[] = [];
+        let token = 0;
+
+        function findFeature(src: "fields" | "nc", id: string): SoyFeature | null {
+          if (src === "nc") return live.current.ncLoaded?.features.find((f) => String(f.properties.id) === id) ?? null;
+          return shown.find((f) => String(f.properties.id) === id) ?? null;
+        }
+
+        const push = (feats: SoyFeature[], state: { loading: boolean; failed: boolean }) => {
           if (!map) return;
-          const feats: Feature[] = [];
-          for (const k of wanted) {
-            const f = cellCache.get(k);
-            if (f) feats.push(...f);
-          }
-          (map.getSource("fields") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({
+          const { selected: scope, ncLoaded: ncFc } = live.current;
+          const level = levelOf(scope);
+          shown = feats;
+          (map.getSource("fields") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats } as never);
+          // The map always shows every non-compliant field ADM listed; the
+          // table and figures count only those in the chosen scope.
+          const all = ncFc?.features ?? [];
+          const nc = all.filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
+          (map.getSource("nc") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: all } as never);
+          (map.getSource("nc-pts") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({
             type: "FeatureCollection",
-            features: feats,
+            features: all.map((f) => ({ type: "Feature", properties: f.properties, geometry: { type: "Point", coordinates: [...center(f)] } })),
           } as never);
+          setUnitState({ level, ...state });
+          measure(state.loading);
+          live.current.onScopeFields?.({ fields: feats, nc, complete: level === 3 && !state.loading && !state.failed, ...state, scope });
         };
+
         const refresh = () => {
           if (!map) return;
-          const zoomOk = map.getZoom() >= FIELDS_MIN_ZOOM;
-          if (!zoomOk || !live.current.on.fields) {
-            setCellState((s) => ({ ...s, zoomOk }));
+          const { selected: scope, data: dt, on: onNow } = live.current;
+          const level = levelOf(scope);
+          const parts = level === 3 ? unitParts(scope, dt) : null;
+          // Grid (soybean density) only on the overview; fields only for one catchment.
+          for (const id of GRID_LAYERS) map.setLayoutProperty(id, "visibility", level === 1 && onNow.fields ? "visible" : "none");
+          const my = ++token;
+          if (!parts || !onNow.fields) {
+            push([], { loading: false, failed: false });
             return;
           }
-          const b = map.getBounds();
-          const deg = live.current.data.cellDeg;
-          const ctr = map.getCenter();
-          const list: { k: string; d: number }[] = [];
-          for (let x = Math.floor(b.getWest() / deg); x <= Math.floor(b.getEast() / deg); x++) {
-            for (let y = Math.floor(b.getSouth() / deg); y <= Math.floor(b.getNorth() / deg); y++) {
-              const k = `${x}_${y}`;
-              if (!available.has(k)) continue;
-              list.push({ k, d: Math.hypot((x + 0.5) * deg - ctr.lng, (y + 0.5) * deg - ctr.lat) });
-            }
+          const hits = parts.map((id) => unitCache.get(id));
+          if (hits.every(Boolean)) {
+            push(hits.flatMap((h) => h!), { loading: false, failed: false });
+            return;
           }
-          list.sort((a, b2) => a.d - b2.d);
-          wanted = new Set(list.slice(0, MAX_CELLS).map((x) => x.k));
-          push();
-          let failed = false;
-          for (const k of wanted) {
-            if (cellCache.has(k)) continue;
-            inflight++;
-            setCellState({ zoomOk, loading: inflight, failed });
-            void fetch(`/data/fields/cells/${k}.geojson`)
-              .then((res) => (res.ok ? (res.json() as Promise<FC>) : Promise.reject(new Error(String(res.status)))))
-              .then((fc) => {
-                cellCache.set(k, fc.features);
-                if (wanted.has(k)) push();
-              })
-              .catch(() => {
-                failed = true;
-              })
-              .finally(() => {
-                inflight--;
-                setCellState({ zoomOk, loading: inflight, failed });
-              });
-          }
-          setCellState((s) => ({ ...s, zoomOk, loading: inflight }));
+          push([], { loading: true, failed: false });
+          // Parts are disjoint (0–80 mi = 0–40 mi + the 40–80 mi ring).
+          Promise.all(parts.map(loadUnit))
+            .then((all) => all.flat())
+            .then((feats) => {
+              if (my === token) push(feats, { loading: false, failed: false });
+            })
+            .catch(() => {
+              if (my === token) push([], { loading: false, failed: true });
+            });
         };
-        map.on("moveend", refresh);
-        (map as unknown as { __refreshCells?: () => void }).__refreshCells = refresh;
+        refreshRef.current = refresh;
+
+        // Figures for what the map shows: one catchment → its loaded fields;
+        // overview → the density grid (≈, cells whose centre is in view) and
+        // every non-compliant field of the supply chain in view.
+        function measure(loading = false) {
+          if (!map) return;
+          const { selected: scope, ncLoaded: ncFc, data: dt } = live.current;
+          const one = levelOf(scope) === 3;
+          if (one && loading) {
+            setInView(null);
+            return;
+          }
+          const bb = map.getBounds();
+          const W = bb.getWest(), E = bb.getEast(), S = bb.getSouth(), N = bb.getNorth(); // prettier-ignore
+          const inB = (x: number, y: number) => x >= W && x <= E && y >= S && y <= N;
+          let comp = 0;
+          if (one) {
+            for (const f of shown) if (inB(Number(f.properties._x), Number(f.properties._y))) comp += Number(f.properties.a) || 0;
+          } else {
+            let rows = dt.grid;
+            let d = dt.gridDeg;
+            const z = map.getZoom();
+            for (const lv of fineGrid ?? []) if (z >= lv.minZoom) ({ rows, deg: d } = lv);
+            for (const r of rows) if (inB((r[0]! + 0.5) * d, (r[1]! + 0.5) * d)) comp += r[2]!;
+          }
+          let ncAcres = 0, defo = 0, ncFields = 0; // prettier-ignore
+          for (const f of ncFc?.features ?? []) {
+            if (!inScope(one ? scope : "all", { flags: Number(f.properties.f), k: String(f.properties.k ?? "") })) continue;
+            if (!inB(Number(f.properties._x), Number(f.properties._y))) continue;
+            ncFields++;
+            ncAcres += Number(f.properties.a) || 0;
+            defo += Number(f.properties.ch) || 0;
+          }
+          setInView({ total: comp + ncAcres, defo, ncAcres, ncFields, approx: !one, one });
+        }
+        map.on("moveend", () => measure());
 
         mapRef.current = map;
         if (import.meta.env.DEV && containerRef.current) {
           (containerRef.current as unknown as { __map?: unknown }).__map = map;
         }
         setReady(true);
+        void loadNonCompliant()
+          .then((fc) => {
+            if (!cancelled) setNcLoaded(fc);
+          })
+          .catch(() => undefined);
         refresh();
       });
     })();
@@ -639,36 +784,27 @@ export function SoySupplyMap({
       cancelled = true;
       popupRef.current?.remove();
       map?.remove();
+      // A unit still loading must not touch the removed map.
+      map = null;
       mapRef.current = null;
     };
     // The map is built once per view; everything reactive is applied below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Non-compliant fields (one ~1 MB file).
+  // The container changes size with the side panel, drawer and window.
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready || !on.nc) return;
-    const apply = (fc: FC) => {
-      (map.getSource("nc") as import("maplibre-gl").GeoJSONSource | undefined)?.setData(fc as never);
-      const pts: FC = {
-        type: "FeatureCollection",
-        features: fc.features.flatMap((f) => {
-          const at = f.geometry.type === "Point" ? (f.geometry.coordinates as [number, number]) : centerOf(f.geometry);
-          return at ? [{ type: "Feature", properties: f.properties, geometry: { type: "Point", coordinates: at } }] : [];
-        }),
-      };
-      (map.getSource("nc-pts") as import("maplibre-gl").GeoJSONSource | undefined)?.setData(pts as never);
-    };
-    if (ncCache) return apply(ncCache);
-    void fetch("/data/fields/noncomply.geojson")
-      .then((res) => (res.ok ? (res.json() as Promise<FC>) : Promise.reject(new Error(String(res.status)))))
-      .then((fc) => {
-        ncCache = fc;
-        apply(fc);
-      })
-      .catch(() => undefined);
-  }, [ready, on.nc]);
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => mapRef.current?.resize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Scope or loaded data changed → reload / refilter.
+  useEffect(() => {
+    if (ready) refreshRef.current();
+  }, [ready, selected, ncLoaded, on.fields]);
 
   // Layer switches; remote layers load the first time they're switched on.
   useEffect(() => {
@@ -676,11 +812,13 @@ export function SoySupplyMap({
     if (!map || !ready) return;
     const vis = (v: boolean) => (v ? "visible" : "none");
     const set = (ids: string[], v: boolean) => ids.forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, "visibility", vis(v)));
-    set(["fields", "fields-line", "grid"], on.fields);
-    set(["nc-fill", "nc-line", "nc-dot"], on.nc);
+    const group = groupOf(selected);
+    set(["fields", "fields-line", "sel-line"], on.fields);
+    set(["nc-fill", "nc-line", "nc-halo", "nc-dot", "sel-nc-line"], on.nc);
     set(["rings", "plant", "plant-label"], on.rings);
-    set(["adm", "adm-catch", "adm-label"], on.adm);
-    set(["tp", "tp-catch", "tp-label"], on.tp);
+    set(["direct-area", "ring-label"], on.rings && group === "direct");
+    set(["adm", "adm-catch", "adm-label"], on.adm && (!group || group === "adm"));
+    set(["tp", "tp-catch", "tp-label"], on.tp && (!group || group === "tp"));
     set(["rail", "rail-casing"], on.rail);
     set(["rivers", "rivers-line"], on.rivers);
     set(["corridors"], on.corridors);
@@ -703,44 +841,29 @@ export function SoySupplyMap({
         })
         .catch(() => setRemote((s) => ({ ...s, [r]: "error" })));
     }
-    (map as unknown as { __refreshCells?: () => void }).__refreshCells?.();
-  }, [on, ready, remote]);
+  }, [on, ready, remote, selected]);
 
   // Colouring: fields, grid.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const bit = tierBit(selected);
     let fieldColor: unknown;
     if (mode === "corridor") fieldColor = bandColorExpr(basis);
     else if (colorBy === "years")
       fieldColor = ["step", ["get", "y"], SOY_YEARS_COLORS[0], ...SOY_YEARS_COLORS.slice(1).flatMap((col, i) => [i + 2, col])];
     else fieldColor = FIELD_COLOR;
     map.setPaintProperty("fields", "fill-color", fieldColor as never);
-    // MapLibre has no bitwise operator: test the tier bit arithmetically.
-    const hasBit = bit == null ? true : [">=", ["%", ["get", "f"], bit * 2], bit];
-    map.setPaintProperty("fields", "fill-opacity", (bit == null ? 0.8 : ["case", hasBit, 0.85, 0.22]) as never);
     const gridColor =
       mode === "corridor"
         ? [
             "case",
             ["<=", ["get", "cov"], 0],
             BAND_COLORS.none,
-            [
-              "step",
-              ["/", ["get", basis === "rail" ? "r10" : basis === "river" ? "v10" : "e10"], ["max", ["get", "cov"], 1]],
-              BAND_COLORS.far,
-              0.25,
-              BAND_COLORS.b20,
-              0.6,
-              BAND_COLORS.b10,
-              0.9,
-              BAND_COLORS.b5,
-            ],
+            ["step", ["/", ["get", basis === "rail" ? "r10" : basis === "river" ? "v10" : "e10"], ["max", ["get", "cov"], 1]], BAND_COLORS.far, 0.25, BAND_COLORS.b20, 0.6, BAND_COLORS.b10, 0.9, BAND_COLORS.b5], // prettier-ignore
           ]
-        : ["step", ["get", "a"], SOY_YEARS_COLORS[0], 1000, SOY_YEARS_COLORS[2], 4000, SOY_YEARS_COLORS[4], 10000, SOY_YEARS_COLORS[5], 20000, SOY_YEARS_COLORS[6], 35000, SOY_YEARS_COLORS[7]]; // prettier-ignore
-    map.setPaintProperty("grid", "fill-color", gridColor as never);
-  }, [mode, colorBy, basis, band, selected, ready]);
+        : ["step", ["get", "p"], SOY_YEARS_COLORS[0], GRID_STEPS[0], SOY_YEARS_COLORS[2], GRID_STEPS[1], SOY_YEARS_COLORS[4], GRID_STEPS[2], SOY_YEARS_COLORS[5], GRID_STEPS[3], SOY_YEARS_COLORS[6], GRID_STEPS[4], SOY_YEARS_COLORS[7]]; // prettier-ignore
+    for (const id of GRID_LAYERS) map.setPaintProperty(id, "fill-color", gridColor as never);
+  }, [mode, colorBy, basis, band, ready]);
 
   // Selected catchment: emphasise its outline, dim the others, fit to it.
   useEffect(() => {
@@ -750,15 +873,14 @@ export function SoySupplyMap({
     const isTp = id === "tp" || id === "tpcore" || /^tp\d/.test(id);
     const isAdm = id === "adm" || /^adm\d/.test(id);
     const one = (x: string) => ["==", ["get", "id"], x];
-    map.setPaintProperty("rings", "line-width", ["case", one(id), 3.4, 2.2] as never);
-    map.setPaintProperty("rings", "line-opacity", (id && id !== "q40" && id !== "q80" && id !== "all" ? 0.45 : 0.95) as never);
+    const direct = groupOf(id) === "direct";
+    const strong = id === "q40" ? ["q40"] : id === "q80" ? ["q80"] : id === "q80r" || id === "direct" ? ["q40", "q80"] : [];
+    map.setPaintProperty("rings", "line-width", (strong.length ? ["match", ["get", "id"], strong, 3.4, 2.2] : 2.2) as never);
+    map.setFilter("direct-area", ["==", ["get", "id"], id] as never);
+    map.setPaintProperty("rings", "line-opacity", (id && !direct && id !== "all" ? 0.4 : 0.95) as never);
     map.setPaintProperty("adm-catch", "line-width", (/^adm\d/.test(id) ? ["case", one(id), 3, 1.1] : isAdm ? 2 : 1.3) as never);
     map.setPaintProperty("adm-catch", "line-opacity", (/^adm\d/.test(id) ? ["case", one(id), 1, 0.35] : id && !isAdm && id !== "all" ? 0.4 : 0.9) as never);
-    map.setPaintProperty(
-      "tp-catch",
-      "line-width",
-      (/^tp\d/.test(id) ? ["case", one(id), 3, 0.8] : isTp ? 1.6 : 1) as never,
-    );
+    map.setPaintProperty("tp-catch", "line-width", (/^tp\d/.test(id) ? ["case", one(id), 3, 0.8] : isTp ? 1.6 : 1) as never);
     map.setPaintProperty(
       "tp-catch",
       "line-opacity",
@@ -773,89 +895,115 @@ export function SoySupplyMap({
               : ["case", ["get", "core"], 0.85, 0.5]) as never,
     );
     popupRef.current?.remove();
-    // Fit to the selection.
-    const d = live.current.data;
-    let b: [[number, number], [number, number]] | null = null;
-    const merge = (bb: [[number, number], [number, number]]) => {
-      b = b ? [[Math.min(b[0][0], bb[0][0]), Math.min(b[0][1], bb[0][1])], [Math.max(b[1][0], bb[1][0]), Math.max(b[1][1], bb[1][1])]] : bb; // prettier-ignore
-    };
-    if (id === "q40" || id === "q80") {
-      const r = d.rings.find((x) => x.id === id)!;
-      merge(circleBounds(d.plant.lon, d.plant.lat, r.radiusM));
-    } else if (/^adm\d/.test(id)) {
-      const e = d.admElevators.find((x) => x.id === id);
-      if (e) merge(circleBounds(e.lon, e.lat, e.radiusM ?? 37000));
-    } else if (/^tp\d/.test(id)) {
-      const e = d.thirdParty.find((x) => x.id === id);
-      if (e) merge(circleBounds(e.lon, e.lat, e.radiusM));
-    } else if (id === "adm") {
-      d.admElevators.forEach((e) => merge(circleBounds(e.lon, e.lat, e.radiusM ?? 37000)));
-    } else if (id === "tp" || id === "tpcore") {
-      d.thirdParty.filter((e) => id === "tp" || e.core).forEach((e) => merge(circleBounds(e.lon, e.lat, e.radiusM)));
-    } else {
-      d.thirdParty.forEach((e) => merge(circleBounds(e.lon, e.lat, e.radiusM)));
-      d.admElevators.forEach((e) => merge(circleBounds(e.lon, e.lat, e.radiusM ?? 37000)));
-    }
+    const b = scopeBounds(id, data);
     if (b) map.fitBounds(b, { padding: 30, duration: 700 });
-  }, [selected, ready]);
+  }, [selected, ready, data]);
 
+  // Selected field highlight.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    map.setLayoutProperty("imagery", "visibility", basemap === "imagery" ? "visible" : "none");
-    map.setLayoutProperty("map", "visibility", basemap === "map" ? "visible" : "none");
+    const f = ["==", ["get", "id"], selectedField ?? "__none__"];
+    map.setFilter("sel-line", f as never);
+    map.setFilter("sel-nc-line", f as never);
+  }, [selectedField, ready]);
+
+  // Focus requests (table row, find box).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !focus) return;
+    if (focus.bbox) map.fitBounds(focus.bbox, { padding: 120, maxZoom: 14, duration: 700 });
+    else if (focus.center) map.flyTo({ center: focus.center, zoom: focus.zoom ?? 14, duration: 700 });
+  }, [focus?.nonce, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Basemap swap in place (keeps every data layer).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    setBasemap(map, basemap, DATA_FLOOR);
   }, [basemap, ready]);
 
   useEffect(() => {
     popupRef.current?.remove();
   }, [lang]);
 
-  const LABEL: Record<LayerKey, string> = {
-    fields: c.layerFields,
-    nc: c.layerNc,
-    rings: c.layerPlantRings,
-    adm: c.layerAdm,
-    tp: c.layerTp,
-    rail: c.layerRail,
-    rivers: c.layerRivers,
-    corridors: c.layerCorridors,
-    roads: c.layerRoads,
-  };
-  const SW: Record<LayerKey, string> = {
-    fields: mode === "corridor" ? BAND_COLORS.b10 : FIELD_COLOR,
-    nc: NC_COLOR,
-    rings: PLANT_COLOR,
-    adm: "#ffffff",
-    tp: TP_COLOR,
-    rail: RAIL_COLOR,
-    rivers: RIVER_COLOR,
-    corridors: "#dfe9f7",
-    roads: "#f1efe8",
+  // One card: each row switches a layer and shows its map symbol.
+  const level = unitState.level;
+  const KEY: Record<LayerKey, { label: string; symbol: ReactNode; detail?: ReactNode }> = {
+    fields:
+      mode === "corridor"
+        ? {
+            label: c.layerFields,
+            symbol: <i className="sq" style={{ background: BAND_COLORS.b10 }} />,
+            detail: (
+              <div className="soy-key-detail">
+                <p className="soy-key-note">{fill(c.legendBands, { basis: (basis === "rail" ? c.rail : basis === "river" ? c.riverWord : c.either).toLowerCase() })}</p>
+                {(
+                  [
+                    [BAND_COLORS.b5, fill(c.bandLe, { n: 5 })],
+                    [BAND_COLORS.b10, fill(c.bandLe, { n: 10 })],
+                    [BAND_COLORS.b20, fill(c.bandLe, { n: 20 })],
+                    [BAND_COLORS.far, c.bandFar],
+                    [BAND_COLORS.none, c.legendNoData],
+                  ] as const
+                ).map(([col, text]) => (
+                  <p key={text} className="soy-legend-item">
+                    <i className="sq" style={{ background: col }} /> {text}
+                  </p>
+                ))}
+              </div>
+            ),
+          }
+        : level === 1
+          ? {
+              label: c.legendDensity,
+              symbol: <i className="sq" style={{ background: SOY_YEARS_COLORS[5] }} />,
+              detail: (
+                <div className="soy-key-detail">
+                  <div className="soy-legend-ramp six">
+                    {[0, 2, 4, 5, 6, 7].map((i) => (
+                      <i key={i} style={{ background: SOY_YEARS_COLORS[i] }} />
+                    ))}
+                  </div>
+                  <div className="soy-legend-ends">
+                    <span>&lt; {GRID_STEPS[0]}%</span>
+                    <span>≥ {GRID_STEPS[4]}%</span>
+                  </div>
+                </div>
+              ),
+            }
+          : { label: c.legendCompliant, symbol: <i className="sq" style={{ background: FIELD_COLOR }} /> },
+    nc: {
+      label: c.legendNc,
+      symbol: <i className="nc-ring" />,
+      detail: <p className="soy-key-note">{c.legendNcDot}</p>,
+    },
+    rings: { label: c.keyRings, symbol: <><i className="dot" style={{ background: PLANT_COLOR }} /><i className="ln" /></> },
+    adm: { label: c.keyAdm, symbol: <><i className="dot adm" /><i className="ln dash" /></> },
+    tp: { label: c.keyTp, symbol: <><i className="dot" style={{ background: TP_COLOR }} /><i className="ln dash tp" /></> },
+    rail: { label: c.layerRail, symbol: <i className="ln" style={{ borderTopColor: RAIL_COLOR }} /> },
+    rivers: { label: c.layerRivers, symbol: <i className="ln thick" style={{ borderTopColor: RIVER_COLOR }} /> },
+    corridors: { label: c.layerCorridors, symbol: <i className="sq" style={{ background: "#dfe9f7" }} /> },
+    roads: { label: c.layerRoads, symbol: <i className="ln road" /> },
   };
   const order: LayerKey[] =
     mode === "corridor"
       ? ["fields", "rail", "rivers", "corridors", "rings", "adm", "tp", "nc", "roads"]
       : ["fields", "nc", "rings", "adm", "tp", "rail", "rivers", "roads"];
-  const basisName = basis === "rail" ? c.rail : basis === "river" ? c.riverWord : c.either;
 
   return (
     <div className="soy-map supply-map">
       <div ref={containerRef} className="soy-map-canvas" />
       <div className="soy-map-tools">
-        <div className="soy-map-basemap seg" role="group" aria-label="Basemap">
-          {(["imagery", "map"] as const).map((k) => (
-            <button key={k} type="button" className={basemap === k ? "on" : ""} aria-pressed={basemap === k} onClick={() => setBasemap(k)}>
-              {k === "imagery" ? c.basemapImagery : c.basemapMap}
-            </button>
-          ))}
-        </div>
-        <details className="soy-layers map-card" open={layersOpen} onToggle={(e) => setLayersOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        {toolsSlot}
+        <details className="soy-layers soy-key map-card" open={layersOpen} onToggle={(e) => setLayersOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary>{c.layers}</summary>
           <ul>
             {order.map((k) => {
               const st = (REMOTE as string[]).includes(k) ? remote[k as Remote] : null;
+              const item = KEY[k];
               return (
-                <li key={k}>
+                <li key={k} className={on[k] ? "" : "off"}>
                   <label>
                     <input
                       type="checkbox"
@@ -865,65 +1013,88 @@ export function SoySupplyMap({
                         setOn((s) => ({ ...s, [k]: !s[k] }));
                       }}
                     />
-                    <i className={`soy-swatch ${k}`} style={{ background: SW[k] }} />
-                    {LABEL[k]}
-                    {on[k] && st === "loading" ? <em> {c.loading}</em> : null}
-                    {on[k] && st === "error" ? <em className="err"> {c.failed}</em> : null}
+                    <span className="soy-key-symbol">{item.symbol}</span>
+                    <span>
+                      {item.label}
+                      {on[k] && st === "loading" ? <em> {c.loading}</em> : null}
+                      {on[k] && st === "error" ? <em className="err"> {c.failed}</em> : null}
+                    </span>
                   </label>
+                  {on[k] && item.detail ? item.detail : null}
                 </li>
               );
             })}
           </ul>
+          <p className="soy-key-foot">{c.legendMiles}</p>
         </details>
       </div>
 
-      <div className="soy-map-legend map-card supply-legend">
-        {mode === "corridor" ? (
-          <>
-            <p className="soy-legend-title">{fill(c.legendBands, { basis: basisName.toLowerCase() })}</p>
-            {(
-              [
-                [BAND_COLORS.b5, fill(c.bandLe, { n: 5 })],
-                [BAND_COLORS.b10, fill(c.bandLe, { n: 10 })],
-                [BAND_COLORS.b20, fill(c.bandLe, { n: 20 })],
-                [BAND_COLORS.far, c.bandFar],
-                [BAND_COLORS.none, c.legendNoData],
-              ] as const
-            ).map(([col, text]) => (
-              <p key={text} className="soy-legend-item">
-                <i className="sq" style={{ background: col }} /> {text}
-              </p>
+      <div className="basemap-chip soy-basemap-chip">
+        {bmOpen ? (
+          <div className="basemap-menu" role="menu">
+            {BASEMAP_ORDER.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={basemap === id}
+                className={basemap === id ? "on" : ""}
+                onClick={() => {
+                  setBm(id);
+                  setBmOpen(false);
+                }}
+              >
+                {BASEMAPS[id].label}
+              </button>
             ))}
-          </>
-        ) : (
-          <>
-            <p className="soy-legend-item">
-              <i className="sq" style={{ background: FIELD_COLOR }} /> {c.legendCompliant}
-            </p>
-            <p className="soy-legend-item">
-              <i className="sq" style={{ background: NC_COLOR, outline: `1px solid ${NC_INK}` }} /> {c.legendNc}
-            </p>
-            <p className="soy-legend-note">{c.legendNcDot}</p>
-          </>
-        )}
-        <p className="soy-legend-item">
-          <i className="dot" style={{ background: PLANT_COLOR }} /> {c.legendPlant}
-        </p>
-        <p className="soy-legend-item">
-          <i className="dot adm" /> {c.legendAdm}
-        </p>
-        <p className="soy-legend-item">
-          <i className="dot" style={{ background: TP_COLOR }} /> {c.legendTp}
-        </p>
+          </div>
+        ) : null}
+        <button type="button" className="basemap-chip-btn" aria-haspopup="menu" aria-expanded={bmOpen} onClick={() => setBmOpen((v) => !v)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M12 3 2 8l10 5 10-5-10-5zM2 13l10 5 10-5" strokeLinejoin="round" />
+          </svg>
+          <span className="basemap-chip-label">
+            <small>{c.basemap}</small>
+            {BASEMAPS[basemap].label}
+          </span>
+        </button>
       </div>
 
-      {on.fields && !cellState.zoomOk ? <p className="soy-map-status">{c.zoomForFields}</p> : null}
-      {on.fields && cellState.zoomOk && cellState.loading > 0 ? (
+      {mode === "supply" && inView ? (
+        <div className="soy-inview map-card" aria-live="polite">
+          <p className="soy-inview-title">
+            {c.inViewTitle} · {inView.one ? c.inViewCatchment : c.inViewChain}
+          </p>
+          <div className="soy-inview-row">
+            <div>
+              <b>
+                {inView.approx ? "≈ " : ""}
+                {formatAcres(inView.total, lang)}
+              </b>
+              <span>{c.inViewTotal}</span>
+            </div>
+            <div>
+              <b className="bad">{formatAcres(inView.defo, lang)}</b>
+              <span>{c.inViewDefo}</span>
+            </div>
+            <div>
+              <b>{inView.total > 0 ? formatSharePct(pct(inView.defo, inView.total), lang) : "—"}</b>
+              <span>{c.inViewShare}</span>
+            </div>
+          </div>
+          <p className="soy-inview-note">
+            {fill(c.inViewNc, { n: formatCount(inView.ncFields, lang), area: formatAcres(inView.ncAcres, lang) })}
+            {inView.approx ? ` ${c.inViewApprox}` : ""}
+          </p>
+        </div>
+      ) : null}
+      {on.fields && unitState.level < 3 ? <p className="soy-map-status">{c.pickForFields}</p> : null}
+      {on.fields && unitState.loading ? (
         <p className="soy-map-status">
           <span className="spinner" aria-hidden="true" /> {c.loadingFields}
         </p>
       ) : null}
-      {cellState.failed ? <p className="soy-map-status error">{c.fieldsError}</p> : null}
+      {unitState.failed ? <p className="soy-map-status error">{c.fieldsError}</p> : null}
     </div>
   );
 }

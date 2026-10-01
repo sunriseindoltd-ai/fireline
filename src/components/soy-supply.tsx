@@ -1,23 +1,18 @@
 import { useMemo, useState } from "react";
-import { Bar, BarChart, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiTile } from "@/components/kpi-tile";
-import { SoySupplyMap, type SupplyColorBy } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
-import { fill, formatCount, formatHa, formatLarge } from "@/lib/format";
+import { fill, formatAcres, formatCount, formatHa, formatLarge } from "@/lib/format";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, type SoyCopy } from "@/lib/soy-copy";
 import { formatSharePct, type SoySupplyCopy } from "@/lib/soy-supply-copy";
 import {
   AC_TO_HA,
-  BAND_COLORS,
   FIELD_COLOR,
-  M_PER_MI,
   NC_COLOR,
-  RIVER_COLOR,
-  RAIL_COLOR,
+  comboTotals,
   pct,
-  type Band,
-  type Basis,
   type Catchment,
+  type ComboTotals,
   type SupplyData,
 } from "@/lib/soy-supply";
 
@@ -27,15 +22,24 @@ type Common = {
   c: SoySupplyCopy;
   sc: SoyCopy;
   lang: Lang;
+  /** Catchment shared by every tab (the workspace holds it). */
+  scope: string;
+  setScope: (id: string) => void;
+  present: boolean;
+  onOpenMap: () => void;
 };
 
-const TIERS = ["all", "q40", "q80", "adm", "tpcore", "tp"] as const;
+/** Level 1 and the three supplier types (level 2) — the tabs above the figures. */
+const TIERS = ["all", "direct", "adm", "tp"] as const;
+/** Rows of the true-scale table. */
 
 function tierLabel(id: string, c: SoySupplyCopy) {
   return (
     {
       all: c.scopeAll,
+      direct: c.scopeDirect,
       q40: c.scopeQ40,
+      q80r: c.scopeQ80r,
       q80: c.scopeQ80,
       adm: c.scopeAdm,
       tpcore: c.scopeTp56,
@@ -105,10 +109,13 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
       <div className="chart-card">
         <h3>{c.cropTitle}</h3>
         <ResponsiveContainer width="100%" height={230}>
-          <BarChart data={k.compliant.cropHistoryHa} margin={{ top: 8, left: 8, right: 8 }}>
+          <BarChart
+            // Acres, like every other area in SoyTrace (the stats are stored in ha).
+            data={k.compliant.cropHistoryHa.map((r) => Object.fromEntries(Object.entries(r).map(([key, v]) => [key, key === "year" ? v : Number(v) / AC_TO_HA])))}
+            margin={{ top: 8, left: 8, right: 8 }}>
             <XAxis dataKey="year" tickLine={false} axisLine={false} fontSize={12} />
             <YAxis tickLine={false} axisLine={false} fontSize={11} width={88} tickFormatter={(v: number) => formatLarge(v, lang)} />
-            <Tooltip formatter={(v: number, key: string) => [formatHa(v, lang), sc.groups[key as keyof typeof sc.groups] ?? key]} />
+            <Tooltip formatter={(v: number, key: string) => [formatAcres(v, lang), sc.groups[key as keyof typeof sc.groups] ?? key]} />
             {SOY_GROUPS.map((g) => (
               <Bar key={g} dataKey={g} stackId="a" fill={SOY_GROUP_COLORS[g]} isAnimationActive={false} />
             ))}
@@ -155,7 +162,7 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
                   {r.county}, {r.state}
                 </td>
                 <td className="num tabular-nums">{countF(r.fields)}</td>
-                <td className="num tabular-nums">{formatHa(r.acres * AC_TO_HA, lang)}</td>
+                <td className="num tabular-nums">{formatAcres(r.acres, lang)}</td>
               </tr>
             ))}
           </tbody>
@@ -166,30 +173,19 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
 }
 
 /** The Quincy supply chain: catchments, fields, non-compliant fields at true scale. */
-export function SoySupplyView({ data, cdlNames, c, sc, lang }: Common) {
-  const [scope, setScope] = useState<string>("all");
-  const [colorBy, setColorBy] = useState<SupplyColorBy>("status");
-  const [tpQuery, setTpQuery] = useState("");
-  const [tpCore, setTpCore] = useState(false);
+export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onOpenMap }: Common) {
   const catchments = useCatchments(data);
   const k = catchments.get(scope) ?? catchments.get("all")!;
   const countF = (n: number) => formatCount(n, lang);
-  const haF = (acres: number) => formatHa(acres * AC_TO_HA, lang);
-  const acF = (acres: number) => fill(c.acres, { n: formatLarge(acres, lang) });
+  // Areas in acres (the client's unit); hectares as the secondary figure.
+  const haF = (acres: number) => formatAcres(acres, lang);
+  const acF = (acres: number) => formatHa(acres * AC_TO_HA, lang);
   const nck = k.nonCompliant;
   const share = pct(nck.acres, k.compliant.acres + nck.acres);
   // "All catchments" shows ADM's whole list, including the fields outside every catchment.
   const ncAll = data.nonCompliantAll;
   const ncForCard = scope === "all" ? ncAll : nck;
   const outside = ncAll.fields - (catchments.get("all")?.nonCompliant.fields ?? 0);
-  const miles = (m: number, nautical: boolean) => (nautical ? `${Math.round(m / 1852)} NM` : `${Math.round(m / M_PER_MI)} mi`);
-  const admRadius = data.admElevators.find((e) => e.radiusM)?.radiusM ?? 0;
-  const tpRadius = data.thirdParty[0]?.radiusM ?? 0;
-  const companies = new Set(data.thirdParty.map((t) => t.company)).size;
-  const tpRows = data.thirdParty
-    .filter((t) => (!tpCore || t.core) && [t.company, t.tract, t.county, t.state].join(" ").toLowerCase().includes(tpQuery.trim().toLowerCase()))
-    .map((t) => ({ t, k: catchments.get(t.id) }))
-    .sort((a, b) => (b.k?.compliant.acres ?? 0) - (a.k?.compliant.acres ?? 0));
   const beforeRows: [string, number][] = [
     [c.ncBeforeTreed, ncForCard.byBefore.treed ?? 0],
     [c.ncBeforeNatural, ncForCard.byBefore.natural ?? 0],
@@ -203,6 +199,11 @@ export function SoySupplyView({ data, cdlNames, c, sc, lang }: Common) {
         <div>
           <h1>{c.supplyTitle}</h1>
           <p className="summary-sub">{c.supplyIntro}</p>
+        </div>
+        <div className="summary-tools">
+          <button type="button" className="btn-secondary" onClick={onOpenMap}>
+            {c.openMap}
+          </button>
         </div>
       </div>
       <ScopeTabs scope={scope} setScope={setScope} data={data} c={c} />
@@ -221,73 +222,7 @@ export function SoySupplyView({ data, cdlNames, c, sc, lang }: Common) {
         <KpiTile value={formatSharePct(share, lang)} label={c.kpiNcShare} hint={c.kpiNcShareHint} />
       </div>
 
-      <section className="chart-card soy-map-card">
-        <div className="supply-map-bar">
-          <span>{c.colorBy}</span>
-          <div className="seg" role="group" aria-label={c.colorBy}>
-            {(["status", "years"] as const).map((v) => (
-              <button key={v} type="button" className={colorBy === v ? "on" : ""} aria-pressed={colorBy === v} onClick={() => setColorBy(v)}>
-                {v === "status" ? c.colorCatchment : c.colorYears}
-              </button>
-            ))}
-          </div>
-        </div>
-        <SoySupplyMap
-          data={data}
-          mode="supply"
-          selected={scope}
-          onSelect={(id) => setScope(id ?? "all")}
-          colorBy={colorBy}
-          basis="either"
-          band={10}
-          cdlNames={cdlNames}
-          catchments={catchments}
-          c={c}
-          lang={lang}
-        />
-      </section>
-
-      <section className="chart-card supply-wide">
-        <h3>{c.scaleTitle}</h3>
-        <p className="chart-note">{c.scaleBody}</p>
-        <div className="soy-table-wrap">
-          <table className="data-table soy-table scale-table">
-            <thead>
-              <tr>
-                <th>{c.colCatchment}</th>
-                <th className="num">{c.colCompliantArea}</th>
-                <th className="num">{c.colNcFields}</th>
-                <th className="num">{c.colNcArea}</th>
-                <th className="num">{c.colShare}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(["q40", "q80", "adm", "tpcore", "tp", "all"] as const).map((id) => {
-                const x = catchments.get(id);
-                if (!x) return null;
-                const p = pct(x.nonCompliant.acres, x.compliant.acres + x.nonCompliant.acres);
-                return (
-                  <tr key={id} className={scope === id ? "on" : ""} tabIndex={0} onClick={() => setScope(id)} onKeyDown={(e) => e.key === "Enter" && setScope(id)}>
-                    <td>
-                      {tierLabel(id, c)}
-                      <span className="scale-bar" aria-hidden="true">
-                        <i style={{ width: `${Math.max(p, 0.4)}%` }} />
-                      </span>
-                    </td>
-                    <td className="num tabular-nums">{haF(x.compliant.acres)}</td>
-                    <td className="num tabular-nums">{countF(x.nonCompliant.fields)}</td>
-                    <td className="num tabular-nums">{haF(x.nonCompliant.acres)}</td>
-                    <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="chart-note scale-legend">
-          <i style={{ background: FIELD_COLOR }} /> {c.scaleCompliant} <i style={{ background: NC_COLOR }} /> {c.scaleNonCompliant}
-        </p>
-      </section>
+      <ComboTable data={data} c={c} lang={lang} />
 
       <div className="chart-grid soy-charts">
         <section className="chart-card">
@@ -336,102 +271,332 @@ export function SoySupplyView({ data, cdlNames, c, sc, lang }: Common) {
               </tbody>
             </table>
           </div>
-          <p className="chart-note">
-            {fill(c.ncDual, { n: countF(ncAll.alsoCompliant) })} {fill(c.ncPointOnly, { n: countF(ncAll.pointOnly) })}
-          </p>
+          {present ? null : (
+            <p className="chart-note">
+              {fill(c.ncDual, { n: countF(ncAll.alsoCompliant) })} {fill(c.ncPointOnly, { n: countF(ncAll.pointOnly) })}
+            </p>
+          )}
         </section>
 
         <section className="chart-card">
-          <h3>{c.tpTitle}</h3>
-          <div className="supply-tp-tools">
-            <label className="search-field">
-              <input type="search" value={tpQuery} onChange={(e) => setTpQuery(e.target.value)} placeholder={c.tpSearch} aria-label={c.tpSearch} />
-            </label>
-            <label className="check-inline">
-              <input type="checkbox" checked={tpCore} onChange={(e) => setTpCore(e.target.checked)} /> {c.tpCoreOnly}
-            </label>
-          </div>
-          <div className="soy-table-wrap tall">
-            <table className="data-table soy-table">
-              <thead>
-                <tr>
-                  <th>{c.colCompany}</th>
-                  <th>{c.colPlace}</th>
-                  <th className="num">{c.colSoyArea}</th>
-                  <th className="num">{c.colNcFields}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tpRows.map(({ t, k: x }) => (
-                  <tr key={t.id} className={scope === t.id ? "on" : ""} tabIndex={0} onClick={() => setScope(t.id)} onKeyDown={(ev) => ev.key === "Enter" && setScope(t.id)}>
-                    <td>
-                      {t.company ?? "—"}
-                      {t.core ? <span className="soy-tag">{c.core}</span> : null}
-                    </td>
-                    <td>{[t.county, t.state].filter(Boolean).join(", ")}</td>
-                    <td className="num tabular-nums">{x ? haF(x.compliant.acres) : "—"}</td>
-                    <td className="num tabular-nums">{x ? countF(x.nonCompliant.fields) : "—"}</td>
+          <h3>{c.ncWhyTitle}</h3>
+          <p className="chart-note">{c.ncWhyIntro}</p>
+          <h3 className="soy-subhead">{c.ncExtentTitle}</h3>
+          <table className="data-table soy-table">
+            <tbody>
+              {(
+                [
+                  ["whole", c.ncExtentWhole],
+                  ["most", c.ncExtentMost],
+                  ["part", c.ncExtentPart],
+                  ["unknown", c.unknown],
+                ] as const
+              )
+                .filter(([key]) => (ncForCard.byExtent?.[key] ?? 0) > 0)
+                .map(([key, label]) => (
+                  <tr key={key}>
+                    <td>{label}</td>
+                    <td className="num tabular-nums">{countF(ncForCard.byExtent?.[key] ?? 0)}</td>
+                    <td className="num tabular-nums">{formatSharePct(pct(ncForCard.byExtent?.[key] ?? 0, ncForCard.fields), lang)}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
+            </tbody>
+          </table>
           <p className="chart-note">
-            {fill(c.tpNote, { companies: countF(companies), miles: miles(tpRadius, false), km: Math.round(tpRadius / 1000) })}
+            {fill(c.ncExtentNote, {
+              changed: haF(ncForCard.changeAcres),
+              total: haF(ncForCard.acres),
+              p: formatSharePct(pct(ncForCard.changeAcres, ncForCard.acres), lang),
+            })}
           </p>
+          <h3 className="soy-subhead">{c.ncUseTitle}</h3>
+          <table className="data-table soy-table">
+            <tbody>
+              {(
+                [
+                  ["crop", c.ncUseCrop],
+                  ["pasture", c.ncUsePasture],
+                  ["nonag", c.ncUseNonAg],
+                  ["unknown", c.unknown],
+                ] as const
+              )
+                .filter(([key]) => (ncForCard.byUse?.[key] ?? 0) > 0)
+                .map(([key, label]) => (
+                  <tr key={key}>
+                    <td>{label}</td>
+                    <td className="num tabular-nums">{countF(ncForCard.byUse?.[key] ?? 0)}</td>
+                    <td className="num tabular-nums">{formatSharePct(pct(ncForCard.byUse?.[key] ?? 0, ncForCard.fields), lang)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          <p className="chart-note">{c.ncUseNote}</p>
         </section>
       </div>
 
-      <section className="chart-card supply-wide">
-        <h3>{c.admTitle}</h3>
-        <div className="soy-table-wrap">
-          <table className="data-table soy-table">
-            <thead>
-              <tr>
-                <th>{c.colName}</th>
-                <th>{c.colRiver}</th>
-                <th className="num">{c.colSoyArea}</th>
-                <th className="num">{c.colNcFields}</th>
-                <th className="num">{c.colNcArea}</th>
-                <th className="num">{c.colShare}</th>
-                <th className="num">{c.colRail}</th>
-                <th className="num">{c.colRiverDist}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.admElevators
-                .filter((e) => e.radiusM)
-                .map((e) => {
-                  const x = catchments.get(e.id);
-                  return (
-                    <tr key={e.id} className={scope === e.id ? "on" : ""} tabIndex={0} onClick={() => setScope(e.id)} onKeyDown={(ev) => ev.key === "Enter" && setScope(e.id)}>
-                      <td>
-                        {e.name}
-                        <span className="soy-cell-sub">{[e.city, e.state].filter(Boolean).join(", ")}</span>
-                      </td>
-                      <td>{e.river ?? "—"}</td>
-                      <td className="num tabular-nums">{x ? haF(x.compliant.acres) : "—"}</td>
-                      <td className="num tabular-nums">{x ? countF(x.nonCompliant.fields) : "—"}</td>
-                      <td className="num tabular-nums">{x ? haF(x.nonCompliant.acres) : "—"}</td>
-                      <td className="num tabular-nums">
-                        {x ? formatSharePct(pct(x.nonCompliant.acres, x.compliant.acres + x.nonCompliant.acres), lang) : "—"}
-                      </td>
-                      <td className="num tabular-nums">{fill(c.milesShort, { n: e.railMi.toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 }) })}</td>
-                      <td className="num tabular-nums">{fill(c.milesShort, { n: e.riverMi.toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 }) })}</td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-        <p className="chart-note">
-          {fill(c.admNote, { miles: miles(admRadius, true), km: Math.round(admRadius / 1000) })}
-        </p>
-      </section>
+      <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={scope} setScope={setScope} />
 
       <CropCharts k={k} c={c} sc={sc} lang={lang} />
-      <DataNotes c={c} />
+      {present ? null : <DataNotes c={c} />}
     </>
+  );
+}
+
+type FacilityKind = "chain" | "plant" | "adm" | "tp";
+
+function csvCell(v: unknown) {
+  const s = v == null ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** ADM's ask: compliant vs non-compliant polygons for the whole Quincy supply
+ * chain and per facility (the crushing plant and every elevator). */
+function FacilityTable({
+  data,
+  catchments,
+  c,
+  lang,
+  scope,
+  setScope,
+}: {
+  data: SupplyData;
+  catchments: Map<string, Catchment>;
+  c: SoySupplyCopy;
+  lang: Lang;
+  scope: string;
+  setScope: (id: string) => void;
+}) {
+  const [kind, setKind] = useState<"all" | FacilityKind>("all");
+  const [query, setQuery] = useState("");
+  const countF = (n: number) => formatCount(n, lang);
+  const acF = (n: number) => formatAcres(n, lang);
+  const plantPlace = [data.plant.city, data.plant.state].filter(Boolean).join(", ");
+  const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = [
+    { id: "all", kind: "chain", name: c.scopeAll, place: plantPlace },
+    { id: "direct", kind: "plant", name: `${data.plant.name} · ${c.scopeQ80}`, place: plantPlace },
+    { id: "q40", kind: "plant", name: c.scopeQ40, place: plantPlace, sub: true },
+    { id: "q80r", kind: "plant", name: c.scopeQ80r, place: plantPlace, sub: true },
+    ...data.admElevators
+      .filter((e) => e.radiusM)
+      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
+    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
+  ];
+  const q = query.trim().toLowerCase();
+  const shown = rows.filter((r) => (kind === "all" || r.kind === kind || r.kind === "chain") && (!q || r.kind === "chain" || `${r.name} ${r.place}`.toLowerCase().includes(q)));
+  const kindLabel: Record<FacilityKind, string> = { chain: c.facChain, plant: c.kindPlant, adm: c.kindAdm, tp: c.kindTp };
+  const line = (id: string) => {
+    const x = catchments.get(id);
+    if (!x) return null;
+    const cf = x.compliant.fields;
+    const nf = x.nonCompliant.fields;
+    const ca = x.compliant.acres;
+    const na = x.nonCompliant.acres;
+    return { cf, nf, ca, na, pf: pct(nf, cf + nf), pa: pct(na, ca + na), defo: x.nonCompliant.changeAcres };
+  };
+  function download() {
+    const head = ["facility_id", "type", "name", "place", "compliant_polygons", "noncompliant_polygons", "noncompliant_pct_of_polygons", "compliant_acres", "noncompliant_acres", "noncompliant_pct_of_acres", "deforested_acres"]; // prettier-ignore
+    const body = rows.map((r) => {
+      const v = line(r.id);
+      return [r.id, r.kind, r.name, r.place, v?.cf, v?.nf, v?.pf.toFixed(4), v?.ca.toFixed(1), v?.na.toFixed(1), v?.pa.toFixed(4), v?.defo.toFixed(1)];
+    });
+    const text = [head, ...body].map((r) => r.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "soytrace-quincy-compliance-by-facility.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return (
+    <section className="chart-card supply-wide">
+      <div className="soy-fac-head">
+        <div>
+          <h3>{c.facTitle}</h3>
+          <p className="chart-note">{c.facIntro}</p>
+        </div>
+        <button type="button" className="btn-secondary" onClick={download}>
+          {c.facDownload}
+        </button>
+      </div>
+      <div className="supply-tp-tools">
+        <div className="seg" role="group" aria-label={c.facTitle}>
+          {(["all", "plant", "adm", "tp"] as const).map((v) => (
+            <button key={v} type="button" className={kind === v ? "on" : ""} aria-pressed={kind === v} onClick={() => setKind(v)}>
+              {v === "all" ? c.statusAll : kindLabel[v]}
+            </button>
+          ))}
+        </div>
+        <label className="search-field">
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={c.tpSearch} aria-label={c.tpSearch} />
+        </label>
+      </div>
+      <div className="soy-table-wrap tall">
+        <table className="data-table soy-table soy-fac-table">
+          <thead>
+            <tr>
+              <th>{c.facCol}</th>
+              <th className="num">{c.facCompliantN}</th>
+              <th className="num">{c.facNcN}</th>
+              <th className="num">{c.facPctN}</th>
+              <th className="num">{c.facCompliantA}</th>
+              <th className="num">{c.facNcA}</th>
+              <th className="num">{c.facPctA}</th>
+              <th className="num">{c.facDefo}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r) => {
+              const v = line(r.id);
+              if (!v) return null;
+              return (
+                <tr
+                  key={r.id}
+                  className={[scope === r.id ? "on" : "", r.kind === "chain" ? "total" : "", r.sub ? "sub" : ""].join(" ").trim()}
+                  tabIndex={0}
+                  onClick={() => setScope(r.id)}
+                  onKeyDown={(e) => e.key === "Enter" && setScope(r.id)}
+                >
+                  <td>
+                    {r.name}
+                    <span className="soy-cell-sub">
+                      {kindLabel[r.kind]} · {r.place}
+                    </span>
+                  </td>
+                  <td className="num tabular-nums">{countF(v.cf)}</td>
+                  <td className="num tabular-nums">{countF(v.nf)}</td>
+                  <td className="num tabular-nums">{formatSharePct(v.pf, lang)}</td>
+                  <td className="num tabular-nums">{acF(v.ca)}</td>
+                  <td className="num tabular-nums">{acF(v.na)}</td>
+                  <td className="num tabular-nums">{formatSharePct(v.pa, lang)}</td>
+                  <td className="num tabular-nums">{acF(v.defo)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="chart-note">{c.facNote}</p>
+    </section>
+  );
+}
+
+/** The user's ask: statistics for Quincy 0–40 / 0–80 mi, ADM elevators (all
+ * or any chosen ones), their combinations and third parties — compliant and
+ * non-compliant together, each field counted once. */
+function ComboTable({ data, c, lang }: { data: SupplyData; c: SoySupplyCopy; lang: Lang }) {
+  const sites = data.admElevators.filter((e) => e.radiusM);
+  const siteIds = sites.map((e) => e.id);
+  const [quincy, setQuincy] = useState<"none" | "q40" | "q80">("q40");
+  const [picked, setPicked] = useState<string[]>(siteIds);
+  const [tp, setTp] = useState<"none" | "tp" | "tpcore">("none");
+  const countF = (n: number) => formatCount(n, lang);
+  const acF = (n: number) => formatAcres(n, lang);
+  const presets: [string, string, string[]][] = [
+    ["q40", c.comboQ40, ["q40"]],
+    ["q80", c.comboQ80, ["q80"]],
+    ["adm", fill(c.comboAdm, { n: sites.length }), siteIds],
+    ["q40adm", c.comboQ40Adm, ["q40", ...siteIds]],
+    ["q80adm", c.comboQ80Adm, ["q80", ...siteIds]],
+    ["tp", fill(c.comboTp, { n: data.thirdParty.length }), ["tp"]],
+    ["all", c.comboAll, ["q80", ...siteIds, "tp"]],
+  ];
+  const customIds = [...(quincy === "none" ? [] : [quincy]), ...picked, ...(tp === "none" ? [] : [tp])];
+  const custom = comboTotals(data, customIds);
+  const row = (key: string, label: string, t: ComboTotals | null, cls = "") => {
+    if (!t) return null;
+    const p = pct(t.ncAcres, t.acres + t.ncAcres);
+    return (
+      <tr key={key} className={cls}>
+        <td>
+          {label}
+          <span className="scale-bar" aria-hidden="true">
+            <i style={{ width: `${Math.max(p, 0.4)}%` }} />
+          </span>
+        </td>
+        <td className="num tabular-nums">{countF(t.fields)}</td>
+        <td className="num tabular-nums">{acF(t.acres)}</td>
+        <td className="num tabular-nums">{countF(t.ncFields)}</td>
+        <td className="num tabular-nums">{acF(t.ncAcres)}</td>
+        <td className="num tabular-nums">{acF(t.defo)}</td>
+        <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
+      </tr>
+    );
+  };
+  const togglePick = (id: string) => setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
+  return (
+    <section className="chart-card supply-wide soy-combo">
+      <h3>{c.comboTitle}</h3>
+      <p className="chart-note">{c.comboIntro}</p>
+      <div className="soy-table-wrap">
+        <table className="data-table soy-table scale-table">
+          <thead>
+            <tr>
+              <th>{c.colCatchment}</th>
+              <th className="num">{c.colCompliantN}</th>
+              <th className="num">{c.colCompliantA}</th>
+              <th className="num">{c.colNcN}</th>
+              <th className="num">{c.colNcA}</th>
+              <th className="num">{c.colDefo}</th>
+              <th className="num">{c.colNcShareA}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {presets.map(([key, label, ids]) => row(key, label, comboTotals(data, ids), key === "all" ? "total" : ""))}
+            {customIds.length ? row("custom", c.comboCustom, custom, "custom") : null}
+          </tbody>
+        </table>
+      </div>
+      <p className="chart-note scale-legend">
+        <i style={{ background: FIELD_COLOR }} /> {c.scaleCompliant} <i style={{ background: NC_COLOR }} /> {c.scaleNonCompliant}
+      </p>
+
+      <div className="soy-combo-build">
+        <p className="eyebrow">{c.comboBuild}</p>
+        <div className="soy-combo-line">
+          <span>{c.comboQuincy}</span>
+          <div className="seg" role="group" aria-label={c.comboQuincy}>
+            {(["none", "q40", "q80"] as const).map((v) => (
+              <button key={v} type="button" className={quincy === v ? "on" : ""} aria-pressed={quincy === v} onClick={() => setQuincy(v)}>
+                {v === "none" ? c.comboNone : v === "q40" ? c.comboQ40 : c.comboQ80}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="soy-combo-line">
+          <span>{c.comboTpPick}</span>
+          <div className="seg" role="group" aria-label={c.comboTpPick}>
+            {(["none", "tp", "tpcore"] as const).map((v) => (
+              <button key={v} type="button" className={tp === v ? "on" : ""} aria-pressed={tp === v} onClick={() => setTp(v)}>
+                {v === "none" ? c.comboNone : v === "tp" ? c.comboAllSites : c.comboTpCore}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="soy-combo-line top">
+          <span>
+            {c.comboAdmPick} · {picked.length}/{sites.length}
+          </span>
+          <div className="soy-combo-sites">
+            <div className="soy-combo-quick">
+              <button type="button" className="btn-text" onClick={() => setPicked(siteIds)}>
+                {c.comboAllSites}
+              </button>
+              <button type="button" className="btn-text" onClick={() => setPicked([])}>
+                {c.comboNoSites}
+              </button>
+            </div>
+            {sites.map((e) => (
+              <label key={e.id} className="check-inline">
+                <input type="checkbox" checked={picked.includes(e.id)} onChange={() => togglePick(e.id)} />
+                {e.city ?? e.name}
+                {e.state ? `, ${e.state}` : ""}
+              </label>
+            ))}
+          </div>
+        </div>
+        {customIds.length ? null : <p className="chart-note">{c.comboPickSome}</p>}
+      </div>
+    </section>
   );
 }
 
@@ -449,193 +614,35 @@ function DataNotes({ c }: { c: SoySupplyCopy }) {
 }
 
 /** Rail & river potential: compliant soybean area within reach of rail and the main river system. */
-export function SoyCorridorView({ data, cdlNames, c, sc, lang }: Common) {
-  const [scope, setScope] = useState<string>("all");
-  const [band, setBand] = useState<Band>(10);
-  const [basis, setBasis] = useState<Basis>("either");
-  const catchments = useCatchments(data);
-  const k = catchments.get(scope) ?? catchments.get("all")!;
-  const countF = (n: number) => formatCount(n, lang);
-  const haF = (acres: number) => formatHa(acres * AC_TO_HA, lang);
-  const acF = (acres: number) => fill(c.acres, { n: formatLarge(acres, lang) });
-  const cov = k.compliant.coverageAcres;
-  const at = k.compliant.corridor[String(band)] ?? { rail: 0, river: 0, either: 0, both: 0 };
-  const p = (v: number) => formatSharePct(pct(v, cov), lang);
-  const chart = data.bandsMi.map((b) => {
-    const x = k.compliant.corridor[String(b)]!;
-    return {
-      band: fill(c.bandLe, { n: b }),
-      rail: x.rail * AC_TO_HA,
-      river: x.river * AC_TO_HA,
-      either: x.either * AC_TO_HA,
-    };
-  });
-  const within1 = (xs: { railMi: number; riverMi: number }[]) => ({
-    rail: xs.filter((x) => x.railMi <= 1).length,
-    river: xs.filter((x) => x.riverMi <= 1).length,
-  });
-  const admNear = within1(data.admElevators);
-  const tpNear = within1(data.thirdParty);
-  const mi = (n: number) => fill(c.milesShort, { n: n.toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 }) });
-  const outsideFields = k.compliant.fields - k.compliant.coverageFields;
-  const outsideAcres = k.compliant.acres - cov;
-  const tableIds = ["q40", "q80", "adm", "tpcore", "tp", "all", ...data.admElevators.filter((e) => e.radiusM).map((e) => e.id)];
-
+/** Data & method: where the figures come from and how they are built. */
+export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; present: boolean }) {
   return (
     <>
       <div className="summary-head">
         <div>
-          <h1>{c.corrTitle}</h1>
-          <p className="summary-sub">{c.corrIntro}</p>
+          <h1>{c.docsTitle}</h1>
+          <p className="summary-sub">{c.docsIntro}</p>
         </div>
       </div>
-      <ScopeTabs scope={scope} setScope={setScope} data={data} c={c} />
-      <div className="supply-controls">
-        <span>{c.bandLabel}</span>
-        <div className="seg" role="group" aria-label={c.bandLabel}>
-          {data.bandsMi.map((b) => (
-            <button key={b} type="button" className={band === b ? "on" : ""} aria-pressed={band === b} onClick={() => setBand(b)}>
-              {fill(c.bandLe, { n: b })}
-            </button>
-          ))}
-        </div>
-        <span>{c.basisLabel}</span>
-        <div className="seg" role="group" aria-label={c.basisLabel}>
-          {(["either", "rail", "river"] as const).map((b) => (
-            <button key={b} type="button" className={basis === b ? "on" : ""} aria-pressed={basis === b} onClick={() => setBasis(b)}>
-              {b === "rail" ? c.basisRail : b === "river" ? c.basisRiver : c.basisEither}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="kpi-row">
-        <KpiTile value={haF(cov)} label={c.kpiCoverage} hint={c.kpiCoverageHint} sub={acF(cov)} />
-        <KpiTile value={haF(at.rail)} label={fill(c.kpiNearRail, { n: band })} sub={fill(c.ofCoverage, { p: p(at.rail) })} />
-        <KpiTile value={haF(at.river)} label={fill(c.kpiNearRiver, { n: band })} sub={fill(c.ofCoverage, { p: p(at.river) })} />
-        <KpiTile tone="comply" value={haF(at.either)} label={fill(c.kpiNearEither, { n: band })} sub={fill(c.ofCoverage, { p: p(at.either) })} />
-        <KpiTile value={haF(at.both)} label={fill(c.kpiNearBoth, { n: band })} sub={fill(c.ofCoverage, { p: p(at.both) })} />
-      </div>
-
-      <section className="chart-card soy-map-card">
-        <SoySupplyMap
-          data={data}
-          mode="corridor"
-          selected={scope}
-          onSelect={(id) => setScope(id ?? "all")}
-          colorBy="status"
-          basis={basis}
-          band={band}
-          cdlNames={cdlNames}
-          catchments={catchments}
-          c={c}
-          lang={lang}
-        />
-      </section>
-
-      <div className="chart-grid soy-charts">
-        <section className="chart-card">
-          <h3>{c.corrChartTitle}</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={chart} margin={{ top: 8, left: 8, right: 8 }}>
-              <XAxis dataKey="band" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis tickLine={false} axisLine={false} fontSize={11} width={88} tickFormatter={(v: number) => formatLarge(v, lang)} />
-              <Tooltip formatter={(v: number, key: string) => [formatHa(v, lang), key === "rail" ? c.rail : key === "river" ? c.riverWord : c.either]} />
-              <Legend formatter={(key: string) => (key === "rail" ? c.rail : key === "river" ? c.riverWord : c.either)} />
-              <Bar dataKey="rail" fill={RAIL_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-              <Bar dataKey="river" fill={RIVER_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-              <Bar dataKey="either" fill={BAND_COLORS.b10} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="chart-note">{c.corrChartNote}</p>
-          {outsideFields > 0 ? (
-            <p className="chart-note">{fill(c.outsideCoverage, { n: countF(outsideFields), area: haF(outsideAcres) })}</p>
-          ) : null}
-        </section>
-
-        <section className="chart-card">
-          <h3>{c.facilitiesTitle}</h3>
-          <p className="chart-note supply-body">
-            {fill(c.facilitiesBody, {
-              admRail: countF(admNear.rail),
-              admRiver: countF(admNear.river),
-              adm: countF(data.admElevators.length),
-              tpRail: countF(tpNear.rail),
-              tpRiver: countF(tpNear.river),
-              plantRail: mi(data.plant.railMi),
-              plantRiver: mi(data.plant.riverMi),
-            })}
-          </p>
-          <div className="soy-table-wrap">
-            <table className="data-table soy-table">
-              <thead>
-                <tr>
-                  <th>{c.colName}</th>
-                  <th className="num">{c.colRail}</th>
-                  <th className="num">{c.colRiverDist}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>{data.plant.name}</td>
-                  <td className="num tabular-nums">{mi(data.plant.railMi)}</td>
-                  <td className="num tabular-nums">{mi(data.plant.riverMi)}</td>
-                </tr>
-                {data.admElevators.map((e) => (
-                  <tr key={e.id}>
-                    <td>{e.name}</td>
-                    <td className="num tabular-nums">{mi(e.railMi)}</td>
-                    <td className="num tabular-nums">{mi(e.riverMi)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <section className="chart-card">
-        <h3>{c.corrTableTitle}</h3>
-        <div className="soy-table-wrap">
-          <table className="data-table soy-table">
-            <thead>
-              <tr>
-                <th>{c.colCatchment}</th>
-                <th className="num">{c.kpiCoverage}</th>
-                <th className="num">{c.colRailPct}</th>
-                <th className="num">{c.colRiverPct}</th>
-                <th className="num">{c.colEitherPct}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableIds.map((id) => {
-                const x = catchments.get(id);
-                if (!x) return null;
-                const cv = x.compliant.coverageAcres;
-                const b = x.compliant.corridor[String(band)]!;
-                return (
-                  <tr key={id} className={scope === id ? "on" : ""} tabIndex={0} onClick={() => setScope(id)} onKeyDown={(e) => e.key === "Enter" && setScope(id)}>
-                    <td>{catchmentLabel(id, data, c)}</td>
-                    <td className="num tabular-nums">{haF(cv)}</td>
-                    <td className="num tabular-nums">{formatSharePct(pct(b.rail, cv), lang)}</td>
-                    <td className="num tabular-nums">{formatSharePct(pct(b.river, cv), lang)}</td>
-                    <td className="num tabular-nums">{formatSharePct(pct(b.either, cv), lang)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="chart-card supply-notes">
-        <h3>{c.methodTitle}</h3>
+      <section className="chart-card supply-notes supply-wide">
+        <h3>{c.docsSources}</h3>
         <ul>
+          <li>{c.docsSource1}</li>
+          <li>{c.docsSource2}</li>
+          <li>{c.docsSource3}</li>
+        </ul>
+      </section>
+      <section className="chart-card supply-notes supply-wide">
+        <h3>{c.docsDefs}</h3>
+        <ul>
+          <li>{c.docsDef1}</li>
+          <li>{c.docsDef2}</li>
+          <li>{c.docsDef3}</li>
           <li>{fill(c.method1, { x: formatCount(data.network.railKm.X ?? 0, lang) })}</li>
           <li>{fill(c.method2, { km2: formatCount(data.network.riverSystemKm2, lang), n: data.network.riverSystems ?? 1 })}</li>
         </ul>
       </section>
-      <DataNotes c={c} />
+      {present ? null : <DataNotes c={c} />}
     </>
   );
 }

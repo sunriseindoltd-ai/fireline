@@ -300,17 +300,18 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   }
 
   // A soy sourcing area's fields (`fields/<area>.geojson`, + .partN) and the
-  // soy context layers (`layers/<name>.geojson`), only for the soy tenant. On
+  // soy context layers (`layers/<name>.geojson`, plus the density grids in
+  // `layers/grid.json`), only for the soy tenant. On
   // disk under the tenant's folder; in R2 at the same relative path inside the
   // soy bucket (a bucket of its own, so no tenant prefix).
   if (rel.startsWith("fields/") || rel.startsWith("layers/")) {
-    if (!isSoyTenant(tenant) || !rel.endsWith(".geojson") || /\.part\d+\.geojson$/i.test(rel)) {
+    if (!isSoyTenant(tenant) || !(rel.endsWith(".geojson") || rel === "layers/grid.json") || /\.part\d+\.geojson$/i.test(rel)) {
       return new Response("Not found", { status: 404 });
     }
-    // Supply-chain files (fields/cells/*, fields/noncomply, layers/*) are
+    // Supply-chain files (fields/units/*, fields/noncomply, layers/*) are
     // single objects; only the per-area field files of the older view come
     // in parts — skip the part probe (an extra R2 request) for the rest.
-    const single = rel.startsWith("fields/cells/") || rel === "fields/noncomply.geojson" || rel.startsWith("layers/");
+    const single = rel.startsWith("fields/units/") || rel === "fields/noncomply.geojson" || rel.startsWith("layers/");
     const result = single ? await loadPlotRel(stored, r2Soy, rel) : await loadPlotFeatureCollection(stored, r2Soy, rel);
     if (!result.ok) {
       return new Response("Upstream storage error", { status: result.reason === "not-found" ? 404 : 502 });

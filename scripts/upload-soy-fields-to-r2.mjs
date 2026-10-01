@@ -6,17 +6,18 @@
  *
  *   fields/<area>.geojson (+ .partN)   per-area fields of the "Crushing plant
  *                                      areas" view (scripts/prepare-adm-soy.py)
- *   fields/cells/<x>_<y>.geojson        Quincy supply-chain fields by 0.25° cell
+ *   fields/units/<id>.geojson           Quincy supply-chain fields, one file per catchment
  *   fields/noncomply.geojson            non-compliant fields
- *   layers/*.geojson                    rail, rivers, corridors (prepare-adm-soy-supply.py), roads
+ *   layers/*.geojson, layers/grid.json  rail, rivers, corridors, density grids (prepare-adm-soy-supply.py), roads
  *
  * Files whose MD5 matches the object's ETag are skipped. Stale keys under
  * fields/ and layers/ (nothing local with that path) are deleted so nothing
- * leftover can be served.
+ * leftover can be served — unless --keep-stale is given (use it while the
+ * production build still reads the old paths, then run again without it).
  *
  * Requires R2_ADM_SOY_ACCOUNT_ID / _ACCESS_KEY_ID / _SECRET_ACCESS_KEY / _BUCKET.
  *
- * Usage: node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs
+ * Usage: node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs [--keep-stale]
  */
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
@@ -28,6 +29,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url)) + "/..";
 const TENANT_DIR = path.join(ROOT, "private-data", "tenants", "adm-soy");
 const PREFIXES = ["fields", "layers"];
 const CONCURRENCY = 6;
+const KEEP_STALE = process.argv.includes("--keep-stale");
 
 const {
   R2_ADM_SOY_ACCOUNT_ID: account,
@@ -48,7 +50,7 @@ async function walk(dir, rel = "") {
   for (const ent of await readdir(dir, { withFileTypes: true })) {
     const r = rel ? `${rel}/${ent.name}` : ent.name;
     if (ent.isDirectory()) out.push(...(await walk(path.join(dir, ent.name), r)));
-    else if (ent.name.endsWith(".geojson")) out.push(r);
+    else if (ent.name.endsWith(".geojson") || ent.name === "grid.json") out.push(r);
   }
   return out;
 }
@@ -96,7 +98,7 @@ for (const prefix of PREFIXES) {
       const res = await client.fetch(keyUrl(key), {
         method: "PUT",
         body,
-        headers: { "content-type": "application/geo+json" },
+        headers: { "content-type": key.endsWith(".geojson") ? "application/geo+json" : "application/json" },
       });
       if (!res.ok) throw new Error(`PUT ${key} failed: ${res.status} ${await res.text().catch(() => "")}`);
       uploaded++;
@@ -107,7 +109,12 @@ for (const prefix of PREFIXES) {
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   const local = new Set(files.map((f) => `${prefix}/${f}`));
-  for (const key of [...remote.keys()].filter((k) => !local.has(k))) {
+  const stale = [...remote.keys()].filter((k) => !local.has(k));
+  if (KEEP_STALE) {
+    if (stale.length) console.log(`[upload-soy-fields] kept ${stale.length} stale keys under ${prefix}/ (--keep-stale)`);
+    continue;
+  }
+  for (const key of stale) {
     const del = await client.fetch(keyUrl(key), { method: "DELETE" });
     console.log(`[upload-soy-fields] deleted stale ${key} (${del.status})`);
   }

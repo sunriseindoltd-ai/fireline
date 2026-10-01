@@ -3507,6 +3507,162 @@ button.kpi-action:hover {
   line-height: 1.55;
 }
 
+/* SoyTrace Map & data (soy-mapview.tsx): PalmTrace's mapview layout. */
+.soy-mapview .soy-map {
+  height: 100%;
+}
+.soy-mapview.map-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+.soy-mapview.map-only .side-panel {
+  display: none;
+}
+.supply-map .soy-map-legend {
+  bottom: 84px;
+}
+.soy-basemap-chip {
+  bottom: 28px;
+}
+.soy-find {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 280px;
+  max-width: 100%;
+  padding: 6px;
+}
+.soy-find input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font: 400 13px var(--font-sans);
+  outline: none;
+}
+.soy-find input:focus {
+  border-color: var(--color-brand);
+}
+.soy-find button {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  color: #fff;
+  font: 500 12.5px var(--font-sans);
+  cursor: pointer;
+}
+.soy-find-miss {
+  flex-basis: 100%;
+  margin: 2px 4px 2px;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+.soy-colorby {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 8px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.soy-load-note {
+  background: var(--color-bg-2);
+  color: var(--color-fg-2);
+}
+.soy-nc-badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.soy-status {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.soy-status.ok {
+  background: #e6f2ea;
+  color: #1f6b3d;
+}
+.soy-status.nc {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.soy-field-table tbody tr {
+  cursor: pointer;
+}
+.soy-field-table tbody tr.on td {
+  background: var(--color-brand-soft);
+}
+.soy-deck-hist > span {
+  display: block;
+  margin: 8px 0 2px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.soy-drawer .table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 0 16px 8px;
+}
+.soy-drawer .table-tools .search-field {
+  flex: 1 1 220px;
+}
+.soy-drawer .table-tools .search-field input {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  font: 400 14px var(--font-sans);
+  outline: none;
+}
+
+/* SoyTrace hierarchy panel + radius legend. */
+.soy-panel-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.soy-panel-tools {
+  display: grid;
+  gap: 8px;
+  margin: 0 8px;
+}
+.soy-panel-tools .search-field input {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  font: 400 14px var(--font-sans);
+  outline: none;
+}
+.soy-list-head {
+  margin: 4px 8px -6px;
+}
+.soy-legend-item .ln {
+  flex: none;
+  width: 18px;
+  height: 0;
+  border-top: 2px solid #1d1d1f;
+}
+.soy-legend-item .ln.dash {
+  border-top-style: dashed;
+}
+.soy-legend-item .ln.tp {
+  border-top-color: #d2a95b;
+}
+
 /* ---------- Per-product brand colour (brand.ts) ----------
    PalmTrace and the Earthline Trace umbrella use --color-brand (green);
    SoyTrace swaps it for amber wherever its pages, login or workspace set
@@ -3523,4 +3679,254 @@ button.kpi-action:hover {
 }
 .product-card[data-product="soy"] .product-card-link {
   color: var(--color-brand);
+}
+
+/* SoyTrace map: one card for layers and legend (switch + symbol per row). */
+.soy-key {
+  width: 268px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+.soy-key ul {
+  gap: 6px;
+}
+.soy-key li.off .soy-key-symbol,
+.soy-key li.off label > span:last-child {
+  opacity: 0.5;
+}
+.soy-key-symbol {
+  flex: none;
+  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.soy-key-symbol .sq {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.soy-key-symbol .dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px var(--color-line);
+}
+.soy-key-symbol .dot.adm {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #1d1d1f;
+}
+.soy-key-symbol .ln {
+  flex: none;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid #1d1d1f;
+}
+.soy-key-symbol .dot + .ln {
+  width: 12px;
+}
+.soy-key-symbol .ln.dash {
+  border-top-style: dashed;
+}
+.soy-key-symbol .ln.tp {
+  border-top-color: #d2a95b;
+}
+.soy-key-symbol .ln.thick {
+  border-top-width: 3px;
+}
+.soy-key-symbol .ln.road {
+  border-top: 3px solid #f1efe8;
+  box-shadow: 0 0 0 1px var(--color-line);
+}
+.soy-key-symbol .nc-ring {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #c8372b;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px var(--color-line);
+}
+.soy-key-detail {
+  margin: 4px 0 2px 51px;
+}
+.soy-key-detail .soy-legend-item {
+  margin-top: 3px;
+  font-size: 11.5px;
+}
+.soy-key-note {
+  margin: 2px 0 2px 51px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+.soy-key-detail .soy-key-note {
+  margin-left: 0;
+}
+.soy-legend-ramp.six {
+  grid-template-columns: repeat(6, 1fr);
+}
+.soy-key-foot {
+  margin: 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--color-line);
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.soy-corr-controls {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.soy-corr-controls .seg {
+  width: 100%;
+  display: flex;
+}
+.soy-corr-controls .seg button {
+  flex: 1;
+}
+.soy-corr-badge {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1f6b46;
+  background: #e6f2ea;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.soy-corr-badge.none {
+  color: var(--color-muted);
+  background: var(--color-surface-2, #f2f2f4);
+  font-weight: 500;
+}
+/* Crop history: names like "Grassland/Pasture" must not run into the next column. */
+.soy-pop-hist li {
+  min-width: 0;
+}
+.soy-pop-hist li span + i + *,
+.soy-pop-hist li {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.soy-pop-hist span {
+  flex: none;
+}
+.soy-deck-hist .soy-pop-hist {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: row;
+  grid-template-rows: none;
+}
+/* "In this map view" figures (ADM: acreage vs deforested acreage where zoomed in). */
+.soy-inview {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 380px));
+  min-width: 300px;
+  padding: 10px 14px;
+}
+.soy-inview-title {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.soy-inview-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.soy-inview-row b {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.soy-inview-row b.bad {
+  color: #b3392e;
+}
+.soy-inview-row span {
+  font-size: 11.5px;
+  color: var(--color-muted);
+}
+.soy-inview-note {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--color-muted);
+}
+@media (max-width: 900px) {
+  .soy-inview {
+    width: calc(100% - 24px);
+    min-width: 0;
+    bottom: 76px;
+  }
+}
+/* Per-facility compliance table. */
+.soy-fac-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.soy-fac-head .btn-secondary {
+  flex: none;
+}
+.soy-fac-table tr.total td {
+  font-weight: 600;
+  background: var(--color-surface-2, #f5f5f7);
+}
+.soy-fac-table tr.sub td:first-child {
+  padding-left: 26px;
+}
+/* Statistics by scope: presets + "your selection". */
+.soy-combo .scale-table tr.total td,
+.soy-combo .scale-table tr.custom td {
+  font-weight: 600;
+}
+.soy-combo .scale-table tr.custom td {
+  background: #fbf5ea;
+}
+.soy-combo-build {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-line);
+  display: grid;
+  gap: 10px;
+}
+.soy-combo-line {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.soy-combo-line.top {
+  align-items: start;
+}
+.soy-combo-line > span {
+  color: var(--color-muted);
+}
+.soy-combo-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.soy-combo-quick {
+  flex-basis: 100%;
+  display: flex;
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .soy-combo-line {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.soy-combo-line .seg {
+  justify-self: start;
+  width: auto;
 }
