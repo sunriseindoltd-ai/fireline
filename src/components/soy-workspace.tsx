@@ -57,7 +57,6 @@ type SoyData = {
   flagged: SoyFlagged[];
   cdlNames: Record<string, string>;
 };
-const AC_TO_HA = 0.40468564224;
 
 type FieldsState = {
   status: "idle" | "loading" | "error" | "ready";
@@ -316,7 +315,6 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const areaPlants = area ? data.plants.filter((p) => p.area === area.id) : data.plants;
   const flaggedHere = area ? data.flagged.filter((f) => f.area === area.id) : data.flagged;
   const elevatorsHere = area ? data.elevators.filter((e) => e.area === area.id) : data.elevators;
-  const flaggedChange = flaggedHere.reduce((sum, f) => sum + (f.changeAcres ?? 0), 0);
   const byState = new Map<string, number>();
   for (const f of flaggedHere) byState.set(f.state ?? "—", (byState.get(f.state ?? "—") ?? 0) + 1);
   const flaggedByState = [...byState].sort((a, b) => b[1] - a[1]);
@@ -574,11 +572,6 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                 <>
                   <div className="kpi-row compact soy-mini-kpis">
                     <KpiTile value={countF(flaggedHere.length)} label={sc.flaggedKpi} />
-                    <KpiTile
-                      value={fill(sc.acres, { n: formatCount(flaggedChange, lang) })}
-                      label={sc.flaggedChangeKpi}
-                      sub={haF(flaggedChange * AC_TO_HA)}
-                    />
                   </div>
                   <table className="data-table soy-table">
                     <tbody>

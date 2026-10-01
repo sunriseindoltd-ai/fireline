@@ -181,6 +181,16 @@ export const FLAG = { q40: 1, q80: 2, adm: 4, tp: 8, core: 16, dual: 32 } as con
 
 export const AC_TO_HA = 0.40468564224;
 
+/** US state names for the abbreviations in the data. */
+export const US_STATES: Record<string, string> = {
+  AL: "Alabama", AR: "Arkansas", DE: "Delaware", GA: "Georgia", IA: "Iowa", IL: "Illinois", IN: "Indiana",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", MD: "Maryland", MI: "Michigan", MN: "Minnesota", MO: "Missouri",
+  MS: "Mississippi", NC: "North Carolina", ND: "North Dakota", NE: "Nebraska", NJ: "New Jersey", NY: "New York",
+  OH: "Ohio", OK: "Oklahoma", PA: "Pennsylvania", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee",
+  VA: "Virginia", WI: "Wisconsin",
+}; // prettier-ignore
+export const stateName = (st: string | null | undefined) => (st ? (US_STATES[st] ? `${US_STATES[st]} (${st})` : st) : "—");
+
 export type ComboTotals = { fields: number; acres: number; ncFields: number; ncAcres: number; defo: number };
 
 /** Totals for the union of catchments `ids` (q40, q80, adm<n>, tp, tpcore). */

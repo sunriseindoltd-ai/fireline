@@ -13,6 +13,7 @@ import {
   comboScope,
   comboTotals,
   inScope,
+  stateName,
   pct,
   type Catchment,
   type ComboTotals,
@@ -230,7 +231,6 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
           value={haF(nck.acres)}
           label={c.kpiNcArea}
           hint={c.kpiNcAreaHint}
-          sub={fill(c.changed, { v: haF(nck.changeAcres) })}
         />
         <KpiTile
           tone="comply"
@@ -301,34 +301,6 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
         <section className="chart-card">
           <h3>{c.ncWhyTitle}</h3>
           <p className="chart-note">{c.ncWhyIntro}</p>
-          <h3 className="soy-subhead">{c.ncExtentTitle}</h3>
-          <table className="data-table soy-table">
-            <tbody>
-              {(
-                [
-                  ["whole", c.ncExtentWhole],
-                  ["most", c.ncExtentMost],
-                  ["part", c.ncExtentPart],
-                  ["unknown", c.unknown],
-                ] as const
-              )
-                .filter(([key]) => (ncForCard.byExtent?.[key] ?? 0) > 0)
-                .map(([key, label]) => (
-                  <tr key={key}>
-                    <td>{label}</td>
-                    <td className="num tabular-nums">{countF(ncForCard.byExtent?.[key] ?? 0)}</td>
-                    <td className="num tabular-nums">{formatSharePct(pct(ncForCard.byExtent?.[key] ?? 0, ncForCard.fields), lang)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <p className="chart-note">
-            {fill(c.ncExtentNote, {
-              changed: haF(ncForCard.changeAcres),
-              total: haF(ncForCard.acres),
-              p: formatSharePct(pct(ncForCard.changeAcres, ncForCard.acres), lang),
-            })}
-          </p>
           <h3 className="soy-subhead">{c.ncUseTitle}</h3>
           <table className="data-table soy-table">
             <tbody>
@@ -410,13 +382,13 @@ function FacilityTable({
     const nf = x.nonCompliant.fields;
     const ca = x.compliant.acres;
     const na = x.nonCompliant.acres;
-    return { cf, nf, ca, na, pf: pct(nf, cf + nf), pa: pct(na, ca + na), defo: x.nonCompliant.changeAcres };
+    return { cf, nf, ca, na, pf: pct(nf, cf + nf), pa: pct(na, ca + na) };
   };
   function download() {
-    const head = ["facility_id", "type", "name", "place", "compliant_polygons", "noncompliant_polygons", "compliant_pct_of_polygons", "noncompliant_pct_of_polygons", "compliant_acres", "noncompliant_acres", "compliant_pct_of_acres", "noncompliant_pct_of_acres", "deforested_acres"]; // prettier-ignore
+    const head = ["facility_id", "type", "name", "place", "compliant_polygons", "noncompliant_polygons", "compliant_pct_of_polygons", "noncompliant_pct_of_polygons", "compliant_acres", "noncompliant_acres", "compliant_pct_of_acres", "noncompliant_pct_of_acres"]; // prettier-ignore
     const body = rows.map((r) => {
       const v = line(r.id);
-      return [r.id, r.kind, r.name, r.place, v?.cf, v?.nf, v ? (100 - v.pf).toFixed(4) : null, v?.pf.toFixed(4), v?.ca.toFixed(1), v?.na.toFixed(1), v ? (100 - v.pa).toFixed(4) : null, v?.pa.toFixed(4), v?.defo.toFixed(1)]; // prettier-ignore
+      return [r.id, r.kind, r.name, r.place, v?.cf, v?.nf, v ? (100 - v.pf).toFixed(4) : null, v?.pf.toFixed(4), v?.ca.toFixed(1), v?.na.toFixed(1), v ? (100 - v.pa).toFixed(4) : null, v?.pa.toFixed(4)]; // prettier-ignore
     });
     const text = [head, ...body].map((r) => r.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
@@ -460,7 +432,6 @@ function FacilityTable({
               <th className="num">{c.facCompliantA}</th>
               <th className="num">{c.facNcA}</th>
               <th className="num">{c.facPctA}</th>
-              <th className="num">{c.facDefo}</th>
             </tr>
           </thead>
           <tbody>
@@ -491,14 +462,12 @@ function FacilityTable({
                   <td className="num tabular-nums">
                     <span className="comply">{formatSharePct(pct(v.ca, v.ca + v.na), lang)}</span> / {formatSharePct(v.pa, lang)}
                   </td>
-                  <td className="num tabular-nums">{acF(v.defo)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <p className="chart-note">{c.facNote}</p>
     </section>
   );
 }
@@ -527,7 +496,6 @@ function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps)
       <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
       <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
       <td className="num tabular-nums">{formatAcres(t.ncAcres, lang)}</td>
-      <td className="num tabular-nums">{formatAcres(t.defo, lang)}</td>
       <td className="num tabular-nums comply">{formatSharePct(pct(t.acres, t.acres + t.ncAcres), lang)}</td>
       <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
     </tr>
@@ -543,7 +511,6 @@ function ComboHead({ c }: { c: SoySupplyCopy }) {
         <th className="num">{c.colCompliantA}</th>
         <th className="num">{c.colNcN}</th>
         <th className="num">{c.colNcA}</th>
-        <th className="num">{c.colDefo}</th>
         <th className="num">{c.colCompliantShareA}</th>
         <th className="num">{c.colNcShareA}</th>
       </tr>
@@ -552,7 +519,7 @@ function ComboHead({ c }: { c: SoySupplyCopy }) {
 }
 
 /** What is inside one statistics row: its catchments one by one, and the
- * non-compliant fields in it (how much changed, 2025 land use, states). */
+ * non-compliant fields in it (2025 land use, states). */
 function ComboDetail({
   data,
   c,
@@ -588,14 +555,47 @@ function ComboDetail({
     }, {}),
   ).sort((a, b) => b[1] - a[1]);
   const n = inside.length;
-  const share = (v: number) => (n ? ` · ${formatSharePct(pct(v, n), lang)}` : "");
+  const shareOf = (v: number) => (n ? formatSharePct(pct(v, n), lang) : "—");
+  const small = (title: string, rows: [string, number][]) => (
+    <div>
+      <p className="soy-combo-sub">{title}</p>
+      <table className="data-table soy-table soy-combo-mini">
+        <thead>
+          <tr>
+            <th />
+            <th className="num">{c.colFieldsShort}</th>
+            <th className="num">{c.colShareShort}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, v]) => (
+            <tr key={label}>
+              <td>{label}</td>
+              <td className="num tabular-nums">{formatCount(v, lang)}</td>
+              <td className="num tabular-nums">{shareOf(v)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
   return (
     <div className="soy-combo-detail">
       {parts.length > 1 ? (
         <div className="soy-combo-parts">
           <p className="eyebrow">{c.comboParts}</p>
           <div className="soy-table-wrap short">
-            <table className="data-table soy-table">
+            <table className="data-table soy-table soy-combo-mini">
+              <thead>
+                <tr>
+                  <th>{c.colCatchment}</th>
+                  <th className="num">{c.colCompliantN}</th>
+                  <th className="num">{c.colCompliantA}</th>
+                  <th className="num">{c.colNcN}</th>
+                  <th className="num">{c.colCompliantShareA}</th>
+                  <th className="num">{c.colNcShareA}</th>
+                </tr>
+              </thead>
               <tbody>
                 {parts.map(([label, pids]) => {
                   const t = comboTotals(data, pids);
@@ -624,44 +624,12 @@ function ComboDetail({
           <p className="chart-note">{c.comboLoadingNc}</p>
         ) : (
           <div className="soy-combo-nc-grid">
-            <dl className="facts">
-              {(
-                [
-                  [c.ncExtentWhole, count("ex", "whole")],
-                  [c.ncExtentMost, count("ex", "most")],
-                  [c.ncExtentPart, count("ex", "part")],
-                ] as const
-              ).map(([label, v]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>
-                    {formatCount(v, lang)}
-                    {share(v)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <dl className="facts">
-              {(
-                [
-                  [c.ncUseCrop, count("u", "crop")],
-                  [c.ncUsePasture, count("u", "pasture")],
-                  [c.ncUseNonAg, count("u", "nonag")],
-                ] as const
-              ).map(([label, v]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>
-                    {formatCount(v, lang)}
-                    {share(v)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <div>
-              <p className="soy-combo-sub">{c.comboNcStates}</p>
-              <p className="soy-combo-states">{states.map(([st, v]) => `${st} ${formatCount(v, lang)}`).join(" · ") || "—"}</p>
-            </div>
+            {small(c.ncUseTitle, [
+              [c.ncUseCrop, count("u", "crop")],
+              [c.ncUsePasture, count("u", "pasture")],
+              [c.ncUseNonAg, count("u", "nonag")],
+            ])}
+            {small(c.comboNcStates, states.map(([st, v]) => [stateName(st), v] as [string, number]))}
           </div>
         )}
       </div>
@@ -755,7 +723,7 @@ function ComboBuilder({ data, c, lang, open }: { data: SupplyData; c: SoySupplyC
               <ComboRow label={c.comboCustom} t={comboTotals(data, ids)} cls="custom" lang={lang} expanded={expanded} onOpen={() => setExpanded((v) => !v)} />
               {expanded ? (
                 <tr className="soy-combo-detail-row">
-                  <td colSpan={8}>
+                  <td colSpan={7}>
                     <ComboDetail data={data} c={c} lang={lang} ids={ids} parts={parts} onMap={() => open(ids)} />
                   </td>
                 </tr>
@@ -812,7 +780,7 @@ function ComboTable({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCop
                 />
                 {openKey === key ? (
                   <tr className="soy-combo-detail-row">
-                    <td colSpan={8}>
+                    <td colSpan={7}>
                       <ComboDetail data={data} c={c} lang={lang} ids={ids} parts={parts} onMap={() => open(key === "all" ? [] : ids)} />
                     </td>
                   </tr>

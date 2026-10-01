@@ -213,10 +213,10 @@ export function SoyMapView({
   // ------------------------------------------------------------ downloads
   const scopeName = infos.find((x) => x.id === scope)?.name ?? c.scopeAll;
   const slug = (scope || "all").replace(/[^\w-]+/g, "-");
-  const ncHeader = ["field_id", "state", "county", "field_acres", "changed_acres", "cover_2018_2020", "first_cropped", "crop_2024", "crop_2025", "F2026_Soy", "also_compliant", "point_only", "lon", "lat"]; // prettier-ignore
+  const ncHeader = ["field_id", "state", "county", "field_acres", "cover_2018_2020", "first_cropped", "crop_2024", "crop_2025", "F2026_Soy", "also_compliant", "point_only", "lon", "lat"]; // prettier-ignore
   const ncRow = (f: SoyFeature) => {
     const p = f.properties;
-    return [p.id, p.s, p.n, p.a, p.ch, p.b, p.y, p.c24, p.c25, p.s26, Number(p.f) & FLAG.dual ? "yes" : "no", p.po ? "yes" : "no", Number(p._x).toFixed(5), Number(p._y).toFixed(5)] as (string | number | null)[]; // prettier-ignore
+    return [p.id, p.s, p.n, p.a, p.b, p.y, p.c24, p.c25, p.s26, Number(p.f) & FLAG.dual ? "yes" : "no", p.po ? "yes" : "no", Number(p._x).toFixed(5), Number(p._y).toFixed(5)] as (string | number | null)[]; // prettier-ignore
   };
   const downloads = [
     {
@@ -261,7 +261,7 @@ export function SoyMapView({
         downloadBlob(
           "soytrace-catchments.csv",
           csv([
-            ["catchment_id", "kind", "name", "place", "compliant_fields", "compliant_acres", "noncompliant_fields", "noncompliant_acres", "changed_acres", "noncompliant_share_pct"],
+            ["catchment_id", "kind", "name", "place", "compliant_fields", "compliant_acres", "noncompliant_fields", "noncompliant_acres", "noncompliant_share_pct"],
             ...infos.map((x) => [
               x.id,
               x.kind,
@@ -271,7 +271,6 @@ export function SoyMapView({
               x.k?.compliant.acres,
               x.k?.nonCompliant.fields,
               x.k?.nonCompliant.acres,
-              x.k?.nonCompliant.changeAcres,
               x.k ? pct(x.k.nonCompliant.acres, x.k.compliant.acres + x.k.nonCompliant.acres).toFixed(4) : null,
             ]),
           ]),
@@ -416,18 +415,6 @@ export function SoyMapView({
                   [c.fieldArea, acresHa(p.a), ""],
                   ...(isNc
                     ? ([
-                        [c.changedArea, acresHa(p.ch), "bad"],
-                        [
-                          c.extentLabel,
-                          p.ex
-                            ? fill(p.ex === "whole" ? c.extentWhole : p.ex === "most" ? c.extentMost : c.extentPart, {
-                                ch: formatAcres(Number(p.ch), lang),
-                                a: formatAcres(Number(p.a), lang),
-                                p: formatSharePct(pct(Number(p.ch), Number(p.a)), lang),
-                              })
-                            : "—",
-                          "",
-                        ],
                         [
                           c.useLabel,
                           p.u

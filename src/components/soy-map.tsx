@@ -455,7 +455,6 @@ export function SoyMap({
               <p class="soy-pop-kicker">${escapeHtml(c.flagged)}</p>
               ${row(c.fieldId, f.id, true)}
               ${row(c.fieldLocation, [f.county, f.state].filter(Boolean).join(", "))}
-              ${row(c.flChange, acres(f.changeAcres))}
               ${row(c.flFieldArea, acres(f.fieldAcres))}
               ${row(c.flCrops, `${f.crop2024 ?? "—"} → ${f.crop2025 ?? "—"}`)}
               ${row(c.flSoy2026, soy)}</div>`,

@@ -229,9 +229,9 @@ export function SoySupplyMap({
     corridors: "idle",
     roads: "idle",
   });
-  // ADM's ask: in the area zoomed in, the soybean acreage, the deforested
-  // acreage and the share of one in the other.
-  const [inView, setInView] = useState<{ total: number; defo: number; ncAcres: number; ncFields: number; approx: boolean; one: boolean } | null>(null);
+  // ADM's ask: in the area zoomed in, the soybean acreage and the
+  // compliant / non-compliant shares of it.
+  const [inView, setInView] = useState<{ total: number; ncAcres: number; ncFields: number; approx: boolean; one: boolean } | null>(null);
   const [unitState, setUnitState] = useState<{ level: number; loading: boolean; failed: boolean }>({ level: 1, loading: false, failed: false });
   const [layersOpen, setLayersOpen] = useState(true);
   useEffect(() => {
@@ -674,7 +674,6 @@ export function SoySupplyMap({
               e.lngLat,
               `<div class="soy-pop"><p class="soy-pop-kicker">${esc(p.po ? cc.popNcPoint : cc.popNc)}</p>
               ${row(cc.fieldId, String(p.id), true)}${row(cc.fieldArea, acresHa(Number(p.a)))}
-              ${row(cc.changedArea, acresHa(p.ch == null ? null : Number(p.ch)))}
               ${p.po ? "" : `<p class="soy-pop-k">${esc(cc.history)}</p>${history(String(p.c))}`}</div>`,
             );
             return;
@@ -785,15 +784,14 @@ export function SoySupplyMap({
             for (const lv of fineGrid ?? []) if (z >= lv.minZoom) ({ rows, deg: d } = lv);
             for (const r of rows) if (inB((r[0]! + 0.5) * d, (r[1]! + 0.5) * d)) comp += r[2]!;
           }
-          let ncAcres = 0, defo = 0, ncFields = 0; // prettier-ignore
+          let ncAcres = 0, ncFields = 0; // prettier-ignore
           for (const f of ncFc?.features ?? []) {
             if (!inScope(one ? scope : "all", { flags: Number(f.properties.f), k: String(f.properties.k ?? "") })) continue;
             if (!inB(Number(f.properties._x), Number(f.properties._y))) continue;
             ncFields++;
             ncAcres += Number(f.properties.a) || 0;
-            defo += Number(f.properties.ch) || 0;
           }
-          setInView({ total: comp + ncAcres, defo, ncAcres, ncFields, approx: !one, one });
+          setInView({ total: comp + ncAcres, ncAcres, ncFields, approx: !one, one });
         }
         map.on("moveend", () => measure());
 
@@ -1119,20 +1117,20 @@ export function SoySupplyMap({
               <span>{c.inViewTotal}</span>
             </div>
             <div>
-              <b className="bad">{formatAcres(inView.defo, lang)}</b>
-              <span>{c.inViewDefo}</span>
+              <b className="bad">{formatAcres(inView.ncAcres, lang)}</b>
+              <span>{c.inViewNcArea}</span>
             </div>
             <div>
               <b className="ok">{inView.total > 0 ? formatSharePct(pct(inView.total - inView.ncAcres, inView.total), lang) : "—"}</b>
               <span>{c.inViewCompliant}</span>
             </div>
             <div>
-              <b>{inView.total > 0 ? formatSharePct(pct(inView.defo, inView.total), lang) : "—"}</b>
+              <b>{inView.total > 0 ? formatSharePct(pct(inView.ncAcres, inView.total), lang) : "—"}</b>
               <span>{c.inViewShare}</span>
             </div>
           </div>
           <p className="soy-inview-note">
-            {fill(c.inViewNc, { n: formatCount(inView.ncFields, lang), area: formatAcres(inView.ncAcres, lang) })}
+            {fill(c.inViewNc, { n: formatCount(inView.ncFields, lang) })}
             {inView.approx ? ` ${c.inViewApprox}` : ""}
           </p>
         </div>
