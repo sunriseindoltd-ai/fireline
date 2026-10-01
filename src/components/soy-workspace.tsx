@@ -271,6 +271,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               scope={scope}
               setScope={setScope}
               canDownload={role !== "auditor"}
+              showOwners={!present}
             />
           ) : (
             <div className="page soy-page">

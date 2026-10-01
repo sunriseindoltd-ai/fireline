@@ -71,6 +71,8 @@ from shapely.geometry import shape
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GDB = os.path.join(ROOT, "Data Storage", "ADM Soy", "Data Backup", "ADM_SOY.gdb")
+# ADM's complete non-compliant points with owner name and mailing address.
+NC_OWNERS = os.path.join(ROOT, "Data Storage", "ADM Soy", "Non_Compliant", "Non_Compliant.gdb")
 # Outlines sent later (1 Oct 2026) for non-compliant points that came without
 # a polygon; same CSB attributes and Albers projection as Non_Compliant_Polygons.
 NC_EXTRA = [
@@ -157,6 +159,16 @@ def group_of(code):
 
 def clean(s):
     return " ".join(str(s).split()) if s is not None and str(s).strip() else None
+
+
+def owner_props(o):
+    """Owner name, mailing address and previous owner of a non-compliant field."""
+    if not o:
+        return {}
+    addr = ", ".join(x for x in (clean(o.get("Address")), clean(o.get("City")),
+                                 " ".join(x for x in (clean(o.get("ST")), clean(o.get("Zip"))) if x)) if x)
+    out = {"on": clean(o.get("Name")), "oa": addr or None, "pv": clean(o.get("Previous_Owner"))}
+    return {k: v for k, v in out.items() if v}
 
 
 def log(msg, t0=[time.time()]):
@@ -487,6 +499,15 @@ def main():
     nc_core = np.any([nc_units[e["id"]] for e in tp if e["core"]], axis=0)
 
     comp_ids = set(idx)
+    # Owner of each non-compliant field (ADM's complete point file, 1 Oct
+    # 2026): shown on the field card to signed-in users only, never in
+    # downloads or presentation mode.
+    owners = {}
+    if os.path.exists(NC_OWNERS):
+        with fiona.open(NC_OWNERS, layer="Point_Non_Compliant") as src:
+            for f in src:
+                owners[str(f["properties"]["CSBID"])] = dict(f["properties"])
+        log(f"non-compliant owners: {sum(1 for o in owners.values() if clean(o.get('Name')))} of {len(owners)}")
     # Points without an outline carry crop names, not codes.
     with open(os.path.join(OUT, "soy.json"), encoding="utf-8") as fh:
         code_by_name = {v: int(k) for k, v in json.load(fh)["cdlNames"].items()}
@@ -527,6 +548,7 @@ def main():
             "c24": crop24, "c25": crop25, "f": f, "po": point_only, "k": "|".join(nc_member[k]),
             "sy": sum(1 for c in cdl if c in SOY) if r is not None else None,
             "ex": ex, "u": use,
+            **owner_props(owners.get(cid)),
             "r": round(float(nc_rd[k]), 1) if st in COVERAGE and not math.isnan(nc_rd[k]) else None,
             "v": round(float(nc_vd[k]), 1) if st in COVERAGE and not math.isnan(nc_vd[k]) else None,
         })

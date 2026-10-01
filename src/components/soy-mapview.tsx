@@ -45,10 +45,10 @@ function csv(rows: (string | number | null | undefined)[][]) {
   };
   return rows.map((r) => r.map(cell).join(",")).join("\n");
 }
+// Downloads carry neither the map centre nor the owner's name and address.
 const stripCenter = (f: SoyFeature): SoyFeature => {
-  const { _x, _y, ...props } = f.properties;
-  void _x;
-  void _y;
+  const { _x, _y, on, oa, pv, ...props } = f.properties;
+  void [_x, _y, on, oa, pv];
   return { ...f, properties: props };
 };
 
@@ -116,6 +116,7 @@ export function SoyMapView({
   scope,
   setScope,
   canDownload,
+  showOwners = true,
   mode = "supply",
 }: {
   data: SupplyData;
@@ -126,6 +127,8 @@ export function SoyMapView({
   scope: string;
   setScope: (id: string) => void;
   canDownload: boolean;
+  /** Owner name and address of non-compliant fields (off in presentation mode). */
+  showOwners?: boolean;
   /** "corridor": the Rail & river tab — fields shaded by distance to rail / the river system. */
   mode?: "supply" | "corridor";
 }) {
@@ -425,6 +428,13 @@ export function SoyMapView({
                       ] as const)
                     : []),
                   [c.location, [p.n, p.s].filter(Boolean).join(", ") || "—", ""],
+                  ...(isNc && showOwners
+                    ? ([
+                        [c.owner, String(p.on ?? "—"), ""],
+                        [c.ownerAddress, String(p.oa ?? "—"), ""],
+                        ...(p.pv ? ([[c.prevOwner, String(p.pv), ""]] as const) : []),
+                      ] as const)
+                    : []),
                   [c.memberOf, tiers(p.k), ""],
                   ...(isNc
                     ? ([

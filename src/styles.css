@@ -4106,3 +4106,8 @@ button.kpi-action:hover {
   font-weight: 500;
   color: var(--color-muted);
 }
+/* Long values (owner address) wrap inside the field card. */
+.plot-detail-row b {
+  max-width: 62%;
+  overflow-wrap: anywhere;
+}
