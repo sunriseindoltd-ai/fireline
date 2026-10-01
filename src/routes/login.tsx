@@ -1,4 +1,5 @@
 import { BrandMark } from "@/components/brand-mark";
+import { resetTour } from "@/components/soy-tour";
 import { LangToggle } from "@/components/lang-toggle";
 import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
@@ -77,6 +78,8 @@ function LoginPage() {
       setFailed(true);
       return;
     }
+    // A new sign-in: SoyTrace's guide shows once more (not on every refresh).
+    resetTour();
     await navigate({ href: safeNext(next) });
   }
 

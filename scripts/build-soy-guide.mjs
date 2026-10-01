@@ -47,6 +47,7 @@ async function takeShots(browser) {
     if (sessionStorage.getItem("__g")) return;
     sessionStorage.setItem("__g", "1");
     for (const k of Object.keys(localStorage)) if (k.startsWith("soytrace.")) localStorage.removeItem(k);
+    localStorage.setItem("soytrace.tourDone", "1");
     localStorage.setItem("kanopi.lang", "id");
   });
   const p = await ctx.newPage();
@@ -55,6 +56,9 @@ async function takeShots(browser) {
   await p.fill('input[name="password"]', cols[cols.indexOf("adm-soy-1") + 1]);
   await p.click('button[type="submit"]');
   await p.waitForURL(/\/app/, { timeout: 120000 });
+  // Signing in re-arms the reading guide; these checks skip it.
+  await p.evaluate(() => localStorage.setItem("soytrace.tourDone", "1"));
+  await p.addLocatorHandler(p.locator(".tour-card"), async () => { await p.keyboard.press("Escape"); });
   await p.waitForSelector(".app-tabs button", { timeout: 60000 });
   const shot = async (name) => {
     await p.waitForTimeout(2500);
@@ -270,7 +274,6 @@ function levelTable() {
       row("all", "Level 1 · Quincy, semua pemasok"),
       row("direct", "Level 2 · Langsung ke Quincy (0–80 NM)"),
       row("q40", "   Level 3 · Quincy 0–40 NM"),
-      row("q80r", "   Level 3 · Quincy 40–80 NM"),
       row("q80", "   Level 3 · Quincy 0–80 NM"),
       row("adm", `Level 2 · Elevator ADM (${sites.length} lokasi)`),
       row("tp", `Level 2 · Pihak ketiga (${supply.thirdParty.length})`),
@@ -340,7 +343,6 @@ function html() {
 │
 ├─ Level 2  Langsung ke Quincy ........ catchment 40 & 80 NM dari pabrik
 │   ├─ Level 3  Quincy 0–40 NM
-│   ├─ Level 3  Quincy 40–80 NM (cincin)
 │   └─ Level 3  Quincy 0–80 NM
 ├─ Level 2  Elevator ADM (${sites.length} lokasi) ... catchment 20 NM per lokasi
 │   └─ Level 3  satu elevator (mis. ADM Grain - Burlington)
@@ -399,7 +401,7 @@ ${table(
     [code("tp"), "2", "Semua pihak ketiga"],
     [code("tpcore"), "2 (statistik saja)", "Pihak ketiga di IL, IA, MO, KY, MN, IN (56)"],
     [code("q40"), "3", "Quincy 0–40 NM"],
-    [code("q80r"), "3", "Cincin Quincy 40–80 NM"],
+    [code("q80r"), "—", "Hanya file bahan (ladang 40–80 NM) untuk memuat 0–80 NM; tidak ditampilkan sebagai cakupan"],
     [code("q80"), "3", "Quincy 0–80 NM (gabungan q40 + q80r; statistiknya = direct)"],
     [code("adm1 … adm15"), "3", "Satu lokasi elevator ADM (Evansville: 3 titik, 1 catchment)"],
     [code("tp1 … tp98"), "3", "Satu fasilitas pihak ketiga"],
@@ -410,7 +412,8 @@ ${table(
 <ul>
   <li><b>Catchment</b> = lingkaran buffer ADM dari titik fasilitas: Quincy 40 / 80 NM, elevator ADM 20 NM, pihak ketiga 32,2 km (proyeksi ESRI:102003).</li>
   <li><b>Keanggotaan ladang</b>: ladang masuk catchment bila batas ladangnya menyentuh lingkaran, diambil dari set klien untuk tier-nya (Quincy dari CP_Compliant_Polygons_80NM, elevator dari Compliant_Elevator_ADM_Polygons, pihak ketiga dari ThirdParty_Compliant_Polygons). Ladang non-comply dengan cara yang sama (titik tanpa poligon: bila di dalam lingkaran).</li>
-  <li><b>Cincin 40–80 NM</b>: ladang di 0–80 NM yang tidak menyentuh lingkaran 40 NM. 0–40 NM dan 40–80 NM tidak saling tumpang tindih, jadi jumlah keduanya = 0–80 NM.</li>
+  <li><b>0–80 NM</b> dimuat dari dua file: 0–40 NM dan sisanya (q80r). Angka 40–80 NM sendiri tidak ditampilkan (keputusan 1 Okt) supaya tidak rancu.</li>
+  <li><b>Gabungan cakupan</b> (statistik per cakupan, “Susun gabungan sendiri”, peta <code>combo:…</code>): ladang dikelompokkan menurut kombinasi catchment-nya (<code>supply.combos</code>), jadi gabungan apa pun dihitung tanpa ladang dobel.</li>
   <li><b>Comply / non-comply</b> adalah klasifikasi ADM; SoyTrace tidak menilai ulang. Luas non-comply = seluruh ladang; luas perubahan (Change_Acr) ditampilkan di sampingnya. 172 ladang non-comply sudah berupa lahan tanam di tingkat ladang sejak 2018 — mereka ditandai karena sebagian kecil ladangnya berubah.</li>
   <li><b>Tutupan 2018–2020 dan tahun pertama ditanami</b> dihitung dari seri CDL tingkat ladang (hutan/lahan basah berpohon: 141, 142, 143, 190; alami lain: 152, 176, 195, 62, 64).</li>
   <li><b>Jarak ke rel</b>: garis lurus dari titik tengah ladang ke rel aktif terdekat (railusage M dan O; X tidak dihitung).</li>
@@ -429,23 +432,26 @@ ${levelTable()}
   <li><b>Tab</b>: Ringkasan · Peta & data · Rel & sungai · Data & metode · Wilayah 40 mil (tampilan lama: lima pabrik ADM, kiriman sebelumnya).</li>
   <li><b>Presentasi</b>: menyembunyikan pemilih bahasa/klien dan catatan internal (pertanyaan ke ADM) — pakai saat berbagi layar ke klien.</li>
   <li>Pilihan cakupan berlaku di semua tab (disimpan di browser).</li>
+  <li><b>Panduan singkat</b> (8 langkah) muncul sekali setiap login, tidak saat refresh; bisa dilewati, dan diputar ulang lewat tombol <b>?</b> di header.</li>
+  <li>Persentase selalu dua sisi: porsi comply dan porsi non-comply (luas maupun jumlah poligon).</li>
 </ul>
 <ul>
   <li><b>Satuan</b>: luas dalam <b>acre</b> (ha hanya sebagai angka kedua), jarak dalam mil — sesuai permintaan ADM.</li>
   <li><b>Mengapa non-comply</b> (Ringkasan): berapa ladang yang berubah seluruhnya / sebagian besar / sebagian kecil, total luas berubah dibanding luas ladang, dan penggunaan lahan 2025 (pertanian atau bukan).</li>
-  <li><b>Comply vs non-comply per fasilitas</b> (Ringkasan): seluruh rantai pasok, pabrik Quincy (0–80, 0–40, 40–80 NM), 13 elevator ADM dan 98 pihak ketiga — jumlah poligon dan acre comply/non-comply, % masing-masing, acre terdeforestasi; filter tipe, cari, unduh CSV.</li>
+  <li><b>Susun gabungan sendiri</b> dan <b>Statistik per cakupan</b> (Ringkasan): Quincy 0–40 / 0–80 NM, elevator ADM (semua atau pilih), gabungannya, pihak ketiga. Klik baris untuk membuka rinciannya (per catchment, ladang non-comply: seluruh/sebagian, penggunaan 2025, negara bagian) lalu “Buka di peta” — peta menampilkan catchment-catchment itu beserta semua ladangnya (pihak ketiga: daftar, karena terlalu banyak ladang).</li>
+  <li><b>Comply vs non-comply per fasilitas</b> (Ringkasan): seluruh rantai pasok, pabrik Quincy (0–80 dan 0–40 NM), 13 elevator ADM dan 98 pihak ketiga — jumlah poligon dan acre comply/non-comply, % masing-masing, acre terdeforestasi; filter tipe, cari, unduh CSV.</li>
 </ul>
 ${img("summary", "Ringkasan: KPI cakupan terpilih, tabel perbandingan luas dengan skala sebenarnya, analisis non-comply.")}
 <h3>Peta & data — navigasi bertingkat</h3>
 <ul>
   <li><b>Level 1</b> (Quincy): panel kanan menampilkan KPI total dan tiga tipe pemasok. Peta menampilkan titik, lingkaran catchment dan grid kepadatan kedelai (porsi luas tiap sel; makin di-zoom makin rapat: 0,2° → 0,1° → 0,05° → 0,025°) — belum ada ladang.</li>
-  <li><b>Kartu Layer</b> (kiri atas): satu kartu untuk menyalakan/mematikan layer sekaligus legendanya. Ladang non-comply saat zoom jauh ditandai cincin merah (penanda lokasi, bukan ukuran); batas aslinya muncul mulai zoom 11.</li>
+  <li><b>Kartu Layer</b> (kiri atas): satu kartu untuk menyalakan/mematikan layer sekaligus legendanya. Ladang non-comply saat zoom jauh ditandai titik merah berpijar (penanda lokasi, bukan ukuran); semua 1.081 ladang di daftar ADM selalu tampil; batas aslinya muncul mulai zoom 11.</li>
   <li><b>Level 2</b> (klik tipe pemasok): hanya lingkaran tipe itu yang tampil; daftar catchment di panel (pihak ketiga bisa dicari dan difilter “6 negara bagian”).</li>
   <li><b>Level 3</b> (klik satu catchment): file ladangnya dimuat — hanya ladang catchment itu yang digambar. Panel berisi KPI, fakta (radius mil + buffer klien, jarak rel/sungai), tombol tabel ladang dan unduhan.</li>
   <li>Kembali ke atas dengan tautan “‹ …” di panel.</li>
 </ul>
 ${img("l1", "Level 1 — Quincy dan tiga tipe pemasok.")}
-${img("l2-direct", "Level 2 — Langsung ke Quincy: lingkaran 40 & 80 NM; pilihan 0–40, 40–80 dan 0–80 NM.")}
+${img("l2-direct", "Level 2 — Langsung ke Quincy: lingkaran 40 & 80 NM; pilihan 0–40 dan 0–80 NM.")}
 ${img("l3-adm", "Level 3 — satu elevator ADM: hanya ladangnya yang tampil.")}
 <h3>Tabel ladang, kartu detail, cari, unduh</h3>
 <ul>

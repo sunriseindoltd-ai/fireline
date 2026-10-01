@@ -15,6 +15,9 @@ import { formatSharePct, type SoySupplyCopy } from "@/lib/soy-supply-copy";
 import {
   AC_TO_HA,
   FLAG,
+  comboMembers,
+  comboTotals,
+  isCombo,
   levelOf,
   pct,
   radiusLabel,
@@ -53,7 +56,7 @@ export type CatchmentInfo = {
   id: string;
   level: 1 | 2 | 3;
   parent: string | null;
-  kind: "plant" | "group" | "direct" | "adm" | "tp";
+  kind: "plant" | "group" | "direct" | "adm" | "tp" | "combo";
   name: string;
   sub: string;
   k: Catchment | undefined;
@@ -70,13 +73,32 @@ export function catchmentInfos(data: SupplyData, catchments: Map<string, Catchme
     { id: "tp", level: 2, parent: "all", kind: "group", name: c.scopeTp, sub: fill(c.groupTpSub, { n: data.thirdParty.length }), k: catchments.get("tp") },
   ];
   const directName: Record<string, string> = { q40: c.scopeQ40, q80r: c.scopeQ80r, q80: c.scopeQ80 };
-  for (const id of data.directUnits)
+  // The 40–80 NM ring is only a building block of 0–80 NM; not offered on its own.
+  for (const id of data.directUnits.filter((x) => x !== "q80r"))
     out.push({ id, level: 3, parent: "direct", kind: "direct", name: directName[id] ?? id, sub: plantPlace, k: catchments.get(id) });
   for (const e of sites)
     out.push({ id: e.id, level: 3, parent: "adm", kind: "adm", name: e.name, sub: [e.city, e.state, e.river].filter(Boolean).join(" · "), k: catchments.get(e.id) });
   for (const e of data.thirdParty)
     out.push({ id: e.id, level: 3, parent: "tp", kind: "tp", name: e.company ?? e.id, sub: [e.county, e.state].filter(Boolean).join(", "), k: catchments.get(e.id) });
   return out;
+}
+
+/** A union of catchments (from the Summary statistics) as a side-panel node. */
+function comboInfo(scope: string, data: SupplyData, c: SoySupplyCopy): CatchmentInfo {
+  const mem = comboMembers(scope);
+  const sites = data.admElevators.filter((e) => e.radiusM);
+  const picked = sites.filter((e) => mem.includes(e.id));
+  const parts: string[] = [];
+  if (mem.includes("q80")) parts.push(c.scopeQ80);
+  else if (mem.includes("q40")) parts.push(c.scopeQ40);
+  if (picked.length === sites.length) parts.push(fill(c.comboAdm, { n: sites.length }));
+  else if (picked.length > 3) parts.push(fill(c.comboAdmN, { n: picked.length }));
+  else parts.push(...picked.map((e) => e.name));
+  const t = comboTotals(data, mem);
+  const k = t
+    ? ({ id: scope, kind: "tier", name: "", compliant: { fields: t.fields, acres: t.acres }, nonCompliant: { fields: t.ncFields, acres: t.ncAcres, changeAcres: t.defo } } as unknown as Catchment) // prettier-ignore
+    : undefined;
+  return { id: scope, level: 3, parent: "all", kind: "combo", name: parts.join(" + "), sub: c.comboSub, k };
 }
 
 /**
@@ -260,7 +282,7 @@ export function SoyMapView({
 
   // ------------------------------------------------------------ side panel
   const level = levelOf(scope);
-  const node = infos.find((x) => x.id === scope) ?? infos[0]!;
+  const node = (isCombo(scope) ? comboInfo(scope, data, c) : null) ?? infos.find((x) => x.id === scope) ?? infos[0]!;
   const parent = node.parent ? infos.find((x) => x.id === node.parent) : null;
   // The search box and 6-state filter belong to the third-party list only.
   const q = node.id === "tp" ? listQuery.trim().toLowerCase() : "";
@@ -314,18 +336,18 @@ export function SoyMapView({
   }
   const total = (k?.compliant.fields ?? 0) + (k?.nonCompliant.fields ?? 0);
   const kindLabel = (x: CatchmentInfo) =>
-    x.kind === "plant" ? c.levelPlant : x.kind === "group" ? c.levelGroup : x.kind === "adm" ? c.kindAdm : x.kind === "tp" ? c.kindTp : c.kindPlant;
+    x.kind === "combo" ? c.comboKind : x.kind === "plant" ? c.levelPlant : x.kind === "group" ? c.levelGroup : x.kind === "adm" ? c.kindAdm : x.kind === "tp" ? c.kindTp : c.kindPlant;
   const nameOf = (id: string) => infos.find((x) => x.id === id)?.name ?? id;
 
   // ------------------------------------------------------------ field card
   const p = picked?.properties;
   const isNc = !!p && ("ch" in p || "po" in p);
-  const tiers = (kk: unknown) =>
-    String(kk ?? "")
-      .split("|")
-      .filter(Boolean)
-      .map(nameOf)
-      .join(" · ") || "—";
+  const tiers = (kk: unknown) => {
+    // Fields in the 40–80 NM ring read as "Quincy 0–80 NM"; 0–40 NM fields are in both.
+    const ids = String(kk ?? "").split("|").filter(Boolean).map((x) => (x === "q80r" ? "q80" : x));
+    if (ids.includes("q40") && !ids.includes("q80")) ids.splice(ids.indexOf("q40") + 1, 0, "q80");
+    return [...new Set(ids)].map(nameOf).join(" · ") || "—";
+  };
   const acresHa = (a: unknown) =>
     a == null ? "—" : `${haF(Number(a))} · ${formatHa(Number(a) * AC_TO_HA, lang)}`;
 
@@ -611,7 +633,7 @@ export function SoyMapView({
               </div>
             </div>
           ) : null}
-          {k && corridor ? (
+          {k && corridor && k.compliant.corridor ? (
             (() => {
               const cov = k.compliant.coverageAcres;
               const at = k.compliant.corridor[String(band)] ?? { rail: 0, river: 0, either: 0, both: 0 };
@@ -636,9 +658,23 @@ export function SoyMapView({
             })()
           ) : k ? (
             <div className="kpi-row compact">
-              <KpiTile value={haF(k.compliant.acres)} label={c.kpiArea} sub={fill(c.fieldsN, { n: countF(k.compliant.fields) })} />
-              <KpiTile tone="danger" value={countF(k.nonCompliant.fields)} label={c.kpiNcFields} sub={haF(k.nonCompliant.acres)} />
-              <KpiTile value={formatSharePct(pct(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres), lang)} label={c.kpiNcShare} />
+              <KpiTile
+                value={haF(k.compliant.acres)}
+                label={c.kpiArea}
+                sub={`${fill(c.fieldsN, { n: countF(k.compliant.fields) })} · ${formatSharePct(pct(k.compliant.acres, k.compliant.acres + k.nonCompliant.acres), lang)}`}
+              />
+              <KpiTile
+                tone="danger"
+                value={countF(k.nonCompliant.fields)}
+                label={c.kpiNcFields}
+                sub={`${haF(k.nonCompliant.acres)} · ${formatSharePct(pct(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres), lang)}`}
+              />
+              <KpiTile
+                tone="comply"
+                value={formatSharePct(pct(k.compliant.acres, k.compliant.acres + k.nonCompliant.acres), lang)}
+                label={c.kpiCompliantShare}
+                sub={fill(c.ncShareSub, { p: formatSharePct(pct(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres), lang) })}
+              />
             </div>
           ) : null}
 

@@ -213,13 +213,30 @@ export const M_PER_MI = 1609.344;
 export const GROUPS = ["direct", "adm", "tp"] as const;
 export type Group = (typeof GROUPS)[number];
 
+/** A union of catchments drawn together on the map: "combo:q40+adm1+adm3".
+ * Members: q40, q80 (0–80 NM) and ADM elevator sites. */
+export const COMBO = "combo:";
+export function isCombo(scope: string | null): boolean {
+  return !!scope && scope.startsWith(COMBO);
+}
+export function comboMembers(scope: string): string[] {
+  return scope.slice(COMBO.length).split("+").filter(Boolean);
+}
+/** The map scope for a set of catchments: one id stays itself, more become a combo. */
+export function comboScope(ids: string[]): string {
+  // 0–40 NM lies inside 0–80 NM.
+  const uniq = [...new Set(ids)].filter((id, _, all) => !(id === "q40" && all.includes("q80")));
+  return uniq.length === 1 ? uniq[0]! : COMBO + uniq.join("+");
+}
+
 export function levelOf(scope: string | null): 1 | 2 | 3 {
   if (!scope || scope === "all") return 1;
+  if (isCombo(scope)) return 3;
   if ((GROUPS as readonly string[]).includes(scope) || scope === "tpcore") return 2;
   return 3;
 }
 export function groupOf(scope: string | null): Group | null {
-  if (!scope || scope === "all") return null;
+  if (!scope || scope === "all" || isCombo(scope)) return null;
   if ((GROUPS as readonly string[]).includes(scope)) return scope as Group;
   if (scope === "tpcore") return "tp";
   if (scope === "q40" || scope.startsWith("q80")) return "direct";
@@ -236,6 +253,8 @@ export function inScope(scope: string | null, f: { flags: number; k?: string }):
   if (scope === "adm") return has(FLAG.adm);
   if (scope === "tp") return has(FLAG.tp);
   if (scope === "tpcore") return has(FLAG.core);
+  if (isCombo(scope)) return comboMembers(scope!).some((m) => inScope(m, f));
+  if (scope === "q40") return has(FLAG.q40);
   return (f.k ?? "").split("|").includes(scope);
 }
 
@@ -264,6 +283,10 @@ export function circle(lon: number, lat: number, radiusM: number, steps = 96): n
 /** The unit files a level-3 catchment is drawn from, or null when it has none. */
 export function unitParts(scope: string | null, data: SupplyData): string[] | null {
   if (!scope) return null;
+  if (isCombo(scope)) {
+    const parts = comboMembers(scope!).flatMap((m) => unitParts(m, data) ?? []);
+    return parts.length ? [...new Set(parts)] : null;
+  }
   const set = data.unitSets?.[scope];
   if (set) return set;
   return data.units.some(([id]) => id === scope) ? [scope] : null;
@@ -301,6 +324,13 @@ export function scopeBounds(scope: string | null, data: SupplyData): [[number, n
   const merge = (bb: [[number, number], [number, number]]) => {
     b = b ? [[Math.min(b[0][0], bb[0][0]), Math.min(b[0][1], bb[0][1])], [Math.max(b[1][0], bb[1][0]), Math.max(b[1][1], bb[1][1])]] : bb; // prettier-ignore
   };
+  if (isCombo(scope)) {
+    for (const m of comboMembers(scope!)) {
+      const bb = scopeBounds(m, data);
+      if (bb) merge(bb);
+    }
+    return b;
+  }
   if (scope === "q40") return circleBounds(lon, lat, r40);
   if (scope === "direct" || scope === "q80" || scope === "q80r") return circleBounds(lon, lat, r80);
   const adm = data.admElevators.find((e) => e.id === scope && e.radiusM);

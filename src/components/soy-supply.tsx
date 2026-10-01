@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiTile } from "@/components/kpi-tile";
+import { loadNonCompliant, type SoyFeature } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa, formatLarge } from "@/lib/format";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, type SoyCopy } from "@/lib/soy-copy";
@@ -9,7 +10,9 @@ import {
   AC_TO_HA,
   FIELD_COLOR,
   NC_COLOR,
+  comboScope,
   comboTotals,
+  inScope,
   pct,
   type Catchment,
   type ComboTotals,
@@ -186,6 +189,11 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
   const ncAll = data.nonCompliantAll;
   const ncForCard = scope === "all" ? ncAll : nck;
   const outside = ncAll.fields - (catchments.get("all")?.nonCompliant.fields ?? 0);
+  // A statistics row opens the map on that scope (the whole chain for an empty list).
+  const openIds = (ids: string[]) => {
+    setScope(ids.length ? comboTarget(ids) : "all");
+    onOpenMap();
+  };
   const beforeRows: [string, number][] = [
     [c.ncBeforeTreed, ncForCard.byBefore.treed ?? 0],
     [c.ncBeforeNatural, ncForCard.byBefore.natural ?? 0],
@@ -210,7 +218,12 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
 
       <div className="kpi-row">
         <KpiTile value={countF(k.compliant.fields)} label={c.kpiFields} hint={c.kpiFieldsHint} />
-        <KpiTile value={haF(k.compliant.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(k.compliant.acres)} />
+        <KpiTile
+          value={haF(k.compliant.acres)}
+          label={c.kpiArea}
+          hint={c.kpiAreaHint}
+          sub={`${acF(k.compliant.acres)} · ${fill(c.ofAreaShare, { p: formatSharePct(100 - share, lang) })}`}
+        />
         <KpiTile tone="danger" value={countF(nck.fields)} label={c.kpiNcFields} hint={c.kpiNcFieldsHint} />
         <KpiTile
           tone="danger"
@@ -219,10 +232,17 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
           hint={c.kpiNcAreaHint}
           sub={fill(c.changed, { v: haF(nck.changeAcres) })}
         />
-        <KpiTile value={formatSharePct(share, lang)} label={c.kpiNcShare} hint={c.kpiNcShareHint} />
+        <KpiTile
+          tone="comply"
+          value={formatSharePct(pct(k.compliant.acres, k.compliant.acres + nck.acres), lang)}
+          label={c.kpiCompliantShare}
+          hint={c.kpiNcShareHint}
+          sub={fill(c.ncShareSub, { p: formatSharePct(share, lang) })}
+        />
       </div>
 
-      <ComboTable data={data} c={c} lang={lang} />
+      <ComboBuilder data={data} c={c} lang={lang} open={openIds} />
+      <ComboTable data={data} c={c} lang={lang} open={openIds} />
 
       <div className="chart-grid soy-charts">
         <section className="chart-card">
@@ -375,7 +395,6 @@ function FacilityTable({
     { id: "all", kind: "chain", name: c.scopeAll, place: plantPlace },
     { id: "direct", kind: "plant", name: `${data.plant.name} · ${c.scopeQ80}`, place: plantPlace },
     { id: "q40", kind: "plant", name: c.scopeQ40, place: plantPlace, sub: true },
-    { id: "q80r", kind: "plant", name: c.scopeQ80r, place: plantPlace, sub: true },
     ...data.admElevators
       .filter((e) => e.radiusM)
       .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
@@ -394,10 +413,10 @@ function FacilityTable({
     return { cf, nf, ca, na, pf: pct(nf, cf + nf), pa: pct(na, ca + na), defo: x.nonCompliant.changeAcres };
   };
   function download() {
-    const head = ["facility_id", "type", "name", "place", "compliant_polygons", "noncompliant_polygons", "noncompliant_pct_of_polygons", "compliant_acres", "noncompliant_acres", "noncompliant_pct_of_acres", "deforested_acres"]; // prettier-ignore
+    const head = ["facility_id", "type", "name", "place", "compliant_polygons", "noncompliant_polygons", "compliant_pct_of_polygons", "noncompliant_pct_of_polygons", "compliant_acres", "noncompliant_acres", "compliant_pct_of_acres", "noncompliant_pct_of_acres", "deforested_acres"]; // prettier-ignore
     const body = rows.map((r) => {
       const v = line(r.id);
-      return [r.id, r.kind, r.name, r.place, v?.cf, v?.nf, v?.pf.toFixed(4), v?.ca.toFixed(1), v?.na.toFixed(1), v?.pa.toFixed(4), v?.defo.toFixed(1)];
+      return [r.id, r.kind, r.name, r.place, v?.cf, v?.nf, v ? (100 - v.pf).toFixed(4) : null, v?.pf.toFixed(4), v?.ca.toFixed(1), v?.na.toFixed(1), v ? (100 - v.pa).toFixed(4) : null, v?.pa.toFixed(4), v?.defo.toFixed(1)]; // prettier-ignore
     });
     const text = [head, ...body].map((r) => r.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
@@ -464,10 +483,14 @@ function FacilityTable({
                   </td>
                   <td className="num tabular-nums">{countF(v.cf)}</td>
                   <td className="num tabular-nums">{countF(v.nf)}</td>
-                  <td className="num tabular-nums">{formatSharePct(v.pf, lang)}</td>
+                  <td className="num tabular-nums">
+                    <span className="comply">{formatSharePct(pct(v.cf, v.cf + v.nf), lang)}</span> / {formatSharePct(v.pf, lang)}
+                  </td>
                   <td className="num tabular-nums">{acF(v.ca)}</td>
                   <td className="num tabular-nums">{acF(v.na)}</td>
-                  <td className="num tabular-nums">{formatSharePct(v.pa, lang)}</td>
+                  <td className="num tabular-nums">
+                    <span className="comply">{formatSharePct(pct(v.ca, v.ca + v.na), lang)}</span> / {formatSharePct(v.pa, lang)}
+                  </td>
                   <td className="num tabular-nums">{acF(v.defo)}</td>
                 </tr>
               );
@@ -480,94 +503,213 @@ function FacilityTable({
   );
 }
 
-/** The user's ask: statistics for Quincy 0–40 / 0–80 mi, ADM elevators (all
- * or any chosen ones), their combinations and third parties — compliant and
- * non-compliant together, each field counted once. */
-function ComboTable({ data, c, lang }: { data: SupplyData; c: SoySupplyCopy; lang: Lang }) {
+type ComboRowProps = { label: string; t: ComboTotals | null; cls?: string; onOpen?: () => void; expanded?: boolean; lang: Lang };
+
+function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps) {
+  if (!t) return null;
+  const p = pct(t.ncAcres, t.acres + t.ncAcres);
+  return (
+    <tr
+      className={`${cls} ${onOpen ? "clickable" : ""} ${expanded ? "open" : ""}`.trim()}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-expanded={onOpen ? !!expanded : undefined}
+      onClick={onOpen}
+      onKeyDown={(e) => onOpen && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
+    >
+      <td>
+        {onOpen ? <span className="soy-combo-caret" aria-hidden="true">{expanded ? "▾" : "▸"}</span> : null}
+        {label}
+        <span className="scale-bar" aria-hidden="true">
+          <i style={{ width: `${Math.max(p, 0.4)}%` }} />
+        </span>
+      </td>
+      <td className="num tabular-nums">{formatCount(t.fields, lang)}</td>
+      <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
+      <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
+      <td className="num tabular-nums">{formatAcres(t.ncAcres, lang)}</td>
+      <td className="num tabular-nums">{formatAcres(t.defo, lang)}</td>
+      <td className="num tabular-nums comply">{formatSharePct(pct(t.acres, t.acres + t.ncAcres), lang)}</td>
+      <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
+    </tr>
+  );
+}
+
+function ComboHead({ c }: { c: SoySupplyCopy }) {
+  return (
+    <thead>
+      <tr>
+        <th>{c.colCatchment}</th>
+        <th className="num">{c.colCompliantN}</th>
+        <th className="num">{c.colCompliantA}</th>
+        <th className="num">{c.colNcN}</th>
+        <th className="num">{c.colNcA}</th>
+        <th className="num">{c.colDefo}</th>
+        <th className="num">{c.colCompliantShareA}</th>
+        <th className="num">{c.colNcShareA}</th>
+      </tr>
+    </thead>
+  );
+}
+
+/** What is inside one statistics row: its catchments one by one, and the
+ * non-compliant fields in it (how much changed, 2025 land use, states). */
+function ComboDetail({
+  data,
+  c,
+  lang,
+  ids,
+  parts,
+  onMap,
+}: {
+  data: SupplyData;
+  c: SoySupplyCopy;
+  lang: Lang;
+  ids: string[];
+  parts: [string, string[]][];
+  onMap: () => void;
+}) {
+  const [nc, setNc] = useState<SoyFeature[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadNonCompliant()
+      .then((fc) => live && setNc(fc.features))
+      .catch(() => live && setNc([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const inside = (nc ?? []).filter((f) => ids.some((id) => inScope(id, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") })));
+  const count = (key: string, val: string) => inside.filter((f) => String(f.properties[key] ?? "unknown") === val).length;
+  const states = Object.entries(
+    inside.reduce<Record<string, number>>((acc, f) => {
+      const st = String(f.properties.s ?? "—");
+      acc[st] = (acc[st] ?? 0) + 1;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1]);
+  const n = inside.length;
+  const share = (v: number) => (n ? ` · ${formatSharePct(pct(v, n), lang)}` : "");
+  return (
+    <div className="soy-combo-detail">
+      {parts.length > 1 ? (
+        <div className="soy-combo-parts">
+          <p className="eyebrow">{c.comboParts}</p>
+          <div className="soy-table-wrap short">
+            <table className="data-table soy-table">
+              <tbody>
+                {parts.map(([label, pids]) => {
+                  const t = comboTotals(data, pids);
+                  if (!t) return null;
+                  return (
+                    <tr key={label}>
+                      <td>{label}</td>
+                      <td className="num tabular-nums">{formatCount(t.fields, lang)}</td>
+                      <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
+                      <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
+                      <td className="num tabular-nums comply">{formatSharePct(pct(t.acres, t.acres + t.ncAcres), lang)}</td>
+                      <td className="num tabular-nums">{formatSharePct(pct(t.ncAcres, t.acres + t.ncAcres), lang)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+      <div className="soy-combo-nc">
+        <p className="eyebrow">
+          {c.comboNcIn} · {formatCount(n, lang)}
+        </p>
+        {nc == null ? (
+          <p className="chart-note">{c.comboLoadingNc}</p>
+        ) : (
+          <div className="soy-combo-nc-grid">
+            <dl className="facts">
+              {(
+                [
+                  [c.ncExtentWhole, count("ex", "whole")],
+                  [c.ncExtentMost, count("ex", "most")],
+                  [c.ncExtentPart, count("ex", "part")],
+                ] as const
+              ).map(([label, v]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    {formatCount(v, lang)}
+                    {share(v)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <dl className="facts">
+              {(
+                [
+                  [c.ncUseCrop, count("u", "crop")],
+                  [c.ncUsePasture, count("u", "pasture")],
+                  [c.ncUseNonAg, count("u", "nonag")],
+                ] as const
+              ).map(([label, v]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    {formatCount(v, lang)}
+                    {share(v)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <div>
+              <p className="soy-combo-sub">{c.comboNcStates}</p>
+              <p className="soy-combo-states">{states.map(([st, v]) => `${st} ${formatCount(v, lang)}`).join(" · ") || "—"}</p>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="soy-combo-actions">
+        {ids.includes("tp") || ids.includes("tpcore") ? <p className="chart-note">{c.comboTpMap}</p> : <span />}
+        <button type="button" className="btn-primary" onClick={onMap}>
+          {c.comboOpenMap} →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Map scope for a set of catchment ids; third parties open their list (too many fields to draw). */
+function comboTarget(ids: string[]): string {
+  if (ids.includes("tp") || ids.includes("tpcore")) {
+    const rest = ids.filter((x) => x !== "tp" && x !== "tpcore");
+    return rest.length ? "all" : ids.includes("tp") ? "tp" : "tpcore";
+  }
+  return comboScope(ids);
+}
+
+/** The user's ask: build any union — Quincy 0–40 / 0–80 NM, any ADM elevators,
+ * third parties — compliant and non-compliant together, each field once. */
+function ComboBuilder({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; open: (ids: string[]) => void }) {
   const sites = data.admElevators.filter((e) => e.radiusM);
   const siteIds = sites.map((e) => e.id);
   const [quincy, setQuincy] = useState<"none" | "q40" | "q80">("q40");
   const [picked, setPicked] = useState<string[]>(siteIds);
   const [tp, setTp] = useState<"none" | "tp" | "tpcore">("none");
-  const countF = (n: number) => formatCount(n, lang);
-  const acF = (n: number) => formatAcres(n, lang);
-  const presets: [string, string, string[]][] = [
-    ["q40", c.comboQ40, ["q40"]],
-    ["q80", c.comboQ80, ["q80"]],
-    ["adm", fill(c.comboAdm, { n: sites.length }), siteIds],
-    ["q40adm", c.comboQ40Adm, ["q40", ...siteIds]],
-    ["q80adm", c.comboQ80Adm, ["q80", ...siteIds]],
-    ["tp", fill(c.comboTp, { n: data.thirdParty.length }), ["tp"]],
-    ["all", c.comboAll, ["q80", ...siteIds, "tp"]],
+  const ids = [...(quincy === "none" ? [] : [quincy]), ...picked, ...(tp === "none" ? [] : [tp])];
+  const [expanded, setExpanded] = useState(false);
+  const parts: [string, string[]][] = [
+    ...(quincy === "none" ? [] : [[quincy === "q40" ? c.comboQ40 : c.comboQ80, [quincy]] as [string, string[]]]),
+    ...sites.filter((e) => picked.includes(e.id)).map((e) => [e.name, [e.id]] as [string, string[]]),
+    ...(tp === "none" ? [] : [[tp === "tp" ? fill(c.comboTp, { n: data.thirdParty.length }) : c.scopeTp56, [tp]] as [string, string[]]]),
   ];
-  const customIds = [...(quincy === "none" ? [] : [quincy]), ...picked, ...(tp === "none" ? [] : [tp])];
-  const custom = comboTotals(data, customIds);
-  const row = (key: string, label: string, t: ComboTotals | null, cls = "") => {
-    if (!t) return null;
-    const p = pct(t.ncAcres, t.acres + t.ncAcres);
-    return (
-      <tr key={key} className={cls}>
-        <td>
-          {label}
-          <span className="scale-bar" aria-hidden="true">
-            <i style={{ width: `${Math.max(p, 0.4)}%` }} />
-          </span>
-        </td>
-        <td className="num tabular-nums">{countF(t.fields)}</td>
-        <td className="num tabular-nums">{acF(t.acres)}</td>
-        <td className="num tabular-nums">{countF(t.ncFields)}</td>
-        <td className="num tabular-nums">{acF(t.ncAcres)}</td>
-        <td className="num tabular-nums">{acF(t.defo)}</td>
-        <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
-      </tr>
-    );
-  };
   const togglePick = (id: string) => setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
   return (
-    <section className="chart-card supply-wide soy-combo">
-      <h3>{c.comboTitle}</h3>
-      <p className="chart-note">{c.comboIntro}</p>
-      <div className="soy-table-wrap">
-        <table className="data-table soy-table scale-table">
-          <thead>
-            <tr>
-              <th>{c.colCatchment}</th>
-              <th className="num">{c.colCompliantN}</th>
-              <th className="num">{c.colCompliantA}</th>
-              <th className="num">{c.colNcN}</th>
-              <th className="num">{c.colNcA}</th>
-              <th className="num">{c.colDefo}</th>
-              <th className="num">{c.colNcShareA}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {presets.map(([key, label, ids]) => row(key, label, comboTotals(data, ids), key === "all" ? "total" : ""))}
-            {customIds.length ? row("custom", c.comboCustom, custom, "custom") : null}
-          </tbody>
-        </table>
-      </div>
-      <p className="chart-note scale-legend">
-        <i style={{ background: FIELD_COLOR }} /> {c.scaleCompliant} <i style={{ background: NC_COLOR }} /> {c.scaleNonCompliant}
-      </p>
-
+    <section className="chart-card supply-wide soy-combo soy-combo-builder">
+      <h3>{c.comboBuild}</h3>
       <div className="soy-combo-build">
-        <p className="eyebrow">{c.comboBuild}</p>
         <div className="soy-combo-line">
           <span>{c.comboQuincy}</span>
           <div className="seg" role="group" aria-label={c.comboQuincy}>
             {(["none", "q40", "q80"] as const).map((v) => (
               <button key={v} type="button" className={quincy === v ? "on" : ""} aria-pressed={quincy === v} onClick={() => setQuincy(v)}>
                 {v === "none" ? c.comboNone : v === "q40" ? c.comboQ40 : c.comboQ80}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="soy-combo-line">
-          <span>{c.comboTpPick}</span>
-          <div className="seg" role="group" aria-label={c.comboTpPick}>
-            {(["none", "tp", "tpcore"] as const).map((v) => (
-              <button key={v} type="button" className={tp === v ? "on" : ""} aria-pressed={tp === v} onClick={() => setTp(v)}>
-                {v === "none" ? c.comboNone : v === "tp" ? c.comboAllSites : c.comboTpCore}
               </button>
             ))}
           </div>
@@ -594,8 +736,95 @@ function ComboTable({ data, c, lang }: { data: SupplyData; c: SoySupplyCopy; lan
             ))}
           </div>
         </div>
-        {customIds.length ? null : <p className="chart-note">{c.comboPickSome}</p>}
+        <div className="soy-combo-line">
+          <span>{c.comboTpPick}</span>
+          <div className="seg" role="group" aria-label={c.comboTpPick}>
+            {(["none", "tp", "tpcore"] as const).map((v) => (
+              <button key={v} type="button" className={tp === v ? "on" : ""} aria-pressed={tp === v} onClick={() => setTp(v)}>
+                {v === "none" ? c.comboNone : v === "tp" ? c.comboAllSites : c.comboTpCore}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+      {ids.length ? (
+        <div className="soy-table-wrap">
+          <table className="data-table soy-table scale-table">
+            <ComboHead c={c} />
+            <tbody>
+              <ComboRow label={c.comboCustom} t={comboTotals(data, ids)} cls="custom" lang={lang} expanded={expanded} onOpen={() => setExpanded((v) => !v)} />
+              {expanded ? (
+                <tr className="soy-combo-detail-row">
+                  <td colSpan={8}>
+                    <ComboDetail data={data} c={c} lang={lang} ids={ids} parts={parts} onMap={() => open(ids)} />
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="chart-note">{c.comboPickSome}</p>
+      )}
+      <p className="chart-note">{c.comboOpen}</p>
+    </section>
+  );
+}
+
+/** The user's ask: statistics for Quincy 0–40 / 0–80 NM, all ADM elevators,
+ * their combinations and third parties; a row opens it on the map. */
+function ComboTable({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; open: (ids: string[]) => void }) {
+  const sites = data.admElevators.filter((e) => e.radiusM);
+  const siteIds = sites.map((e) => e.id);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const siteParts = sites.map((e) => [e.name, [e.id]] as [string, string[]]);
+  const tpParts = data.thirdParty.map((e) => [[e.company, [e.county, e.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "), [e.id]] as [string, string[]]);
+  const admLabel = fill(c.comboAdm, { n: sites.length });
+  const tpLabel = fill(c.comboTp, { n: data.thirdParty.length });
+  const presets: [string, string, string[], [string, string[]][]][] = [
+    ["q40", c.comboQ40, ["q40"], []],
+    ["q80", c.comboQ80, ["q80"], []],
+    ["adm", admLabel, siteIds, siteParts],
+    ["q40adm", c.comboQ40Adm, ["q40", ...siteIds], [[c.comboQ40, ["q40"]], [admLabel, siteIds], ...siteParts]],
+    ["q80adm", c.comboQ80Adm, ["q80", ...siteIds], [[c.comboQ80, ["q80"]], [admLabel, siteIds], ...siteParts]],
+    ["tp", tpLabel, ["tp"], [[c.scopeTp56, ["tpcore"]], ...tpParts]],
+    ["all", c.comboAll, ["q80", ...siteIds, "tp"], [[c.comboQ80, ["q80"]], [admLabel, siteIds], [tpLabel, ["tp"]]]],
+  ];
+  return (
+    <section className="chart-card supply-wide soy-combo">
+      <h3>{c.comboTitle}</h3>
+      <p className="chart-note">
+        {c.comboIntro} {c.comboOpen}
+      </p>
+      <div className="soy-table-wrap">
+        <table className="data-table soy-table scale-table">
+          <ComboHead c={c} />
+          <tbody>
+            {presets.map(([key, label, ids, parts]) => (
+              <Fragment key={key}>
+                <ComboRow
+                  label={label}
+                  t={comboTotals(data, ids)}
+                  cls={key === "all" ? "total" : ""}
+                  lang={lang}
+                  expanded={openKey === key}
+                  onOpen={() => setOpenKey(openKey === key ? null : key)}
+                />
+                {openKey === key ? (
+                  <tr className="soy-combo-detail-row">
+                    <td colSpan={8}>
+                      <ComboDetail data={data} c={c} lang={lang} ids={ids} parts={parts} onMap={() => open(key === "all" ? [] : ids)} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="chart-note scale-legend">
+        <i style={{ background: FIELD_COLOR }} /> {c.scaleCompliant} <i style={{ background: NC_COLOR }} /> {c.scaleNonCompliant}
+      </p>
     </section>
   );
 }

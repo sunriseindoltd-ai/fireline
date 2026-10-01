@@ -3930,3 +3930,158 @@ button.kpi-action:hover {
   justify-self: start;
   width: auto;
 }
+/* Non-compliant "firefly" in the legend, compliant shares in green. */
+.soy-key-symbol .nc-ring {
+  width: 6px;
+  height: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: #ff5442;
+  box-shadow: 0 0 0 1px #ffe9e4, 0 0 6px 3px rgba(200, 55, 43, 0.45);
+}
+.soy-inview {
+  width: min(560px, calc(100% - 380px));
+}
+.soy-inview-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.soy-inview-row b.ok,
+.soy-table td.comply,
+.soy-table .comply {
+  color: #1f6b46;
+}
+
+/* SoyTrace reading guide (soy-tour.tsx). */
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+.tour-block {
+  position: absolute;
+  inset: 0;
+}
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 17, 20, 0.5);
+}
+.tour-spot {
+  position: absolute;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(15, 17, 20, 0.5);
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+  pointer-events: none;
+}
+.tour-card {
+  position: absolute;
+  background: var(--color-bg, #fff);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  padding: 18px 20px 16px;
+  outline: none;
+}
+.tour-count {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tour-card h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.tour-body {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-fg-2, #424245);
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tour-spacer {
+  flex: 1;
+}
+.tour-help {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg, #fff);
+  color: var(--color-fg, #1d1d1f);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tour-help:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot {
+    transition: none;
+  }
+}
+/* Statistics rows that open to show what is inside them. */
+.soy-combo tr.clickable {
+  cursor: pointer;
+}
+.soy-combo tr.clickable:hover td,
+.soy-combo tr.open td {
+  background: var(--color-surface-2, #f5f5f7);
+}
+.soy-combo-caret {
+  display: inline-block;
+  width: 16px;
+  color: var(--color-muted);
+}
+.soy-combo-detail-row > td {
+  padding: 0 !important;
+  background: #fafafa;
+}
+.soy-combo-detail {
+  padding: 14px 16px 16px;
+  display: grid;
+  gap: 14px;
+}
+.soy-combo-detail .soy-table-wrap.short {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.soy-combo-nc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.soy-combo-nc-grid .facts {
+  margin: 0;
+}
+.soy-combo-sub {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.soy-combo-states {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.soy-combo-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.soy-combo-builder .soy-table-wrap {
+  margin-top: 12px;
+}
+@media (max-width: 800px) {
+  .soy-combo-nc-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

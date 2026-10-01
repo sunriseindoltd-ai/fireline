@@ -19,7 +19,9 @@ import {
   circle,
   circleBounds,
   groupOf,
+  comboMembers,
   inScope,
+  isCombo,
   pct,
   levelOf,
   scopeBounds,
@@ -84,6 +86,8 @@ function gridFC(rows: GridRow[], d: number): FC {
 }
 /** Share of a grid cell under these soybean fields (%) at each colour step. */
 const GRID_STEPS = [1, 5, 10, 20, 35];
+/** Peak opacity of the non-compliant glow. */
+const NC_GLOW = 0.42;
 let fineGrid: { deg: number; minZoom: number; rows: GridRow[] }[] | null = null;
 let gridLevels: Promise<{ deg: number; minZoom: number; rows: GridRow[] }[]> | null = null;
 
@@ -458,22 +462,20 @@ export function SoySupplyMap({
           filter: ["!=", ["geometry-type"], "Point"],
           paint: { "line-color": NC_INK, "line-width": 1.2 },
         });
-        // Zoomed out: a hollow red ring with a white rim — easy to spot over
-        // the green fields, yet clearly a location marker rather than a disc
-        // whose size could be read as area. From zoom 11 the true outline
-        // takes over (points delivered without a polygon keep the marker).
-        const fadeOut = ["interpolate", ["linear"], ["zoom"], 10.5, 1, 11.5, ["case", ["get", "po"], 1, 0]];
-        const ringR = ["interpolate", ["linear"], ["zoom"], 4, 3.2, 8, 5, 11, 6.5];
+        // Zoomed out: a "firefly" — a tiny bright dot with a soft red glow.
+        // Easy to spot over green fields, yet clearly a marker rather than a
+        // disc whose size could be read as area. From zoom 11 the true
+        // outline takes over (points delivered without a polygon keep it).
+        const fade = (v: number) => ["interpolate", ["linear"], ["zoom"], 10.5, v, 11.5, ["case", ["get", "po"], v, 0]];
         map.addLayer({
           id: "nc-halo",
           type: "circle",
           source: "nc-pts",
           paint: {
-            "circle-radius": ringR as never,
-            "circle-color": "rgba(0,0,0,0)",
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 3, 9, 4.5] as never,
-            "circle-stroke-opacity": fadeOut as never,
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 5, 8, 8, 11, 10] as never,
+            "circle-color": NC_MARK,
+            "circle-blur": 1,
+            "circle-opacity": fade(NC_GLOW) as never,
           },
         });
         map.addLayer({
@@ -481,13 +483,28 @@ export function SoySupplyMap({
           type: "circle",
           source: "nc-pts",
           paint: {
-            "circle-radius": ringR as never,
-            "circle-color": "rgba(0,0,0,0)",
-            "circle-stroke-color": NC_MARK,
-            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 1.6, 9, 2.4] as never,
-            "circle-stroke-opacity": fadeOut as never,
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 1.6, 8, 2.3, 11, 3] as never,
+            "circle-color": "#ff5442",
+            "circle-stroke-color": "#ffe9e4",
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 9, 0.8] as never,
+            "circle-opacity": fade(1) as never,
+            "circle-stroke-opacity": fade(1) as never,
           },
         });
+        // A slow breathing glow (skipped for reduced motion).
+        if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          let last = 0;
+          const breathe = (t: number) => {
+            if (cancelled || !map) return;
+            if (t - last > 90 && map.getLayer("nc-halo") && map.getLayoutProperty("nc-halo", "visibility") !== "none") {
+              last = t;
+              const k = 0.5 + 0.5 * Math.sin(t / 700);
+              map.setPaintProperty("nc-halo", "circle-opacity", fade(NC_GLOW * (0.6 + 0.6 * k)) as never);
+            }
+            requestAnimationFrame(breathe);
+          };
+          requestAnimationFrame(breathe);
+        }
         // The selected field (table row or click).
         map.addLayer({
           id: "sel-line",
@@ -713,15 +730,28 @@ export function SoySupplyMap({
             push([], { loading: false, failed: false });
             return;
           }
+          // A field can be in several catchments: draw it once.
+          const once = (lists: SoyFeature[][]) => {
+            if (lists.length === 1) return lists[0]!;
+            const seen = new Set<string>();
+            const out: SoyFeature[] = [];
+            for (const list of lists)
+              for (const f of list) {
+                const fid = String(f.properties.id);
+                if (seen.has(fid)) continue;
+                seen.add(fid);
+                out.push(f);
+              }
+            return out;
+          };
           const hits = parts.map((id) => unitCache.get(id));
           if (hits.every(Boolean)) {
-            push(hits.flatMap((h) => h!), { loading: false, failed: false });
+            push(once(hits as SoyFeature[][]), { loading: false, failed: false });
             return;
           }
           push([], { loading: true, failed: false });
-          // Parts are disjoint (0–80 mi = 0–40 mi + the 40–80 mi ring).
           Promise.all(parts.map(loadUnit))
-            .then((all) => all.flat())
+            .then(once)
             .then((feats) => {
               if (my === token) push(feats, { loading: false, failed: false });
             })
@@ -816,9 +846,10 @@ export function SoySupplyMap({
     set(["fields", "fields-line", "sel-line"], on.fields);
     set(["nc-fill", "nc-line", "nc-halo", "nc-dot", "sel-nc-line"], on.nc);
     set(["rings", "plant", "plant-label"], on.rings);
-    set(["direct-area", "ring-label"], on.rings && group === "direct");
+    const combo = isCombo(selected) ? comboMembers(selected!) : null;
+    set(["direct-area", "ring-label"], on.rings && (group === "direct" || !!combo?.some((m) => m === "q40" || m === "q80")));
     set(["adm", "adm-catch", "adm-label"], on.adm && (!group || group === "adm"));
-    set(["tp", "tp-catch", "tp-label"], on.tp && (!group || group === "tp"));
+    set(["tp", "tp-catch", "tp-label"], on.tp && (group ? group === "tp" : !combo));
     set(["rail", "rail-casing"], on.rail);
     set(["rivers", "rivers-line"], on.rivers);
     set(["corridors"], on.corridors);
@@ -874,12 +905,14 @@ export function SoySupplyMap({
     const isAdm = id === "adm" || /^adm\d/.test(id);
     const one = (x: string) => ["==", ["get", "id"], x];
     const direct = groupOf(id) === "direct";
-    const strong = id === "q40" ? ["q40"] : id === "q80" ? ["q80"] : id === "q80r" || id === "direct" ? ["q40", "q80"] : [];
+    const mem = isCombo(id) ? comboMembers(id) : [id];
+    const strong = mem.includes("q80") ? ["q80"] : mem.includes("q40") ? ["q40"] : id === "q80r" || id === "direct" ? ["q40", "q80"] : [];
+    const admSel = mem.filter((m) => /^adm\d/.test(m));
     map.setPaintProperty("rings", "line-width", (strong.length ? ["match", ["get", "id"], strong, 3.4, 2.2] : 2.2) as never);
-    map.setFilter("direct-area", ["==", ["get", "id"], id] as never);
+    map.setFilter("direct-area", ["in", ["get", "id"], ["literal", mem]] as never);
     map.setPaintProperty("rings", "line-opacity", (id && !direct && id !== "all" ? 0.4 : 0.95) as never);
-    map.setPaintProperty("adm-catch", "line-width", (/^adm\d/.test(id) ? ["case", one(id), 3, 1.1] : isAdm ? 2 : 1.3) as never);
-    map.setPaintProperty("adm-catch", "line-opacity", (/^adm\d/.test(id) ? ["case", one(id), 1, 0.35] : id && !isAdm && id !== "all" ? 0.4 : 0.9) as never);
+    map.setPaintProperty("adm-catch", "line-width", (admSel.length ? ["match", ["get", "id"], admSel, 3, 1.1] : isAdm ? 2 : 1.3) as never);
+    map.setPaintProperty("adm-catch", "line-opacity", (admSel.length ? ["match", ["get", "id"], admSel, 1, 0.35] : id && !isAdm && id !== "all" ? 0.4 : 0.9) as never);
     map.setPaintProperty("tp-catch", "line-width", (/^tp\d/.test(id) ? ["case", one(id), 3, 0.8] : isTp ? 1.6 : 1) as never);
     map.setPaintProperty(
       "tp-catch",
@@ -921,6 +954,18 @@ export function SoySupplyMap({
     const map = mapRef.current;
     if (!map || !ready) return;
     setBasemap(map, basemap, DATA_FLOOR);
+    const light = basemap === "osm";
+    const ink = light ? "#1d1d1f" : "#ffffff";
+    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
+    if (map.getLayer("direct-area")) {
+      map.setPaintProperty("direct-area", "fill-color", ink);
+      map.setPaintProperty("direct-area", "fill-opacity", light ? 0.07 : 0.14);
+    }
+    for (const id of ["ring-label", "plant-label", "adm-label", "tp-label"]) {
+      if (!map.getLayer(id)) continue;
+      map.setPaintProperty(id, "text-color", ink);
+      map.setPaintProperty(id, "text-halo-color", light ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.78)");
+    }
   }, [basemap, ready]);
 
   useEffect(() => {
@@ -1076,6 +1121,10 @@ export function SoySupplyMap({
             <div>
               <b className="bad">{formatAcres(inView.defo, lang)}</b>
               <span>{c.inViewDefo}</span>
+            </div>
+            <div>
+              <b className="ok">{inView.total > 0 ? formatSharePct(pct(inView.total - inView.ncAcres, inView.total), lang) : "—"}</b>
+              <span>{c.inViewCompliant}</span>
             </div>
             <div>
               <b>{inView.total > 0 ? formatSharePct(pct(inView.defo, inView.total), lang) : "—"}</b>

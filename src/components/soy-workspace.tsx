@@ -21,6 +21,7 @@ import { useI18n } from "@/lib/i18n";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/soy-copy";
 import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
 import { SoyMapView } from "@/components/soy-mapview";
+import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
 import type { SupplyData } from "@/lib/soy-supply";
 import { soySupplyCopy } from "@/lib/soy-supply-copy";
 import { usePersistentState } from "@/lib/use-persistent";
@@ -96,7 +97,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const [supplyError, setSupplyError] = useState(false);
   const supplyCatchments = useMemo(() => (supply ? new Map(supply.catchments.map((k) => [k.id, k])) : null), [supply]);
   // A scope remembered from an earlier data version may no longer exist.
-  const scope = !supplyCatchments || supplyCatchments.has(scopeStored) ? scopeStored : "all";
+  const scope = !supplyCatchments || supplyCatchments.has(scopeStored) || scopeStored.startsWith("combo:") ? scopeStored : "all";
   const navigate = useNavigate();
   const [data, setData] = useState<SoyData | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -119,6 +120,17 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       .then(setSupply)
       .catch(() => setSupplyError(true));
   }, []);
+
+  // The reading guide: once per sign-in (login clears the flag), on the map tab.
+  const [tourOpen, setTourOpen] = useState(false);
+  const tourChecked = useRef(false);
+  useEffect(() => {
+    if (tourChecked.current || !supply || !data) return;
+    tourChecked.current = true;
+    if (present || !tourPending()) return;
+    setTab("map");
+    setTourOpen(true);
+  }, [supply, data, present, setTab]);
 
   const loadFields = useCallback((plant: string | null) => {
     const id = ++reqId.current;
@@ -203,6 +215,20 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             {present ? t.presentOn : t.present}
           </button>
         ) : null}
+        {present ? null : (
+          <button
+            type="button"
+            className="tour-help"
+            aria-label={ssc.tourReplay}
+            title={ssc.tourReplay}
+            onClick={() => {
+              setTab("map");
+              setTourOpen(true);
+            }}
+          >
+            ?
+          </button>
+        )}
         {present ? null : <LangToggle />}
         <button type="button" className="btn-text" onClick={() => void logout()}>
           {t.signOut}
@@ -211,12 +237,23 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     </header>
   );
   const appClass = `app ${present ? "presenting" : ""}`;
+  const tour = tourOpen ? (
+    <SoyTour
+      steps={ssc.tourSteps}
+      labels={{ next: ssc.tourNext, back: ssc.tourBack, skip: ssc.tourSkip, done: ssc.tourDone, stepOf: ssc.tourStepOf }}
+      onClose={() => {
+        markTourDone();
+        setTourOpen(false);
+      }}
+    />
+  ) : null;
 
   if (tab !== "areas") {
     const ready = supply && data;
     return (
       <div className={appClass} data-product="soy">
         {header}
+        {tour}
         <main className="app-main">
           {!ready ? (
             <div className="boot">
