@@ -180,6 +180,15 @@ function tenantClientAccount(user: string) {
   return TENANT_CLIENT_ACCOUNTS.find((a) => a.user === user);
 }
 
+/**
+ * Extra Earthline master logins (admin role: every client, tenant switch,
+ * requests inbox). Like the supplier and tenant accounts, only a scrypt hash
+ * is kept here — the password lives with the user, not in the code.
+ */
+const ADMIN_HASHED_ACCOUNTS: readonly { user: string; salt: string; hash: string }[] = [
+  { user: "admin123", salt: "22c4ef49490d9814da275f765dae94f9", hash: "1077b600c6c44fb177155a96cebe8bdf4f0aba713900c9774865f5e3774aee6b" },
+];
+
 function matchesSupplierHash(password: string, account: { salt: string; hash: string }) {
   const hash = scryptSync(password, Buffer.from(account.salt, "hex"), 32);
   return timingSafeEqual(hash, Buffer.from(account.hash, "hex"));
@@ -233,6 +242,8 @@ export function matchGateCredentials(
       }
     }
   }
+  const master = ADMIN_HASHED_ACCOUNTS.find((a) => safeEqual(user, a.user));
+  if (master && matchesSupplierHash(password, master)) return { role: "admin", tenant: DEFAULT_TENANT };
   const supplier = supplierAccount(user);
   if (supplier && matchesSupplierHash(password, supplier)) return { role: "supplier", tenant: DEFAULT_TENANT };
   const tenantClient = tenantClientAccount(user);
