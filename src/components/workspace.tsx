@@ -38,6 +38,7 @@ import {
   type PlotFilters,
 } from "@/lib/plot-filters";
 import { useLedger } from "@/lib/ledger-context";
+import { DataAssistant } from "@/components/data-assistant";
 import { usePersistentState } from "@/lib/use-persistent";
 import { ChainMap } from "@/components/chain-map";
 import { ColumnFilterMenu } from "@/components/column-filter";
@@ -880,6 +881,17 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
           </div>
         )}
       </main>
+      {present ? null : (
+        <DataAssistant
+          lang={lang}
+          group={chain?.name ?? null}
+          millId={selectedMillId}
+          onOpenMill={(id) => {
+            const m = store.mills.find((x) => x.id === id);
+            if (m) go({ groupSlug: groupSlug(m.group), refinery: null, mill: id, tab: "data" });
+          }}
+        />
+      )}
     </div>
   );
 }

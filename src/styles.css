@@ -4111,3 +4111,200 @@ button.kpi-action:hover {
   max-width: 62%;
   overflow-wrap: anywhere;
 }
+
+/* ---------- "Tanya data" — PalmTrace data assistant (data-assistant.tsx) ---------- */
+.assistant-launch {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-fg);
+  color: #fff;
+  font: 600 14px var(--font-sans);
+  box-shadow: var(--shadow-2);
+  cursor: pointer;
+}
+.assistant-launch:hover {
+  background: #000;
+}
+.assistant-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  width: min(460px, calc(100vw - 40px));
+  height: min(680px, calc(100vh - 100px));
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.assistant-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--color-line-soft);
+}
+.assistant-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.assistant-head p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+.assistant-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.assistant-x {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-bg-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.assistant-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.assistant-q {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  padding: 9px 13px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--color-fg);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.assistant-a {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.assistant-a > p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--color-fg);
+}
+.assistant-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.assistant-table {
+  border: 1px solid var(--color-line-soft);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.assistant-table-title {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--color-bg-2);
+}
+.assistant-table-scroll {
+  max-height: 280px;
+  overflow: auto;
+}
+.assistant-table .data-table {
+  font-size: 12.5px;
+  width: 100%;
+}
+.assistant-table .data-table th,
+.assistant-table .data-table td {
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+.assistant-table tr.clickable {
+  cursor: pointer;
+}
+.assistant-table tr.clickable:hover td {
+  background: var(--color-link-soft);
+}
+.assistant-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.assistant-suggest-head {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.assistant-chip {
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-bg);
+  padding: 6px 12px;
+  font: 500 13px var(--font-sans);
+  color: var(--color-fg);
+  cursor: pointer;
+  text-align: left;
+}
+.assistant-chip:hover:not(:disabled) {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+.assistant-chip:disabled {
+  opacity: 0.5;
+}
+.assistant-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-line-soft);
+}
+.assistant-input textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 9px 11px;
+  font: 14px/1.4 var(--font-sans);
+}
+.assistant-input textarea:focus {
+  outline: 2px solid var(--color-brand);
+  outline-offset: -1px;
+}
+.assistant-foot {
+  margin: 0;
+  padding: 0 14px 10px;
+  font-size: 11px;
+  color: var(--color-faint);
+}
+@media (max-width: 640px) {
+  .assistant-panel {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    height: calc(100vh - 80px);
+  }
+}

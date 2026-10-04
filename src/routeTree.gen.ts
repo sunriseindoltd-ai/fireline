@@ -25,6 +25,7 @@ import { Route as AccessRequestsIndexRouteImport } from './routes/access-request
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppPortfolioRouteImport } from './routes/app/portfolio'
 import { Route as AppRequestsRouteImport } from './routes/app/requests'
+import { Route as AssistantIndexRouteImport } from './routes/assistant/index'
 import { Route as ContactRequestIndexRouteImport } from './routes/contact-request/index'
 import { Route as CoverageIndexRouteImport } from './routes/coverage/index'
 import { Route as DataSplatRouteImport } from './routes/data/$'
@@ -119,6 +120,11 @@ const AppRequestsRoute = AppRequestsRouteImport.update({
   path: '/requests',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AssistantIndexRoute = AssistantIndexRouteImport.update({
+  id: '/assistant/',
+  path: '/assistant/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ContactRequestIndexRoute = ContactRequestIndexRouteImport.update({
   id: '/contact-request/',
   path: '/contact-request/',
@@ -205,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
   '/access-requests/': typeof AccessRequestsIndexRoute
   '/app/': typeof AppIndexRoute
+  '/assistant/': typeof AssistantIndexRoute
   '/contact-request/': typeof ContactRequestIndexRoute
   '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
   '/access-requests': typeof AccessRequestsIndexRoute
   '/app': typeof AppIndexRoute
+  '/assistant': typeof AssistantIndexRoute
   '/contact-request': typeof ContactRequestIndexRoute
   '/coverage': typeof CoverageIndexRoute
   '/eudr-summary': typeof EudrSummaryIndexRoute
@@ -267,6 +275,7 @@ export interface FileRoutesById {
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
   '/access-requests/': typeof AccessRequestsIndexRoute
   '/app/': typeof AppIndexRoute
+  '/assistant/': typeof AssistantIndexRoute
   '/contact-request/': typeof ContactRequestIndexRoute
   '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
@@ -300,6 +309,7 @@ export interface FileRouteTypes {
     | '/market/sunrise-price'
     | '/access-requests/'
     | '/app/'
+    | '/assistant/'
     | '/contact-request/'
     | '/coverage/'
     | '/eudr-summary/'
@@ -330,6 +340,7 @@ export interface FileRouteTypes {
     | '/market/sunrise-price'
     | '/access-requests'
     | '/app'
+    | '/assistant'
     | '/contact-request'
     | '/coverage'
     | '/eudr-summary'
@@ -361,6 +372,7 @@ export interface FileRouteTypes {
     | '/market/sunrise-price'
     | '/access-requests/'
     | '/app/'
+    | '/assistant/'
     | '/contact-request/'
     | '/coverage/'
     | '/eudr-summary/'
@@ -390,6 +402,7 @@ export interface RootRouteChildren {
   DocsSplatRoute: typeof DocsSplatRoute
   MarketSunrisePriceRoute: typeof MarketSunrisePriceRoute
   AccessRequestsIndexRoute: typeof AccessRequestsIndexRoute
+  AssistantIndexRoute: typeof AssistantIndexRoute
   ContactRequestIndexRoute: typeof ContactRequestIndexRoute
   CoverageIndexRoute: typeof CoverageIndexRoute
   EudrSummaryIndexRoute: typeof EudrSummaryIndexRoute
@@ -509,6 +522,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/requests'
       preLoaderRoute: typeof AppRequestsRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/assistant/': {
+      id: '/assistant/'
+      path: '/assistant'
+      fullPath: '/assistant/'
+      preLoaderRoute: typeof AssistantIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/contact-request/': {
       id: '/contact-request/'
@@ -649,6 +669,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocsSplatRoute: DocsSplatRoute,
   MarketSunrisePriceRoute: MarketSunrisePriceRoute,
   AccessRequestsIndexRoute: AccessRequestsIndexRoute,
+  AssistantIndexRoute: AssistantIndexRoute,
   ContactRequestIndexRoute: ContactRequestIndexRoute,
   CoverageIndexRoute: CoverageIndexRoute,
   EudrSummaryIndexRoute: EudrSummaryIndexRoute,

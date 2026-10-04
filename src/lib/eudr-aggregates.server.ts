@@ -86,6 +86,11 @@ async function millStats(tenant: Tenant): Promise<Record<string, EudrSummary>> {
   return stats;
 }
 
+/** Per-mill stats for a tenant, keyed by mill id (the data assistant reads these). */
+export function millStatsFor(tenant: Tenant): Promise<Record<string, EudrSummary>> {
+  return millStats(tenant);
+}
+
 function addInto(target: EudrSummary, src: EudrSummary) {
   target.totalPlots += src.totalPlots;
   target.totalAreaHa += src.totalAreaHa;
