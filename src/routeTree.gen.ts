@@ -32,6 +32,7 @@ import { Route as DataSplatRouteImport } from './routes/data/$'
 import { Route as DocsSplatRouteImport } from './routes/docs/$'
 import { Route as EudrSummaryIndexRouteImport } from './routes/eudr-summary/index'
 import { Route as MarketSunrisePriceRouteImport } from './routes/market/sunrise-price'
+import { Route as SoyMethodRouteImport } from './routes/soy_.method'
 import { Route as VillageFlowsIndexRouteImport } from './routes/village-flows/index'
 import { Route as AppGroupIndexRouteImport } from './routes/app/$group/index'
 import { Route as AppGroupDataRouteImport } from './routes/app/$group/data'
@@ -155,6 +156,11 @@ const MarketSunrisePriceRoute = MarketSunrisePriceRouteImport.update({
   path: '/market/sunrise-price',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SoyMethodRoute = SoyMethodRouteImport.update({
+  id: '/soy_/method',
+  path: '/soy/method',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VillageFlowsIndexRoute = VillageFlowsIndexRouteImport.update({
   id: '/village-flows/',
   path: '/village-flows/',
@@ -209,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
+  '/soy/method': typeof SoyMethodRoute
   '/access-requests/': typeof AccessRequestsIndexRoute
   '/app/': typeof AppIndexRoute
   '/assistant/': typeof AssistantIndexRoute
@@ -240,6 +247,7 @@ export interface FileRoutesByTo {
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
+  '/soy/method': typeof SoyMethodRoute
   '/access-requests': typeof AccessRequestsIndexRoute
   '/app': typeof AppIndexRoute
   '/assistant': typeof AssistantIndexRoute
@@ -273,6 +281,7 @@ export interface FileRoutesById {
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
+  '/soy_/method': typeof SoyMethodRoute
   '/access-requests/': typeof AccessRequestsIndexRoute
   '/app/': typeof AppIndexRoute
   '/assistant/': typeof AssistantIndexRoute
@@ -307,6 +316,7 @@ export interface FileRouteTypes {
     | '/data/$'
     | '/docs/$'
     | '/market/sunrise-price'
+    | '/soy/method'
     | '/access-requests/'
     | '/app/'
     | '/assistant/'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/data/$'
     | '/docs/$'
     | '/market/sunrise-price'
+    | '/soy/method'
     | '/access-requests'
     | '/app'
     | '/assistant'
@@ -370,6 +381,7 @@ export interface FileRouteTypes {
     | '/data/$'
     | '/docs/$'
     | '/market/sunrise-price'
+    | '/soy_/method'
     | '/access-requests/'
     | '/app/'
     | '/assistant/'
@@ -401,6 +413,7 @@ export interface RootRouteChildren {
   DataSplatRoute: typeof DataSplatRoute
   DocsSplatRoute: typeof DocsSplatRoute
   MarketSunrisePriceRoute: typeof MarketSunrisePriceRoute
+  SoyMethodRoute: typeof SoyMethodRoute
   AccessRequestsIndexRoute: typeof AccessRequestsIndexRoute
   AssistantIndexRoute: typeof AssistantIndexRoute
   ContactRequestIndexRoute: typeof ContactRequestIndexRoute
@@ -572,6 +585,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketSunrisePriceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/soy_/method': {
+      id: '/soy_/method'
+      path: '/soy/method'
+      fullPath: '/soy/method'
+      preLoaderRoute: typeof SoyMethodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/village-flows/': {
       id: '/village-flows/'
       path: '/village-flows'
@@ -668,6 +688,7 @@ const rootRouteChildren: RootRouteChildren = {
   DataSplatRoute: DataSplatRoute,
   DocsSplatRoute: DocsSplatRoute,
   MarketSunrisePriceRoute: MarketSunrisePriceRoute,
+  SoyMethodRoute: SoyMethodRoute,
   AccessRequestsIndexRoute: AccessRequestsIndexRoute,
   AssistantIndexRoute: AssistantIndexRoute,
   ContactRequestIndexRoute: ContactRequestIndexRoute,

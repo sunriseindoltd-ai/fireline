@@ -12,7 +12,8 @@ import { EARTHLINE } from "@/lib/site-copy";
  * a few plain text links, then language, "Sign in" as text and the one
  * primary action (request early access). The brand and links follow the page:
  * Earthline Trace on the umbrella page, PalmTrace / SoyTrace on theirs
- * (brand.ts). The workspace is invitation-only.
+ * (brand.ts) — methodology (/method, /soy/method), About and Contact stay in
+ * the product the visitor came from. The workspace is invitation-only.
  */
 function SiteHeader({ signedIn, product }: { signedIn: boolean; product?: ProductId }) {
   const { s, lang } = useI18n();
@@ -52,13 +53,16 @@ function SiteHeader({ signedIn, product }: { signedIn: boolean; product?: Produc
               <Link to="/soy" hash="how" onClick={close}>
                 {s.navHow}
               </Link>
+              <Link to="/soy/method" activeProps={{ className: "active" }} onClick={close}>
+                {s.navMethod}
+              </Link>
             </>
           ) : (
             <Link to="/" hash="products" onClick={close}>
               {b.navProducts}
             </Link>
           )}
-          <Link to="/about" activeProps={{ className: "active" }} onClick={close}>
+          <Link to="/about" search={product ? { product } : {}} activeProps={{ className: "active" }} onClick={close}>
             {s.navAbout}
           </Link>
           <Link
@@ -147,13 +151,16 @@ function SiteFooter({ product }: { product?: ProductId }) {
               </Link>
             ))}
             {product === "palm" ? <Link to="/method">{s.navMethod}</Link> : null}
+            {product === "soy" ? <Link to="/soy/method">{s.navMethod}</Link> : null}
             <Link to="/login" search={product ? { product } : {}}>
               {s.signIn}
             </Link>
           </nav>
           <nav aria-label={s.footerCompany}>
             <h3>{s.footerCompany}</h3>
-            <Link to="/about">{s.navAbout}</Link>
+            <Link to="/about" search={product ? { product } : {}}>
+              {s.navAbout}
+            </Link>
             <Link to="/contact" search={product ? { product } : {}}>
               {s.navContact}
             </Link>
