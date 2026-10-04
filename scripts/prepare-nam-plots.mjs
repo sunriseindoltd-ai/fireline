@@ -9,7 +9,11 @@
  * BNS: PlotID via prepare-plots.mjs's assignPlotIds() scheme, identity
  * (UML_ID, Mill_name, NodeID) from mills.json.
  *
- * Usage: node scripts/prepare-nam-plots.mjs
+ * Usage: node scripts/prepare-nam-plots.mjs [file name …]
+ *   With names, only those GeoJSON files are (re)built — use this when adding
+ *   one mill, so the other mills keep their PlotIDs (PlotIDs carry the YYMM
+ *   of the run). Example (1 Oct 2026, DJAYA → LINGGA TIGA SAWIT 2):
+ *   node scripts/prepare-nam-plots.mjs "LINGGA TIGA SAWIT 2.geojson"
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -89,7 +93,9 @@ async function main() {
   const byUml = new Map(mills.filter((m) => m.group === GROUP).map((m) => [m.umlId, m]));
 
   await mkdir(OUT_DIR, { recursive: true });
-  const files = (await readdir(SRC_DIR)).filter((f) => f.toLowerCase().endsWith(".geojson"));
+  const only = process.argv.slice(2);
+  const files = (await readdir(SRC_DIR)).filter((f) => f.toLowerCase().endsWith(".geojson") && (!only.length || only.includes(f)));
+  if (only.length && files.length !== only.length) throw new Error(`not found in ${SRC_DIR}: ${only.filter((f) => !files.includes(f)).join(", ")}`);
   console.log(`[prepare-nam] ${files.length} file(s) in ${SRC_DIR}`);
 
   const yymm = generatedYyMm();

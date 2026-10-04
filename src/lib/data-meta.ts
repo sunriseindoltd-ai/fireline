@@ -4,7 +4,7 @@
  * ingest lands (prepare-plots → prepare-eudr-stats → upload:plots) — it is
  * the cut-off date clients see under the EUDR figures.
  */
-export const DATA_AS_OF = "2026-09-30";
+export const DATA_AS_OF = "2026-10-02";
 
 /** The JRC export behind private-data/forest (scripts/prepare-forest-cover.mjs). */
 export const JRC_LAYER = {
