@@ -82,6 +82,18 @@ export async function loadMills(tenant: Tenant): Promise<MillLite[]> {
   }
 }
 
+/** The soy tenant's supply.json (bundled, ~330 kB), parsed once per instance. */
+const soySupplyCache = new Map<Tenant, Promise<unknown>>();
+export async function loadSoySupply<T = unknown>(tenant: Tenant): Promise<T | null> {
+  if (!soySupplyCache.has(tenant)) {
+    soySupplyCache.set(
+      tenant,
+      loadRel(`${tenantPrefix(tenant)}supply.json`).then((text) => (text ? JSON.parse(text) : null)),
+    );
+  }
+  return (await soySupplyCache.get(tenant)!) as T | null;
+}
+
 // Matches scripts/prepare-areas.mjs's slugify exactly — that script names
 // each prepared areas file after its Refinery/KCP this same way.
 function slugifyRefinery(name: string) {

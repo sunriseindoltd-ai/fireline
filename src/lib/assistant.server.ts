@@ -15,12 +15,18 @@ import type { Tenant } from "@/lib/tenants";
  * session (never from the request) and restricted roles see only their
  * groups/refineries, exactly like /eudr-summary.
  *
- * Models: Groq's free tier first (GROQ_API_KEY, OpenAI-style API) — about
- * 1 s per answer, and when its small per-minute quota is used up it says so
- * at once (429). Then Gemini Flash on Google AI Studio's free tier
- * (GEMINI_API_KEY), trying the next Flash model when one is busy; Gemini is
- * slower (6–17 s) and a busy model can take 20 s to fail, which is why it is
- * second. Two providers, so one outage does not take the assistant down.
+ * Models, in order (two providers, so one outage does not take the
+ * assistant down):
+ *  1. qwen on Groq's free tier (GROQ_API_KEY, OpenAI-style API) — about 1 s
+ *     and accurate; when its small per-minute quota is used up it says so at
+ *     once (429).
+ *  2. Gemini Flash on Google AI Studio's free tier (GEMINI_API_KEY), trying
+ *     the next Flash model when one is busy — slower (4–17 s), and a busy
+ *     model can take 20 s to fail, but its answers are right.
+ * gpt-oss (also on Groq) was tried as a third step and dropped (4 Oct): it
+ * rounded 0.0074% to "0 %", quoted the wrong column and read total plots as
+ * non-compliant ones. When both models are out, a ready-made question still
+ * shows its table and a free question asks to try again — no wrong figures.
  */
 
 // Free-tier Flash models; any of them can be "experiencing high demand" (503)
@@ -33,23 +39,17 @@ const CALL_TIMEOUT_MS = 25_000;
 const GEMINI_CALL_TIMEOUT_MS = 10_000;
 const GEMINI_BUDGET_MS = 20_000;
 const STICKY_MS = 5 * 60_000;
-// Groq's quotas are per minute: once every Groq model is used up, questions
-// go straight to Gemini until the minute has passed.
+// Groq's quotas are per minute: once qwen is used up, questions skip it until
+// the minute has passed.
 const GROQ_REST_MS = 60_000;
 let preferred = { index: 0, until: 0 };
 let groqRestUntil = 0;
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
 
-// Groq fallback. qwen got the numbers right in testing (4 Oct); gpt-oss-120b
-// once read total plots as non-compliant plots, so it comes second. Each
-// model has its own small per-minute quota (qwen: 7k tokens in, 1k out), so
-// a third model keeps the chain alive when the first two are used up.
+// Groq model: qwen got the numbers right in testing (4 Oct). Its free quota is
+// small (7k tokens in, 1k out per minute), hence Gemini behind it.
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODELS = [
-  { id: "qwen/qwen3.8-27b", extra: { reasoning_effort: "none" } },
-  { id: "openai/gpt-oss-120b", extra: { reasoning_effort: "low" } },
-  { id: "openai/gpt-oss-20b", extra: { reasoning_effort: "low" } },
-] as const;
+const GROQ_MODELS = [{ id: "qwen/qwen3.8-27b", extra: { reasoning_effort: "none" } }] as const;
 // On Groq the first step must call a tool (qwen once answered a data question
 // from nothing, numbers made up); this one is the way out for greetings and
 // off-topic messages.
@@ -60,11 +60,11 @@ const NO_DATA_TOOL = {
   parameters: { type: "object", properties: {} },
 };
 const MAX_STEPS = 4;
-const MAX_ROWS = 40;
+export const MAX_ROWS = 40;
 
 export type Lang = "en" | "id";
 export type AssistantTable = { title: string; columns: string[]; rows: (string | number)[][]; millIds?: (string | null)[] };
-export type AssistantContext = { group?: string | null; millId?: string | null };
+export type AssistantContext = { group?: string | null; millId?: string | null; scope?: string | null };
 export type AssistantTurn = { role: "user" | "assistant"; text: string };
 export type AssistantReply = { text: string; tables: AssistantTable[]; model: string | null; error?: string };
 
@@ -95,9 +95,9 @@ async function loadData(tenant: Tenant, scope: DataScope | null, lang: Lang): Pr
 }
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
-const norm = (s: string) => s.toLowerCase().replace(/&/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
-const r1 = (n: number) => Math.round(n * 10) / 10;
-const pct = (a: number, b: number) => (b > 0 ? r1((a / b) * 100) : 0);
+export const norm = (s: string) => s.toLowerCase().replace(/&/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+export const r1 = (n: number) => Math.round(n * 10) / 10;
+export const pct = (a: number, b: number) => (b > 0 ? r1((a / b) * 100) : 0);
 const defoHa = (s: EudrSummary) => Object.values(s.deforestationByYear).reduce((a, b) => a + b, 0);
 
 function sum(list: EudrSummary[]): EudrSummary & { mills: number } {
@@ -178,7 +178,15 @@ const METRICS = {
 type Metric = keyof typeof METRICS;
 
 // -------------------------------------------------------------------- tools
-type ToolOut = { result: unknown; table?: AssistantTable };
+export type ToolOut = { result: unknown; table?: AssistantTable };
+
+/** What one product gives the model: its instructions and its tools. */
+export type Kit = {
+  system: string;
+  decls: object[];
+  has: (name: string) => boolean;
+  run: (name: string, args: Record<string, unknown>) => ToolOut;
+};
 
 const TOOLS: Record<string, { decl: object; run: (d: Data, a: Record<string, unknown>) => ToolOut }> = {
   list_groups: {
@@ -334,6 +342,15 @@ const TOOLS: Record<string, { decl: object; run: (d: Data, a: Record<string, unk
 export const PRESET_TOOLS = Object.keys(TOOLS);
 
 // --------------------------------------------------------------------- model
+function palmKit(d: Data, ctx: AssistantContext): Kit {
+  return {
+    system: systemPrompt(d, ctx),
+    decls: Object.values(TOOLS).map((x) => x.decl),
+    has: (name) => !!TOOLS[name],
+    run: (name, args) => (TOOLS[name] ? TOOLS[name]!.run(d, args) : { result: { error: `unknown tool ${name}` } }),
+  };
+}
+
 function systemPrompt(d: Data, ctx: AssistantContext) {
   const groups = [...groupsOf(d).keys()].join(", ");
   const here = ctx.millId
@@ -357,7 +374,7 @@ function systemPrompt(d: Data, ctx: AssistantContext) {
 type Part = { text?: string; functionCall?: { name: string; args?: Record<string, unknown>; id?: string }; thoughtSignature?: string };
 type Content = { role: "user" | "model"; parts: Record<string, unknown>[] };
 
-async function callGemini(model: string, system: string, contents: Content[], withTools: boolean, timeoutMs: number) {
+async function callGemini(model: string, kit: Kit, contents: Content[], withTools: boolean, timeoutMs: number) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw Object.assign(new Error("GEMINI_API_KEY is not set"), { fatal: true });
   const res = await fetch(`${API}/${model}:generateContent`, {
@@ -365,9 +382,9 @@ async function callGemini(model: string, system: string, contents: Content[], wi
     signal: AbortSignal.timeout(timeoutMs),
     headers: { "content-type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
+      systemInstruction: { parts: [{ text: kit.system }] },
       contents,
-      ...(withTools ? { tools: [{ functionDeclarations: Object.values(TOOLS).map((x) => x.decl) }] } : {}),
+      ...(withTools ? { tools: [{ functionDeclarations: kit.decls }] } : {}),
       generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
     }),
   });
@@ -386,14 +403,14 @@ const retryable = (e: unknown) => {
 };
 
 /** One Gemini turn, trying the next model on busy / rate-limited / timed-out models, within the question's budget. */
-async function turn(state: { model: number }, system: string, contents: Content[], withTools: boolean, deadline: number) {
+async function turn(state: { model: number }, kit: Kit, contents: Content[], withTools: boolean, deadline: number) {
   let last: unknown = new Error("gemini: time budget used up");
   const order = MODELS.map((_, i) => (state.model + i) % MODELS.length);
   for (const i of order) {
     const left = deadline - Date.now();
     if (left < 2_000) break;
     try {
-      const parts = await callGemini(MODELS[i]!, system, contents, withTools, Math.min(GEMINI_CALL_TIMEOUT_MS, left));
+      const parts = await callGemini(MODELS[i]!, kit, contents, withTools, Math.min(GEMINI_CALL_TIMEOUT_MS, left));
       state.model = i;
       preferred = { index: i, until: Date.now() + STICKY_MS };
       return parts;
@@ -414,7 +431,23 @@ type GroqMsg =
 
 type ToolChoice = "none" | "auto" | "required";
 
-async function callGroq(model: (typeof GROQ_MODELS)[number], messages: GroqMsg[], tools: ToolChoice) {
+/** Groq checks tool arguments against the schema, and a model may send null
+ * for an optional argument it leaves out: let optional arguments be null. */
+function nullableOptionals(decl: object): object {
+  const d = decl as { parameters?: { properties?: Record<string, { type?: unknown; enum?: unknown[] }>; required?: string[] } };
+  const props = d.parameters?.properties;
+  if (!props) return decl;
+  const required = new Set(d.parameters?.required ?? []);
+  const next = Object.fromEntries(
+    Object.entries(props).map(([k, v]) => [
+      k,
+      required.has(k) || typeof v.type !== "string" ? v : { ...v, type: [v.type, "null"], ...(v.enum ? { enum: [...v.enum, null] } : {}) },
+    ]),
+  );
+  return { ...decl, parameters: { ...d.parameters, properties: next } };
+}
+
+async function callGroq(model: (typeof GROQ_MODELS)[number], kit: Kit, messages: GroqMsg[], tools: ToolChoice) {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw Object.assign(new Error("GROQ_API_KEY is not set"), { fatal: true });
   const res = await fetch(GROQ_API, {
@@ -425,7 +458,7 @@ async function callGroq(model: (typeof GROQ_MODELS)[number], messages: GroqMsg[]
       model: model.id,
       messages,
       ...(tools !== "none"
-        ? { tools: [...Object.values(TOOLS).map((x) => x.decl), NO_DATA_TOOL].map((decl) => ({ type: "function", function: decl })), tool_choice: tools }
+        ? { tools: [...kit.decls, NO_DATA_TOOL].map((decl) => ({ type: "function", function: nullableOptionals(decl) })), tool_choice: tools }
         : {}),
       temperature: 0.2,
       max_completion_tokens: 1024,
@@ -434,33 +467,32 @@ async function callGroq(model: (typeof GROQ_MODELS)[number], messages: GroqMsg[]
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw Object.assign(new Error(`groq ${res.status}: ${body.slice(0, 200)}`), { status: res.status, toolFailed: body.includes("tool_use_failed") });
+    throw Object.assign(new Error(`groq ${res.status}: ${body.slice(0, 200)}`), { status: res.status });
   }
   const j = (await res.json()) as { choices?: { message?: { content?: string | null; tool_calls?: GroqCall[] } }[] };
   return j.choices?.[0]?.message ?? {};
 }
 
-/** One Groq turn; a malformed tool call (400 tool_use_failed) also moves on to the next model. */
-async function groqTurn(state: { model: number }, messages: GroqMsg[], tools: ToolChoice) {
+/** One Groq turn, trying the next Groq model (if any) on a busy or rejected call. */
+async function groqTurn(state: { model: number }, kit: Kit, messages: GroqMsg[], tools: ToolChoice) {
   let last: unknown;
   for (let i = state.model; i < GROQ_MODELS.length; i++) {
     try {
-      const msg = await callGroq(GROQ_MODELS[i]!, messages, tools);
+      const msg = await callGroq(GROQ_MODELS[i]!, kit, messages, tools);
       state.model = i;
       return msg;
     } catch (e) {
       last = e;
       console.warn(`[assistant] groq ${GROQ_MODELS[i]!.id} failed: ${(e as Error).message}`);
-      if ((e as { fatal?: boolean }).fatal || !(retryable(e) || (e as { toolFailed?: boolean }).toolFailed)) break;
+      if ((e as { fatal?: boolean }).fatal || !(retryable(e) || (e as { status?: number }).status === 400)) break;
     }
   }
   throw last;
 }
 
-function runTool(d: Data, name: string, args: Record<string, unknown>, tables: AssistantTable[]) {
+function runTool(kit: Kit, name: string, args: Record<string, unknown>, tables: AssistantTable[]) {
   if (name === NO_DATA_TOOL.name) return { ok: true };
-  const tool = TOOLS[name];
-  const out: ToolOut = tool ? tool.run(d, args) : { result: { error: `unknown tool ${name}` } };
+  const out = kit.run(name, args);
   if (out.table) tables.push(out.table);
   return out.result;
 }
@@ -486,7 +518,7 @@ type Ask = {
 
 const presetPrompt = (opts: Ask, result: unknown) => `${opts.message}\n\n[Tool ${opts.preset!.tool} result]\n${JSON.stringify(result).slice(0, 12000)}`;
 
-async function viaGemini(d: Data, system: string, opts: Ask, tables: AssistantTable[], presetResult: unknown): Promise<AssistantReply> {
+async function viaGemini(kit: Kit, opts: Ask, tables: AssistantTable[], presetResult: unknown): Promise<AssistantReply> {
   const deadline = Date.now() + GEMINI_BUDGET_MS;
   const state = { model: Date.now() < preferred.until ? preferred.index : 0 };
   const contents: Content[] = opts.history.slice(-8).map((h) => ({ role: h.role === "user" ? "user" : "model", parts: [{ text: h.text.slice(0, 2000) }] }));
@@ -494,20 +526,20 @@ async function viaGemini(d: Data, system: string, opts: Ask, tables: AssistantTa
   // A ready-made question: its tool already ran, the model only words the answer.
   if (presetResult !== undefined) {
     contents.push({ role: "user", parts: [{ text: presetPrompt(opts, presetResult) }] });
-    const parts = await turn(state, system, contents, false, deadline);
+    const parts = await turn(state, kit, contents, false, deadline);
     return { text: parts.map((p) => p.text ?? "").join("").trim(), tables, model: MODELS[state.model]! };
   }
 
   contents.push({ role: "user", parts: [{ text: opts.message.slice(0, 2000) }] });
   for (let step = 0; step < MAX_STEPS; step++) {
-    const parts = await turn(state, system, contents, step < MAX_STEPS - 1, deadline);
+    const parts = await turn(state, kit, contents, step < MAX_STEPS - 1, deadline);
     const calls = parts.filter((p) => p.functionCall);
     if (!calls.length) return { text: parts.map((p) => p.text ?? "").join("").trim(), tables, model: MODELS[state.model]! };
     // Echo the model's parts unchanged (Gemini 3 needs its thought signatures back).
     contents.push({ role: "model", parts: parts as Record<string, unknown>[] });
     const responses = calls.map((p) => {
       const fc = p.functionCall!;
-      const result = runTool(d, fc.name, fc.args ?? {}, tables);
+      const result = runTool(kit, fc.name, fc.args ?? {}, tables);
       return { functionResponse: { name: fc.name, ...(fc.id ? { id: fc.id } : {}), response: { result } } };
     });
     contents.push({ role: "user", parts: responses });
@@ -515,28 +547,28 @@ async function viaGemini(d: Data, system: string, opts: Ask, tables: AssistantTa
   return { text: "", tables, model: MODELS[state.model]! };
 }
 
-async function viaGroq(d: Data, system: string, opts: Ask, tables: AssistantTable[], presetResult: unknown): Promise<AssistantReply> {
+async function viaGroq(kit: Kit, opts: Ask, tables: AssistantTable[], presetResult: unknown): Promise<AssistantReply> {
   const state = { model: 0 };
   const messages: GroqMsg[] = [
-    { role: "system", content: system },
+    { role: "system", content: kit.system },
     ...opts.history.slice(-8).map((h): GroqMsg => (h.role === "user" ? { role: "user", content: h.text.slice(0, 2000) } : { role: "assistant", content: h.text.slice(0, 2000) })),
   ];
   const name = () => `groq:${GROQ_MODELS[state.model]!.id}`;
 
   if (presetResult !== undefined) {
     messages.push({ role: "user", content: presetPrompt(opts, presetResult) });
-    const msg = await groqTurn(state, messages, "none");
+    const msg = await groqTurn(state, kit, messages, "none");
     return { text: (msg.content ?? "").trim(), tables, model: name() };
   }
 
   messages.push({ role: "user", content: opts.message.slice(0, 2000) });
   for (let step = 0; step < MAX_STEPS; step++) {
-    const msg = await groqTurn(state, messages, step === 0 ? "required" : step < MAX_STEPS - 1 ? "auto" : "none");
+    const msg = await groqTurn(state, kit, messages, step === 0 ? "required" : step < MAX_STEPS - 1 ? "auto" : "none");
     const calls = msg.tool_calls ?? [];
     if (!calls.length) return { text: (msg.content ?? "").trim(), tables, model: name() };
     messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: calls });
     for (const c of calls) {
-      const result = runTool(d, c.function.name, parseArgs(c.function.arguments), tables);
+      const result = runTool(kit, c.function.name, parseArgs(c.function.arguments), tables);
       messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(result).slice(0, 12000) });
     }
   }
@@ -544,28 +576,34 @@ async function viaGroq(d: Data, system: string, opts: Ask, tables: AssistantTabl
 }
 
 export async function askAssistant(opts: Ask): Promise<AssistantReply> {
-  const d = await loadData(opts.tenant, opts.scope, opts.lang);
-  const system = systemPrompt(d, opts.context);
+  const { isSoyTenant } = await import("@/lib/tenants");
+  const kit = isSoyTenant(opts.tenant)
+    ? await (await import("@/lib/assistant-soy.server")).soyKit(opts.tenant, opts.lang, opts.context)
+    : palmKit(await loadData(opts.tenant, opts.scope, opts.lang), opts.context);
   const presetTables: AssistantTable[] = [];
-  const presetResult = opts.preset && TOOLS[opts.preset.tool] ? runTool(d, opts.preset.tool, opts.preset.args ?? {}, presetTables) : undefined;
+  const presetResult = opts.preset && kit.has(opts.preset.tool) ? runTool(kit, opts.preset.tool, opts.preset.args ?? {}, presetTables) : undefined;
   // Test hook (dev only): ASSISTANT_ONLY=groq|gemini uses just that provider.
   const only = process.env.NODE_ENV !== "production" ? process.env.ASSISTANT_ONLY : undefined;
   const useGroq = !!process.env.GROQ_API_KEY && only !== "gemini";
   const useGemini = only !== "groq";
   let error: unknown = null;
 
+  // A model that ends without a sentence (it kept calling tools) still hands
+  // back its tables; the panel then says the tables are the dashboard's.
+  const worded = (r: AssistantReply): AssistantReply => (r.text ? r : { ...r, error: "no-text" });
+
+  // Each step starts over: tables from a half-finished earlier run are dropped.
   if (useGroq && (!useGemini || Date.now() >= groqRestUntil)) {
     try {
-      return await viaGroq(d, system, opts, [...presetTables], presetResult);
+      return worded(await viaGroq(kit, opts, [...presetTables], presetResult));
     } catch (e) {
       error = e;
       if (useGemini) groqRestUntil = Date.now() + GROQ_REST_MS;
     }
   }
   if (useGemini) {
-    // Start over on Gemini: tables from a half-finished Groq run are dropped.
     try {
-      return await viaGemini(d, system, opts, [...presetTables], presetResult);
+      return worded(await viaGemini(kit, opts, [...presetTables], presetResult));
     } catch (e) {
       error = e;
     }

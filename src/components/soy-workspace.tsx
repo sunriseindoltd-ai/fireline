@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandMark } from "@/components/brand-mark";
+import { DataAssistant } from "@/components/data-assistant";
 import { PRODUCTS } from "@/lib/brand";
 import { KpiTile } from "@/components/kpi-tile";
 import { LangToggle } from "@/components/lang-toggle";
@@ -293,6 +294,17 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             </div>
           )}
         </main>
+        {ready && !present ? (
+          <DataAssistant
+            lang={lang}
+            product="soy"
+            scope={scope}
+            onOpenRow={(id) => {
+              setScope(id);
+              setTab("map");
+            }}
+          />
+        ) : null}
       </div>
     );
   }

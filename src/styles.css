@@ -4240,6 +4240,15 @@ button.kpi-action:hover {
   white-space: nowrap;
   padding: 6px 10px;
 }
+/* Item / value tables (one mill, one catchment): long values wrap inside the
+   panel instead of pushing the numbers out of view. */
+.assistant-table .data-table.kv td {
+  white-space: normal;
+  vertical-align: top;
+}
+.assistant-table .data-table.kv td:first-child {
+  width: 46%;
+}
 .assistant-table tr.clickable {
   cursor: pointer;
 }

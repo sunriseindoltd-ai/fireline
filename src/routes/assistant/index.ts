@@ -10,10 +10,8 @@ export const Route = createFileRoute("/assistant/")({
     handlers: {
       POST: async ({ request }) => {
         const { dataScopeForSession, readGateSession } = await import("@/lib/gate");
-        const { isSoyTenant } = await import("@/lib/tenants");
         const session = await readGateSession(request);
         if (!session) return new Response("Unauthorized", { status: 401 });
-        if (isSoyTenant(session.tenant)) return new Response("Not available", { status: 404 });
         let body: Record<string, unknown>;
         try {
           body = (await request.json()) as Record<string, unknown>;
@@ -37,7 +35,7 @@ export const Route = createFileRoute("/assistant/")({
               )
               .slice(-8)
           : [];
-        const ctx = (body.context ?? {}) as { group?: unknown; millId?: unknown };
+        const ctx = (body.context ?? {}) as { group?: unknown; millId?: unknown; scope?: unknown };
         const preset =
           body.preset && typeof body.preset === "object" && typeof (body.preset as { tool?: unknown }).tool === "string"
             ? { tool: (body.preset as { tool: string }).tool, args: ((body.preset as { args?: unknown }).args ?? {}) as Record<string, unknown> }
@@ -49,7 +47,7 @@ export const Route = createFileRoute("/assistant/")({
           lang: body.lang === "en" ? "en" : "id",
           message,
           history,
-          context: { group: typeof ctx.group === "string" ? ctx.group : null, millId: typeof ctx.millId === "string" ? ctx.millId : null },
+          context: { group: typeof ctx.group === "string" ? ctx.group : null, millId: typeof ctx.millId === "string" ? ctx.millId : null, scope: typeof ctx.scope === "string" ? ctx.scope.slice(0, 200) : null },
           preset,
         });
         return Response.json(reply, { headers: { "cache-control": "no-store" } });

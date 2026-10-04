@@ -886,7 +886,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
           lang={lang}
           group={chain?.name ?? null}
           millId={selectedMillId}
-          onOpenMill={(id) => {
+          onOpenRow={(id) => {
             const m = store.mills.find((x) => x.id === id);
             if (m) go({ groupSlug: groupSlug(m.group), refinery: null, mill: id, tab: "data" });
           }}
