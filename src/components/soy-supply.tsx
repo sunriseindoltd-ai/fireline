@@ -52,7 +52,7 @@ function tierLabel(id: string, c: SoySupplyCopy) {
   )[id];
 }
 
-function catchmentLabel(id: string, data: SupplyData, c: SoySupplyCopy) {
+export function catchmentLabel(id: string, data: SupplyData, c: SoySupplyCopy) {
   const t = tierLabel(id, c);
   if (t) return t;
   const adm = data.admElevators.find((e) => e.id === id);

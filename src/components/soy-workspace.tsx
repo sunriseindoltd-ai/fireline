@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BrandMark } from "@/components/brand-mark";
 import { DataAssistant } from "@/components/data-assistant";
+import { SoyReport } from "@/components/soy-report";
+import { soyReportCopy } from "@/lib/soy-report-copy";
 import { PRODUCTS } from "@/lib/brand";
 import { KpiTile } from "@/components/kpi-tile";
 import { LangToggle } from "@/components/lang-toggle";
@@ -123,6 +125,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
 
   // The reading guide: once per sign-in (login clears the flag), on the map tab.
   const [tourOpen, setTourOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const tourChecked = useRef(false);
   useEffect(() => {
     if (tourChecked.current || !supply || !data) return;
@@ -174,7 +177,15 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     docs: ssc.tabDocs,
     areas: ssc.tabAreas,
   };
+  // The printable report (soy-report.tsx) for the selected catchment; a portal, so it can live with the header.
+  const canReport = role !== "auditor" && !!supply && !present;
+  const report =
+    reportOpen && supply ? (
+      <SoyReport data={supply} scope={scope} lang={lang} c={ssc} sc={sc} onClose={() => setReportOpen(false)} />
+    ) : null;
   const header = (
+    <>
+    {report}
     <header className="app-header">
       <span className="app-brand">
         <BrandMark size={22} product="soy" />
@@ -204,6 +215,11 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             </select>
           </label>
         ) : null}
+        {canReport ? (
+          <button type="button" className="present-btn" title={soyReportCopy[lang].openHint} onClick={() => setReportOpen(true)}>
+            {soyReportCopy[lang].open}
+          </button>
+        ) : null}
         {canPresent ? (
           <button
             type="button"
@@ -232,6 +248,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
         </button>
       </div>
     </header>
+    </>
   );
   const appClass = `app ${present ? "presenting" : ""}`;
   const tour = tourOpen ? (
