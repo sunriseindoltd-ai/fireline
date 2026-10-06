@@ -276,6 +276,32 @@ async function loadPlotFeatureCollection(
   return { ok: true, text: JSON.stringify(merged) };
 }
 
+const NLCD_TILE = /^layers\/nlcd\/\d{4}\/\d{1,2}\/\d+\/\d+\.png$/;
+// A 1×1 transparent PNG.
+const EMPTY_PNG = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="),
+  (ch) => ch.charCodeAt(0),
+);
+
+/** A binary file from the soy bucket (or disk): bytes, null when absent, "error" when storage failed. */
+async function loadSoyBinary(stored: string, r2Rel: string): Promise<ArrayBuffer | null | "error"> {
+  if (!r2Soy) {
+    const buf = await readPrivateFile(stored);
+    return buf ? (buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer) : null;
+  }
+  try {
+    const key = r2Rel.split("/").map(encodeURIComponent).join("/");
+    const res = await r2Soy.client.fetch(`${r2Soy.endpoint}/${r2Soy.bucket}/${key}`);
+    if (res.ok) return await res.arrayBuffer();
+    if (res.status === 404) return null;
+    console.error("[kanopi-data] R2 soy fetch failed for", r2Rel, res.status);
+    return "error";
+  } catch (err) {
+    console.error("[kanopi-data] R2 soy fetch threw for", r2Rel, err);
+    return "error";
+  }
+}
+
 export async function serveKanopiData(request: Request): Promise<Response> {
   const session = await readGateSession(request);
   if (!session) return new Response("Unauthorized", { status: 401 });
@@ -308,6 +334,19 @@ export async function serveKanopiData(request: Request): Promise<Response> {
         "content-type": "application/json; charset=utf-8",
         "cache-control": "private, no-store",
       },
+    });
+  }
+
+  // Soy land-cover map tiles (scripts/prepare-soy-nlcd.py): binary PNGs from
+  // the soy bucket (disk in local dev). A tile with nothing in a catchment was
+  // never written — answered with an empty tile so the map shows no error.
+  // They don't vary by role inside the soy tenant, so the browser may keep them.
+  if (NLCD_TILE.test(rel)) {
+    if (!isSoyTenant(tenant)) return new Response("Not found", { status: 404 });
+    const png = await loadSoyBinary(stored, rel);
+    if (png === "error") return new Response("Upstream storage error", { status: 502 });
+    return new Response(png ?? EMPTY_PNG, {
+      headers: { "content-type": "image/png", "cache-control": "private, max-age=604800" },
     });
   }
 

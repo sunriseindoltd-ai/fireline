@@ -34,6 +34,7 @@ import {
   type SupplyFieldProps,
 } from "@/lib/soy-supply";
 import { usePersistentState } from "@/lib/use-persistent";
+import { NLCD_LEGEND, NLCD_MAX_ZOOM, NLCD_MIN_ZOOM, NLCD_YEARS, nlcdTiles, type NlcdYear } from "@/lib/soy-nlcd";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export type SoyFeature = {
@@ -59,14 +60,14 @@ export type ScopeFields = {
 };
 export type MapFocus = { bbox?: [[number, number], [number, number]]; center?: [number, number]; zoom?: number; nonce: number };
 
-type LayerKey = "fields" | "nc" | "rings" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads";
+type LayerKey = "fields" | "nc" | "rings" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "nlcd";
 type Remote = "rail" | "rivers" | "corridors" | "roads";
 const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads"];
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
-  supply: { fields: true, nc: true, rings: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false },
-  corridor: { fields: true, nc: false, rings: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false },
+  supply: { fields: true, nc: true, rings: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, nlcd: false },
+  corridor: { fields: true, nc: false, rings: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, nlcd: false },
 };
-const DATA_FLOOR = ["direct-area", "grid", "corridors", "rivers", "fields"];
+const DATA_FLOOR = ["nlcd", "direct-area", "grid", "corridors", "rivers", "fields"];
 // Soybean density: coarse cells in supply.json, finer ones (layers/grid.json)
 // take over as the map zooms in.
 const GRID_LAYERS = ["grid", "grid-1", "grid-2", "grid-3"];
@@ -234,6 +235,8 @@ export function SoySupplyMap({
   const [inView, setInView] = useState<{ total: number; ncAcres: number; ncFields: number; approx: boolean; one: boolean } | null>(null);
   const [unitState, setUnitState] = useState<{ level: number; loading: boolean; failed: boolean }>({ level: 1, loading: false, failed: false });
   const [layersOpen, setLayersOpen] = useState(true);
+  const [nlcdStored, setNlcdYear] = usePersistentState<NlcdYear>("soytrace.nlcdYear", NLCD_YEARS[0]);
+  const nlcdYear: NlcdYear = (NLCD_YEARS as readonly string[]).includes(nlcdStored) ? nlcdStored : NLCD_YEARS[0];
   useEffect(() => {
     if (window.matchMedia("(max-width: 640px)").matches) setLayersOpen(false);
   }, []);
@@ -333,6 +336,22 @@ export function SoySupplyMap({
           data: { type: "FeatureCollection", features: data.thirdParty.map((e) => pt(e.lon, e.lat, { id: e.id, name: e.company ?? "", core: e.core })) } as never,
         });
 
+        // Land cover (NLCD tiles cut to the catchments) sits on the basemap, under every data layer.
+        map.addSource("nlcd", {
+          type: "raster",
+          tiles: [nlcdTiles(nlcdYear)],
+          tileSize: 256,
+          minzoom: NLCD_MIN_ZOOM,
+          maxzoom: NLCD_MAX_ZOOM,
+          attribution: "Land cover: USGS Annual NLCD",
+        });
+        map.addLayer({
+          id: "nlcd",
+          type: "raster",
+          source: "nlcd",
+          layout: { visibility: "none" },
+          paint: { "raster-opacity": 0.8, "raster-resampling": "nearest" },
+        });
         map.addLayer({
           id: "direct-area",
           type: "fill",
@@ -852,6 +871,10 @@ export function SoySupplyMap({
     set(["rivers", "rivers-line"], on.rivers);
     set(["corridors"], on.corridors);
     set(["roads"], on.roads);
+    set(["nlcd"], on.nlcd);
+    // With land cover on, the fields and density cells thin out so it shows through.
+    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.8);
+    for (const id of GRID_LAYERS) if (map.getLayer(id)) map.setPaintProperty(id, "fill-opacity", on.nlcd ? 0.25 : 0.72);
     for (const r of REMOTE) {
       if (!on[r] || remote[r] !== "idle") continue;
       const cached = remoteCache.get(r);
@@ -871,6 +894,13 @@ export function SoySupplyMap({
         .catch(() => setRemote((s) => ({ ...s, [r]: "error" })));
     }
   }, [on, ready, remote, selected]);
+
+  // The NLCD year: swap the tile URL in place.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    (map.getSource("nlcd") as import("maplibre-gl").RasterTileSource | undefined)?.setTiles([nlcdTiles(nlcdYear)]);
+  }, [nlcdYear, ready]);
 
   // Colouring: fields, grid.
   useEffect(() => {
@@ -1028,11 +1058,39 @@ export function SoySupplyMap({
     rivers: { label: c.layerRivers, symbol: <i className="ln thick" style={{ borderTopColor: RIVER_COLOR }} /> },
     corridors: { label: c.layerCorridors, symbol: <i className="sq" style={{ background: "#dfe9f7" }} /> },
     roads: { label: c.layerRoads, symbol: <i className="ln road" /> },
+    nlcd: {
+      label: c.layerNlcd,
+      symbol: <i className="sq nlcd-sw" />,
+      detail: (
+        <div className="soy-key-detail">
+          <div className="seg nlcd-years" role="radiogroup" aria-label={c.nlcdYear}>
+            {NLCD_YEARS.map((y) => (
+              <button key={y} type="button" role="radio" aria-checked={nlcdYear === y} className={nlcdYear === y ? "on" : ""} onClick={() => setNlcdYear(y)}>
+                {y}
+              </button>
+            ))}
+          </div>
+          <div className="nlcd-legend">
+            {NLCD_LEGEND.map((k) => (
+              <p key={k.en} className="soy-legend-item">
+                <span className="nlcd-sws">
+                  {k.colors.map((col) => (
+                    <i key={col} style={{ background: col }} />
+                  ))}
+                </span>
+                {k[lang]}
+              </p>
+            ))}
+          </div>
+          <p className="soy-key-note">{c.nlcdNote}</p>
+        </div>
+      ),
+    },
   };
   const order: LayerKey[] =
     mode === "corridor"
-      ? ["fields", "rail", "rivers", "corridors", "rings", "adm", "tp", "nc", "roads"]
-      : ["fields", "nc", "rings", "adm", "tp", "rail", "rivers", "roads"];
+      ? ["fields", "rail", "rivers", "corridors", "rings", "adm", "tp", "nc", "roads", "nlcd"]
+      : ["fields", "nc", "rings", "adm", "tp", "rail", "rivers", "roads", "nlcd"];
 
   return (
     <div className="soy-map supply-map">

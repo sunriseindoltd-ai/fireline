@@ -827,6 +827,7 @@ export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: S
           <li>{c.docsSource1}</li>
           <li>{c.docsSource2}</li>
           <li>{c.docsSource3}</li>
+          <li>{c.docsSource4}</li>
         </ul>
       </section>
       <section className="chart-card supply-notes supply-wide">
