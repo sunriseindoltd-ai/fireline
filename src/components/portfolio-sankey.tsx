@@ -54,6 +54,7 @@ export function PortfolioSankey({
         ? [
             { id: "end:village", label: t.traceVillage, tone: "var(--color-risk-low)" },
             { id: "end:buffer", label: t.traceBufferPlain, tone: "var(--color-risk-medium)" },
+            { id: "end:plot", label: t.tracePlot, tone: "#b7c6e8" },
             { id: "end:unknown", label: t.traceUnknown, tone: "var(--color-line)" },
           ]
         : [
@@ -86,7 +87,9 @@ export function PortfolioSankey({
               ? "end:village"
               : m.traceability === "buffer"
                 ? "end:buffer"
-                : "end:unknown"
+                : m.traceability === "plot"
+                  ? "end:plot"
+                  : "end:unknown"
             : coveredIds?.has(m.id)
               ? "end:covered"
               : "end:master";

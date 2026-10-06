@@ -10,6 +10,8 @@
  *   fields/noncomply.geojson            non-compliant fields
  *   layers/*.geojson, layers/grid.json  rail, rivers, corridors, density grids (prepare-adm-soy-supply.py), roads
  *   layers/nlcd/<year>/<z>/<x>/<y>.png  NLCD land-cover tiles (prepare-soy-nlcd.py)
+ *   layers/national/soy.pmtiles, layers/national-grid.geojson  all US soybean fields (prepare-soy-national-tiles.py)
+ *   layers/states.geojson, layers/counties.geojson  boundaries (prepare-soy-boundaries.py)
  *
  * Files whose MD5 matches the object's ETag are skipped. Stale keys under
  * fields/ and layers/ (nothing local with that path) are deleted so nothing
@@ -51,7 +53,7 @@ async function walk(dir, rel = "") {
   for (const ent of await readdir(dir, { withFileTypes: true })) {
     const r = rel ? `${rel}/${ent.name}` : ent.name;
     if (ent.isDirectory()) out.push(...(await walk(path.join(dir, ent.name), r)));
-    else if (ent.name.endsWith(".geojson") || ent.name === "grid.json" || ent.name.endsWith(".png")) out.push(r);
+    else if (ent.name.endsWith(".geojson") || ent.name === "grid.json" || ent.name.endsWith(".png") || ent.name.endsWith(".pmtiles")) out.push(r);
   }
   return out;
 }
@@ -99,7 +101,7 @@ for (const prefix of PREFIXES) {
       const res = await client.fetch(keyUrl(key), {
         method: "PUT",
         body,
-        headers: { "content-type": key.endsWith(".geojson") ? "application/geo+json" : key.endsWith(".png") ? "image/png" : "application/json" },
+        headers: { "content-type": key.endsWith(".geojson") ? "application/geo+json" : key.endsWith(".png") ? "image/png" : key.endsWith(".pmtiles") ? "application/octet-stream" : "application/json" },
       });
       if (!res.ok) throw new Error(`PUT ${key} failed: ${res.status} ${await res.text().catch(() => "")}`);
       uploaded++;

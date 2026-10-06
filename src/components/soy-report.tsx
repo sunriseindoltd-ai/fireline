@@ -874,6 +874,7 @@ export function SoyReport({
               <li>{c.docsSource2}</li>
               <li>{c.docsSource3}</li>
               <li>{c.docsSource4}</li>
+              <li>{c.docsSource5}</li>
             </ul>
             <h3>{r.methodDefs}</h3>
             <ul className="rpt-list">

@@ -302,6 +302,62 @@ async function loadSoyBinary(stored: string, r2Rel: string): Promise<ArrayBuffer
   }
 }
 
+const NATIONAL_PMTILES = "layers/national/soy.pmtiles";
+const RANGE = /^bytes=(\d+)-(\d+)?$/;
+// Anything bigger than one tile or directory read is refused (Vercel caps a response at 4.5 MB).
+const MAX_RANGE = 2 * 1048576;
+
+/** One byte range of a large soy file: 206 with the bytes, from R2 (or disk in local dev). */
+async function serveSoyRange(stored: string, r2Rel: string, range: string | null): Promise<Response> {
+  const m = range ? RANGE.exec(range.trim()) : null;
+  if (!m) return new Response("Range required", { status: 416 });
+  const start = Number(m[1]);
+  const end = m[2] != null ? Number(m[2]) : start + MAX_RANGE - 1;
+  if (end < start || end - start + 1 > MAX_RANGE) return new Response("Range too large", { status: 416 });
+  const headers = { "content-type": "application/octet-stream", "cache-control": "private, max-age=86400", "accept-ranges": "bytes" };
+  if (!r2Soy) {
+    try {
+      const root = path.resolve(process.cwd(), "private-data");
+      const abs = path.resolve(root, stored);
+      if (!abs.startsWith(root + path.sep)) return new Response("Not found", { status: 404 });
+      const { open } = await import("node:fs/promises");
+      const fh = await open(abs, "r");
+      try {
+        const size = (await fh.stat()).size;
+        const last = Math.min(end, size - 1);
+        const buf = Buffer.alloc(Math.max(0, last - start + 1));
+        await fh.read(buf, 0, buf.length, start);
+        return new Response(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer, {
+          status: 206,
+          headers: { ...headers, "content-range": `bytes ${start}-${last}/${size}`, etag: `"${size}"` },
+        });
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+  }
+  try {
+    const key = r2Rel.split("/").map(encodeURIComponent).join("/");
+    const res = await r2Soy.client.fetch(`${r2Soy.endpoint}/${r2Soy.bucket}/${key}`, { headers: { range: `bytes=${start}-${end}` } });
+    if (res.status === 404) return new Response("Not found", { status: 404 });
+    if (!res.ok) {
+      console.error("[kanopi-data] R2 soy range failed for", r2Rel, res.status);
+      return new Response("Upstream storage error", { status: 502 });
+    }
+    const out: Record<string, string> = { ...headers };
+    for (const h of ["content-range", "etag"]) {
+      const v = res.headers.get(h);
+      if (v) out[h] = v;
+    }
+    return new Response(await res.arrayBuffer(), { status: res.status, headers: out });
+  } catch (err) {
+    console.error("[kanopi-data] R2 soy range threw for", r2Rel, err);
+    return new Response("Upstream storage error", { status: 502 });
+  }
+}
+
 export async function serveKanopiData(request: Request): Promise<Response> {
   const session = await readGateSession(request);
   if (!session) return new Response("Unauthorized", { status: 401 });
@@ -341,6 +397,13 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   // the soy bucket (disk in local dev). A tile with nothing in a catchment was
   // never written — answered with an empty tile so the map shows no error.
   // They don't vary by role inside the soy tenant, so the browser may keep them.
+  // All US soybean fields (scripts/prepare-soy-national-tiles.py): one PMTiles
+  // archive the map reads in small byte ranges — forwarded to the soy bucket.
+  if (rel === NATIONAL_PMTILES) {
+    if (!isSoyTenant(tenant)) return new Response("Not found", { status: 404 });
+    return serveSoyRange(stored, rel, request.headers.get("range"));
+  }
+
   if (NLCD_TILE.test(rel)) {
     if (!isSoyTenant(tenant)) return new Response("Not found", { status: 404 });
     const png = await loadSoyBinary(stored, rel);

@@ -4,6 +4,7 @@ import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 
 import { BrandMark } from "@/components/brand-mark";
 import { DataAssistant } from "@/components/data-assistant";
 import { SoyReport } from "@/components/soy-report";
+import type { SoyNational } from "@/components/soy-national";
 import { soyReportCopy } from "@/lib/soy-report-copy";
 import { PRODUCTS } from "@/lib/brand";
 import { KpiTile } from "@/components/kpi-tile";
@@ -85,6 +86,9 @@ const TABS: SoyTab[] = ["summary", "map", "corridor", "docs", "areas"];
  * from the soy R2 bucket (scripts/prepare-adm-soy-supply.py and
  * prepare-adm-soy.py).
  */
+/** Crushing plants besides Quincy that ADM named for SoyTrace (feedback 6 Oct): Decatur West, Lincoln, Des Moines. */
+const OTHER_PLANTS = ["decatur-west", "lincoln", "des-moines"];
+
 export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant }) {
   const { t, lang } = useI18n();
   const sc = soyCopy[lang];
@@ -97,6 +101,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const present = canPresent && presentStored;
   const [supply, setSupply] = useState<SupplyData | null>(null);
   const [supplyError, setSupplyError] = useState(false);
+  const [national, setNational] = useState<SoyNational | null>(null);
   const supplyCatchments = useMemo(() => (supply ? new Map(supply.catchments.map((k) => [k.id, k])) : null), [supply]);
   // A scope remembered from an earlier data version may no longer exist.
   const scope = !supplyCatchments || supplyCatchments.has(scopeStored) || scopeStored.startsWith("combo:") ? scopeStored : "all";
@@ -121,6 +126,11 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       )
       .then(setSupply)
       .catch(() => setSupplyError(true));
+    // All US soybean fields: a context block on the Summary tab, optional.
+    void fetchWithRetry("/data/national.json")
+      .then((res) => (res.ok ? (res.json() as Promise<SoyNational>) : null))
+      .then(setNational)
+      .catch(() => setNational(null));
   }, []);
 
   // The reading guide: once per sign-in (login clears the flag), on the map tab.
@@ -177,6 +187,14 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     docs: ssc.tabDocs,
     areas: ssc.tabAreas,
   };
+  // The client's other crushing plants (soy.json), shown on the supply map until their catchments arrive.
+  const otherPlants = useMemo(
+    () =>
+      (data?.plants ?? [])
+        .filter((p) => OTHER_PLANTS.includes(p.id))
+        .map((p) => ({ id: p.id, name: `ADM ${p.name}`, address: p.address ?? null, lat: p.lat, lon: p.lon })),
+    [data],
+  );
   // The printable report (soy-report.tsx) for the selected catchment; a portal, so it can live with the header.
   const canReport = role !== "auditor" && !!supply && !present;
   const report =
@@ -290,6 +308,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               setScope={setScope}
               canDownload={role !== "auditor"}
               showOwners={!present}
+              otherPlants={otherPlants}
             />
           ) : (
             <div className="page soy-page">
@@ -304,6 +323,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   setScope={setScope}
                   present={present}
                   onOpenMap={() => setTab("map")}
+                  national={national}
                 />
               ) : (
                 <SoyDocsView data={supply} c={ssc} lang={lang} present={present} />

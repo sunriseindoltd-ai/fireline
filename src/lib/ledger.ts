@@ -1,6 +1,7 @@
 import { readFirstSheetRows, rowsToObjects } from "./xlsx-lite.ts";
 
-export type TraceLevel = "village" | "buffer" | "unknown";
+// "plot": the supplier delivered plot polygons themselves (KTN, Agriplot).
+export type TraceLevel = "village" | "buffer" | "plot" | "unknown";
 
 export type MillRecord = {
   id: string;
@@ -248,9 +249,10 @@ export function groupSlug(name: string) {
  */
 export function traceLabel(
   m: Pick<MillRecord, "traceability" | "traceabilityRaw">,
-  t: { traceVillage: string; traceBuffer: string; traceBufferPlain: string },
+  t: { traceVillage: string; traceBuffer: string; traceBufferPlain: string; tracePlot?: string },
 ): string {
   const raw = m.traceabilityRaw.toLowerCase();
+  if (m.traceability === "plot") return t.tracePlot ?? m.traceabilityRaw;
   const parts: string[] = [];
   if (raw.includes("village") || raw.includes("desa")) parts.push(t.traceVillage);
   const km = parseBufferKm(m.traceabilityRaw);

@@ -58,14 +58,21 @@ export type ScopeFields = {
   /** The scope these fields belong to (the view may already show another). */
   scope: string | null;
 };
+/** Another crushing plant shown as a point while its catchments are prepared. */
+export type OtherPlant = { id: string; name: string; address?: string | null; lat: number; lon: number };
 export type MapFocus = { bbox?: [[number, number], [number, number]]; center?: [number, number]; zoom?: number; nonce: number };
 
-type LayerKey = "fields" | "nc" | "rings" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "nlcd";
-type Remote = "rail" | "rivers" | "corridors" | "roads";
-const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads"];
+type LayerKey = "fields" | "us" | "nc" | "rings" | "plants" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "nlcd";
+type Remote = "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "national-grid";
+const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads", "states", "counties", "national-grid"];
+// All US soybean fields (USDA CSB 2025, scripts/prepare-soy-national-tiles.py): vector tiles from zoom 10,
+// a 0.1° density grid below that. Grid colours step at a share of the cell (a 0.1° cell ≈ 22,000 acres).
+const US_MIN_ZOOM = 10;
+const US_GRID_ACRES = [220, 1100, 2200, 4400, 7700];
+let pmtilesProtocol = false;
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
-  supply: { fields: true, nc: true, rings: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, nlcd: false },
-  corridor: { fields: true, nc: false, rings: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, nlcd: false },
+  supply: { fields: true, us: false, nc: true, rings: true, plants: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, states: true, counties: false, nlcd: false },
+  corridor: { fields: true, us: false, nc: false, rings: true, plants: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, states: true, counties: false, nlcd: false },
 };
 const DATA_FLOOR = ["nlcd", "direct-area", "grid", "corridors", "rivers", "fields"];
 // Soybean density: coarse cells in supply.json, finer ones (layers/grid.json)
@@ -198,6 +205,8 @@ export function SoySupplyMap({
   onSelectField,
   focus,
   toolsSlot,
+  backSlot,
+  otherPlants = [],
 }: {
   data: SupplyData;
   mode: SupplyMapMode;
@@ -215,8 +224,14 @@ export function SoySupplyMap({
   onSelectField?: (f: SoyFeature | null) => void;
   focus?: MapFocus | null;
   toolsSlot?: ReactNode;
+  /** A way back up the hierarchy, under the search box (the map view supplies it). */
+  backSlot?: ReactNode;
+  /** The client's other crushing plants (points only, their catchments still to come). */
+  otherPlants?: OtherPlant[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const otherRef = useRef(otherPlants);
+  otherRef.current = otherPlants;
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
   const popupRef = useRef<import("maplibre-gl").Popup | null>(null);
   const [ready, setReady] = useState(false);
@@ -229,6 +244,9 @@ export function SoySupplyMap({
     rivers: "idle",
     corridors: "idle",
     roads: "idle",
+    states: "idle",
+    counties: "idle",
+    "national-grid": "idle",
   });
   // ADM's ask: in the area zoomed in, the soybean acreage and the
   // compliant / non-compliant shares of it.
@@ -251,6 +269,11 @@ export function SoySupplyMap({
     let map: import("maplibre-gl").Map | null = null;
     void (async () => {
       const maplibregl = (await import("maplibre-gl")).default;
+      if (!pmtilesProtocol) {
+        const { Protocol } = await import("pmtiles");
+        maplibregl.addProtocol("pmtiles", new Protocol().tile);
+        pmtilesProtocol = true;
+      }
       if (cancelled || !containerRef.current) return;
       const q80 = data.rings.find((r) => r.id === "q80");
       map = new maplibregl.Map({
@@ -412,6 +435,40 @@ export function SoySupplyMap({
           layout: { visibility: "none" },
           paint: { "line-color": RIVER_COLOR, "line-width": ["case", ["get", "m"], 1.2, 0.6] as never },
         });
+        // All US soybean fields, under the catchment's own fields: a density grid zoomed out, the fields from zoom 10.
+        map.addSource("us-soy", { type: "vector", url: `pmtiles://${window.location.origin}/data/layers/national/soy.pmtiles` });
+        map.addLayer({
+          id: "us-grid",
+          type: "fill",
+          source: "national-grid",
+          maxzoom: US_MIN_ZOOM,
+          layout: { visibility: "none" },
+          paint: {
+            "fill-color": ["step", ["get", "a"], SOY_YEARS_COLORS[0], US_GRID_ACRES[0], SOY_YEARS_COLORS[2], US_GRID_ACRES[1], SOY_YEARS_COLORS[4], US_GRID_ACRES[2], SOY_YEARS_COLORS[5], US_GRID_ACRES[3], SOY_YEARS_COLORS[6], US_GRID_ACRES[4], SOY_YEARS_COLORS[7]] as never, // prettier-ignore
+            "fill-opacity": 0.7,
+          },
+        });
+        map.addLayer({
+          id: "us-soy-fill",
+          type: "fill",
+          source: "us-soy",
+          "source-layer": "fields",
+          minzoom: US_MIN_ZOOM,
+          layout: { visibility: "none" },
+          paint: {
+            "fill-color": ["step", ["get", "y"], SOY_YEARS_COLORS[0], ...SOY_YEARS_COLORS.slice(1).flatMap((col, i) => [i + 2, col])] as never,
+            "fill-opacity": 0.6,
+          },
+        });
+        map.addLayer({
+          id: "us-soy-line",
+          type: "line",
+          source: "us-soy",
+          "source-layer": "fields",
+          minzoom: 12,
+          layout: { visibility: "none" },
+          paint: { "line-color": "#0f3d22", "line-width": 0.5, "line-opacity": 0.5 },
+        });
         map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.8 } });
         map.addLayer({
           id: "fields-line",
@@ -430,6 +487,26 @@ export function SoySupplyMap({
             "line-opacity": 0.85,
             "line-width": ["interpolate", ["linear"], ["zoom"], 6, ["match", ["get", "class"], [1, 2], 1.2, 0.4], 12, ["match", ["get", "class"], [1, 2], 3, 1.4]] as never, // prettier-ignore
           },
+        });
+        // State and county outlines (US Census, scripts/prepare-soy-boundaries.py); names from zoom 4 / 8.
+        const outline = ["!=", ["geometry-type"], "Point"];
+        const labelPt = ["==", ["geometry-type"], "Point"];
+        map.addLayer({
+          id: "counties-line",
+          type: "line",
+          source: "counties",
+          minzoom: 5,
+          filter: outline as never,
+          layout: { visibility: "none" },
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.4, 10, 1] as never, "line-opacity": 0.55 },
+        });
+        map.addLayer({
+          id: "states-line",
+          type: "line",
+          source: "states",
+          filter: outline as never,
+          layout: { visibility: "none" },
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1, 10, 2.2] as never, "line-opacity": 0.85 },
         });
         map.addLayer({
           id: "rail-casing",
@@ -583,6 +660,40 @@ export function SoySupplyMap({
             },
             paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.78)", "text-halo-width": 1.4 },
           });
+        // Area names: states from zoom 4 (in capitals), counties from zoom 8; under the facility labels.
+        for (const [id, source, minzoom, size] of [
+          ["states-label", "states", 4, 12],
+          ["counties-label", "counties", 8, 10.5],
+        ] as const) {
+          map.addLayer({
+            id,
+            type: "symbol",
+            source,
+            minzoom,
+            filter: ["==", ["get", "label"], true],
+            layout: {
+              visibility: "none",
+              "text-field": ["get", "n"],
+              "text-font": ["Open Sans Semibold"],
+              "text-size": size,
+              "text-transform": id === "states-label" ? "uppercase" : "none",
+              "text-letter-spacing": id === "states-label" ? 0.12 : 0,
+              "text-allow-overlap": false,
+            },
+            paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.78)", "text-halo-width": 1.2, "text-opacity": 0.85 },
+          });
+        }
+        // The other crushing plants: a hollow plant marker (their data is still to come), always labelled.
+        map.addSource("plants-other", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: otherRef.current.map((o) => pt(o.lon, o.lat, { id: o.id, name: o.name })) } as never,
+        });
+        map.addLayer({
+          id: "plants-other",
+          type: "circle",
+          source: "plants-other",
+          paint: { "circle-radius": 7, "circle-color": "#ffffff", "circle-stroke-color": PLANT_COLOR, "circle-stroke-width": 3.2 },
+        });
         label("tp-label", "tp", 8, 11);
         label("ring-label", "ring-pt", 0, 12.5);
         map.setLayoutProperty("ring-label", "text-variable-anchor", ["bottom"]);
@@ -590,8 +701,9 @@ export function SoySupplyMap({
         map.setLayoutProperty("ring-label", "visibility", "none");
         label("adm-label", "adm", 5.5, 12);
         label("plant-label", "plant", 0, 13.5);
+        label("plants-other-label", "plants-other", 0, 13);
 
-        for (const layer of ["plant", "adm", "tp", "nc-dot", "nc-fill", "fields"]) {
+        for (const layer of ["plant", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"]) {
           map.on("mouseenter", layer, () => map && (map.getCanvas().style.cursor = "pointer"));
           map.on("mouseleave", layer, () => map && (map.getCanvas().style.cursor = ""));
         }
@@ -610,7 +722,7 @@ export function SoySupplyMap({
         };
         map.on("click", (e) => {
           if (!map) return;
-          const layers = ["plant", "adm", "tp", "nc-dot", "nc-fill", "fields"].filter((l) => map!.getLayer(l));
+          const layers = ["plant", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"].filter((l) => map!.getLayer(l));
           const hit = map.queryRenderedFeatures(e.point, { layers })[0];
           const { data: dt, c: cc, lang: l, catchments: cm, cdlNames: names, onSelectField: pick } = live.current;
           if (!hit) {
@@ -638,6 +750,16 @@ export function SoySupplyMap({
               ${row(cc.toRail, mi(p.railMi))}${row(cc.toRiver, mi(p.riverMi))}
               ${catchLine("q40")}${catchLine("q80")}${btn("q40")}</div>`,
               "q40",
+            );
+            return;
+          }
+          if (lid === "plants-other") {
+            const o = otherRef.current.find((x) => x.id === pid);
+            if (!o) return;
+            open(
+              e.lngLat,
+              `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popPlant)}</p><p class="soy-pop-title">${esc(o.name)}</p>
+              ${o.address ? row(cc.location, o.address) : ""}<p class="soy-pop-note">${esc(cc.plantPending)}</p></div>`,
             );
             return;
           }
@@ -687,6 +809,19 @@ export function SoySupplyMap({
                 return `<li><span>${2018 + i}</span><i style="background:${SOY_GROUP_COLORS[soyGroupOf(n)]}"></i>${esc(name)}</li>`;
               })
               .join("")}</ul>`;
+          if (lid === "us-soy-fill") {
+            const p = hit.properties as { i?: string; a?: number; y?: number; n?: string; s?: string; h?: string };
+            open(
+              e.lngLat,
+              `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popUsField)}</p>
+              ${row(cc.fieldId, String(p.i ?? "—"), true)}${row(cc.area, acresHa(p.a == null ? null : Number(p.a)))}
+              ${row(cc.location, [p.n, p.s].filter(Boolean).join(", ") || "—")}
+              ${row(cc.seasonsLabel, p.y == null ? "—" : fill(cc.yearsN, { n: Number(p.y) }))}
+              ${p.h ? `<p class="soy-pop-k">${esc(cc.history)}</p>${history(String(p.h))}` : `<p class="soy-pop-note">${esc(cc.usZoomForHistory)}</p>`}
+              <p class="soy-pop-note">${esc(cc.usNotClassified)}</p></div>`,
+            );
+            return;
+          }
           if (src === "nc") {
             const p = hit.properties as unknown as NcProps;
             open(
@@ -863,6 +998,7 @@ export function SoySupplyMap({
     set(["fields", "fields-line", "sel-line"], on.fields);
     set(["nc-fill", "nc-line", "nc-halo", "nc-dot", "sel-nc-line"], on.nc);
     set(["rings", "plant", "plant-label"], on.rings);
+    set(["plants-other", "plants-other-label"], on.plants);
     const combo = isCombo(selected) ? comboMembers(selected!) : null;
     set(["direct-area", "ring-label"], on.rings && (group === "direct" || !!combo?.some((m) => m === "q40" || m === "q80")));
     set(["adm", "adm-catch", "adm-label"], on.adm && (!group || group === "adm"));
@@ -871,12 +1007,19 @@ export function SoySupplyMap({
     set(["rivers", "rivers-line"], on.rivers);
     set(["corridors"], on.corridors);
     set(["roads"], on.roads);
+    set(["states-line", "states-label"], on.states);
+    set(["counties-line", "counties-label"], on.counties);
     set(["nlcd"], on.nlcd);
+    set(["us-grid", "us-soy-fill", "us-soy-line"], on.us);
     // With land cover on, the fields and density cells thin out so it shows through.
     if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.8);
-    for (const id of GRID_LAYERS) if (map.getLayer(id)) map.setPaintProperty(id, "fill-opacity", on.nlcd ? 0.25 : 0.72);
+    // With all US fields on, the catchment density cells give way to the fields themselves from zoom 10.
+    const gridOpacity = on.nlcd ? 0.25 : 0.72;
+    for (const id of GRID_LAYERS)
+      if (map.getLayer(id)) map.setPaintProperty(id, "fill-opacity", (on.us ? ["step", ["zoom"], gridOpacity, US_MIN_ZOOM, 0] : gridOpacity) as never);
     for (const r of REMOTE) {
-      if (!on[r] || remote[r] !== "idle") continue;
+      const want = r === "national-grid" ? on.us : on[r];
+      if (!want || remote[r] !== "idle") continue;
       const cached = remoteCache.get(r);
       if (cached) {
         (map.getSource(r) as import("maplibre-gl").GeoJSONSource | undefined)?.setData(cached as never);
@@ -984,12 +1127,12 @@ export function SoySupplyMap({
     setBasemap(map, basemap, DATA_FLOOR);
     const light = basemap === "osm";
     const ink = light ? "#1d1d1f" : "#ffffff";
-    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
+    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line", "states-line", "counties-line"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
     if (map.getLayer("direct-area")) {
       map.setPaintProperty("direct-area", "fill-color", ink);
       map.setPaintProperty("direct-area", "fill-opacity", light ? 0.07 : 0.14);
     }
-    for (const id of ["ring-label", "plant-label", "adm-label", "tp-label"]) {
+    for (const id of ["ring-label", "plant-label", "plants-other-label", "adm-label", "tp-label", "states-label", "counties-label"]) {
       if (!map.getLayer(id)) continue;
       map.setPaintProperty(id, "text-color", ink);
       map.setPaintProperty(id, "text-halo-color", light ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.78)");
@@ -1058,6 +1201,27 @@ export function SoySupplyMap({
     rivers: { label: c.layerRivers, symbol: <i className="ln thick" style={{ borderTopColor: RIVER_COLOR }} /> },
     corridors: { label: c.layerCorridors, symbol: <i className="sq" style={{ background: "#dfe9f7" }} /> },
     roads: { label: c.layerRoads, symbol: <i className="ln road" /> },
+    us: {
+      label: c.layerUs,
+      symbol: <i className="sq" style={{ background: SOY_YEARS_COLORS[4] }} />,
+      detail: (
+        <div className="soy-key-detail">
+          <div className="soy-legend-ramp six">
+            {[0, 2, 4, 5, 6, 7].map((i) => (
+              <i key={i} style={{ background: SOY_YEARS_COLORS[i] }} />
+            ))}
+          </div>
+          <div className="soy-legend-ends">
+            <span>{fill(c.yearsN, { n: 1 })}</span>
+            <span>{fill(c.yearsN, { n: 8 })}</span>
+          </div>
+          <p className="soy-key-note">{c.usNote}</p>
+        </div>
+      ),
+    },
+    plants: { label: c.layerPlants, symbol: <i className="dot plant-pending" />, detail: <p className="soy-key-note">{c.plantPending}</p> },
+    states: { label: c.layerStates, symbol: <i className="ln bound" /> },
+    counties: { label: c.layerCounties, symbol: <i className="ln bound thin" />, detail: <p className="soy-key-note">{c.countiesNote}</p> },
     nlcd: {
       label: c.layerNlcd,
       symbol: <i className="sq nlcd-sw" />,
@@ -1089,14 +1253,15 @@ export function SoySupplyMap({
   };
   const order: LayerKey[] =
     mode === "corridor"
-      ? ["fields", "rail", "rivers", "corridors", "rings", "adm", "tp", "nc", "roads", "nlcd"]
-      : ["fields", "nc", "rings", "adm", "tp", "rail", "rivers", "roads", "nlcd"];
+      ? ["fields", "us", "rail", "rivers", "corridors", "rings", "plants", "adm", "tp", "nc", "roads", "states", "counties", "nlcd"]
+      : ["fields", "us", "nc", "rings", "plants", "adm", "tp", "rail", "rivers", "roads", "states", "counties", "nlcd"];
 
   return (
     <div className="soy-map supply-map">
       <div ref={containerRef} className="soy-map-canvas" />
       <div className="soy-map-tools">
         {toolsSlot}
+        {backSlot}
         <details className="soy-layers soy-key map-card" open={layersOpen} onToggle={(e) => setLayersOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary>{c.layers}</summary>
           <ul>

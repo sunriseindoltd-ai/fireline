@@ -6,6 +6,7 @@ import {
   matchGateCredentials,
   readGateSession,
   setGateCookie,
+  viewerMayUse,
 } from "@/lib/gate";
 import { TENANTS, type Tenant } from "@/lib/tenants";
 
@@ -36,12 +37,13 @@ export const gateLogin = createServerFn({ method: "POST" })
     return { ok: true as const, user: username, role: match.role };
   });
 
-/** Admins (Earthline) only: re-issue the session for another client's workspace. */
+/** Admins (Earthline), and viewers between palm clients: re-issue the session for another client's workspace. */
 export const gateSwitchTenant = createServerFn({ method: "POST" })
   .validator(z.object({ tenant: z.enum(TENANTS.map((t) => t.id) as [Tenant, ...Tenant[]]) }))
   .handler(async ({ data }) => {
     const session = await readGateSession();
-    if (!session || session.role !== "admin") return { ok: false as const };
+    if (!session) return { ok: false as const };
+    if (session.role !== "admin" && !(session.role === "viewer" && viewerMayUse(data.tenant))) return { ok: false as const };
     setGateCookie(await issueGateToken(session.user, session.role, data.tenant));
     return { ok: true as const, tenant: data.tenant };
   });

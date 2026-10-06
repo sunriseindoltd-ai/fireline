@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiTile } from "@/components/kpi-tile";
+import { SoyNationalView, type SoyNational } from "@/components/soy-national";
 import { loadNonCompliant, type SoyFeature } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa, formatLarge } from "@/lib/format";
@@ -31,6 +32,8 @@ type Common = {
   setScope: (id: string) => void;
   present: boolean;
   onOpenMap: () => void;
+  /** All US soybean fields (national.json), when loaded. */
+  national?: SoyNational | null;
 };
 
 /** Level 1 and the three supplier types (level 2) — the tabs above the figures. */
@@ -177,7 +180,7 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
 }
 
 /** The Quincy supply chain: catchments, fields, non-compliant fields at true scale. */
-export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onOpenMap }: Common) {
+export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onOpenMap, national }: Common) {
   const catchments = useCatchments(data);
   const k = catchments.get(scope) ?? catchments.get("all")!;
   const countF = (n: number) => formatCount(n, lang);
@@ -327,6 +330,8 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
       </div>
 
       <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={scope} setScope={setScope} />
+
+      {national ? <SoyNationalView nat={national} data={data} c={c} lang={lang} /> : null}
 
       <CropCharts k={k} c={c} sc={sc} lang={lang} />
       {present ? null : <DataNotes c={c} />}
@@ -828,6 +833,7 @@ export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: S
           <li>{c.docsSource2}</li>
           <li>{c.docsSource3}</li>
           <li>{c.docsSource4}</li>
+          <li>{c.docsSource5}</li>
         </ul>
       </section>
       <section className="chart-card supply-notes supply-wide">

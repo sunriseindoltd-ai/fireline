@@ -83,7 +83,38 @@ const MIT_COLORS = [
 ];
 // Matches the ["HL", "HPT", "HP", "HPK"] order overlapData is built in below.
 const OVERLAP_COLORS = ["var(--forest-hl)", "var(--forest-hpt)", "var(--forest-hp)", "var(--forest-hpk)"];
-const TYPE_COLORS = ["var(--color-type-1)", "var(--color-type-2)", "var(--color-type-3)"];
+const TYPE_COLORS: Record<string, string> = {
+  "Independent Smallholder": "var(--color-type-1)",
+  Company: "var(--color-type-2)",
+  "Scheme Smallholder": "var(--color-type-3)",
+  "Field Boundary": "#b4a6c9",
+};
+// KTN's Risk_Dist classes, as delivered.
+const KTN_RISK_ORDER = ["Low Risk", "Standard Risk", "Medium Risk", "High Risk"];
+const KTN_RISK_COLORS: Record<string, string> = {
+  "Low Risk": "var(--color-risk-low)",
+  "Standard Risk": "#8c9db8",
+  "Medium Risk": "var(--color-risk-medium)",
+  "High Risk": "var(--color-risk-high)",
+};
+
+/** Plain horizontal bars for the KTN cards: label, bar, value on the right. */
+function Bars({ rows }: { rows: { label: string; value: number; text: string; color: string }[] }) {
+  const max = Math.max(...rows.map((r) => r.value), 1e-9);
+  return (
+    <ul className="ktn-bars">
+      {rows.map((r) => (
+        <li key={r.label}>
+          <span className="ktn-bar-label">{r.label}</span>
+          <span className="ktn-bar-track" aria-hidden="true">
+            <i style={{ width: `${(r.value / max) * 100}%`, background: r.color }} />
+          </span>
+          <span className="ktn-bar-value tabular-nums">{r.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 type PercentLabelArgs = {
   cx: number;
@@ -314,8 +345,17 @@ export function EudrSummaryView({
     "Independent Smallholder": t.typeIndependent,
     Company: t.typeCompany,
     "Scheme Smallholder": t.typeScheme,
+    "Field Boundary": t.typeFieldBoundary,
+    Outgrower: t.typeOutgrower,
   };
-  const typeData = Object.entries(summary.plotType).filter(([, v]) => v.count > 0);
+  // Plots analysed by KTN (Agriplot), not Earthline: when they are the whole
+  // view, KTN's own criteria replace the risk / deforestation / A–F /
+  // forest-estate charts; mixed in with Earthline plots, a note says they
+  // have no A–F class (KTN, 6 Oct 2026).
+  const ktn = summary.ktn;
+  const ktnOnly = !!ktn && ktn.plots > 0 && ktn.plots === summary.totalPlots;
+  const typeData = (ktnOnly ? Object.entries(ktn.types) : Object.entries(summary.plotType))
+    .filter(([, v]) => v.count > 0);
   const typeTotalArea = typeData.reduce((s, [, v]) => s + v.areaHa, 0);
 
   // ADM feedback 1 and 3: clicking the compliant share leads to the compliant
@@ -354,9 +394,77 @@ export function EudrSummaryView({
             : undefined
         }
       />
-      <KpiTile tone="danger" value={haF(totalDefo)} label={t.defoPost2020Kpi} hint={t.defoPost2020Hint} sub="2021–" />
+      {ktnOnly ? (
+        <KpiTile tone="danger" value={haF(ktn.prfHa)} label={t.ktnPrfKpi} hint={t.ktnPrfHint} sub="PRF_Ar" />
+      ) : (
+        <KpiTile tone="danger" value={haF(totalDefo)} label={t.defoPost2020Kpi} hint={t.defoPost2020Hint} sub="2021–" />
+      )}
     </div>
   );
+
+  const ktnCards: ReactNode[] = ktn
+    ? [
+        <div className="chart-card" key="ktn-criteria">
+          <h3>{t.ktnCriteriaChart}</h3>
+          <ul className="ktn-crit">
+            {(["DF", "LB", "PRF"] as const).map((k) => {
+              const c = ktn.criteria[k];
+              const all = c.yes + c.no;
+              return (
+                <li key={k}>
+                  <span className="ktn-crit-label">{k === "DF" ? t.ktnCritDF : k === "LB" ? t.ktnCritLB : t.ktnCritPRF}</span>
+                  <span className="stacked-bar" aria-hidden="true">
+                    <span className="stacked-bar-seg" style={{ width: `${all ? (c.yes / all) * 100 : 0}%`, background: "var(--color-comply)" }} />
+                    <span className="stacked-bar-seg" style={{ width: `${all ? (c.no / all) * 100 : 0}%`, background: "var(--color-noncomply)" }} />
+                  </span>
+                  <span className="ktn-crit-value tabular-nums">
+                    {fill(t.ktnCritRow, { pct: formatPct(c.yes, all, lang), n: countF(c.no), ha: haF(c.noHa) })}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="chart-note">{t.ktnCriteriaNote}</p>
+        </div>,
+        <div className="chart-card" key="ktn-risk">
+          <h3>{t.ktnRiskChart}</h3>
+          <Bars
+            rows={Object.entries(ktn.risk)
+              .sort((a, b) => (KTN_RISK_ORDER.indexOf(a[0]) + 99) % 99 - (KTN_RISK_ORDER.indexOf(b[0]) + 99) % 99)
+              .map(([k, v]) => ({
+                label: k,
+                value: v.count,
+                text: `${countF(v.count)} · ${formatPct(v.count, ktn.plots, lang)}`,
+                color: KTN_RISK_COLORS[k] ?? "var(--color-line)",
+              }))}
+          />
+        </div>,
+        <div className="chart-card" key="ktn-land">
+          <h3>{t.ktnLandChart}</h3>
+          <Bars
+            rows={Object.entries(ktn.registered)
+              .sort((a, b) => b[1].areaHa - a[1].areaHa)
+              .map(([k, v]) => ({
+                label: k,
+                value: v.areaHa,
+                text: `${haF(v.areaHa)} · ${countF(v.count)} ${t.plotsLabel}`,
+                color: k === "Unregistered" ? "var(--color-noncomply)" : "var(--color-type-2)",
+              }))}
+          />
+        </div>,
+        <div className="chart-card" key="ktn-forest">
+          <h3>{t.ktnForestChart}</h3>
+          <Bars
+            rows={[
+              { label: t.ktnForestPrf, value: ktn.prfHa, text: haF(ktn.prfHa), color: "var(--color-noncomply)" },
+              { label: t.ktnForestGfc, value: ktn.forestGfcHa, text: haF(ktn.forestGfcHa), color: "var(--forest-hp)" },
+              { label: t.ktnForestTmf, value: ktn.forestTmfHa, text: haF(ktn.forestTmfHa), color: "var(--forest-hpt)" },
+            ]}
+          />
+          <p className="chart-note">{t.ktnForestNote}</p>
+        </div>,
+      ]
+    : [];
 
   const chartCards: ReactNode[] = [
     <div className="chart-card" key="comply">
@@ -513,32 +621,39 @@ export function EudrSummaryView({
       </ResponsiveContainer>
       <p className="chart-note">{t.forestOverlapNote}</p>
     </div>,
-
+  ].filter((card) => !ktnOnly || (card as { key?: string }).key === "comply");
+  chartCards.push(...(ktnOnly ? ktnCards : []), ...[
     <div className="chart-card" key="type">
       <h3>{t.plotTypeChart}</h3>
       <div className="stacked-bar">
-        {typeData.map(([name, v], i) => (
+        {typeData.map(([name, v]) => (
           <div
             key={name}
             className="stacked-bar-seg"
-            style={{ width: `${(v.areaHa / typeTotalArea) * 100}%`, background: TYPE_COLORS[i] }}
+            style={{ width: `${(v.areaHa / typeTotalArea) * 100}%`, background: TYPE_COLORS[name] ?? "#c9ccd1" }}
             title={`${typeNames[name] ?? name}: ${haF(v.areaHa)}`}
           />
         ))}
       </div>
       <ul className="chart-legend">
-        {typeData.map(([name, v], i) => (
+        {typeData.map(([name, v]) => (
           <li key={name}>
-            <i style={{ background: TYPE_COLORS[i] }} />
+            <i style={{ background: TYPE_COLORS[name] ?? "#c9ccd1" }} />
             {typeNames[name] ?? name} <b>{haF(v.areaHa)}</b>
           </li>
         ))}
       </ul>
     </div>,
-  ];
+   ]);
 
   return (
     <div className="eudr-summary">
+      {ktn && ktn.plots > 0 ? (
+        <div className="eudr-notice info">
+          <InfoIcon />
+          <p>{ktnOnly ? t.ktnNoticeOnly : fill(t.ktnNoticeMixed, { n: countF(ktn.plots) })}</p>
+        </div>
+      ) : null}
       {partial && !hideCoverageNotice ? (
         <div className="eudr-notice info">
           <InfoIcon />
@@ -559,7 +674,7 @@ export function EudrSummaryView({
         <>
           {kpiCard}
           <div className="chart-grid">{chartCards}</div>
-          {variant === "chain" && flowMills ? <SupplyFlowSankey mills={flowMills} hideCoverageNote={hideCoverageNotice} /> : null}
+          {variant === "chain" && flowMills && !ktnOnly ? <SupplyFlowSankey mills={flowMills} hideCoverageNote={hideCoverageNotice} /> : null}
           {canList ? (
             <ComplyList
               mills={summary.mills}

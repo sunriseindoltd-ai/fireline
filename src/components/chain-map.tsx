@@ -241,6 +241,7 @@ export type ChainMapLabels = {
   empty: string;
   legendVillage: string;
   legendBuffer: string;
+  legendPlot: string;
   legendPlots: string;
   legendMills: string;
   legendAreas: string;
@@ -260,6 +261,8 @@ export type ChainMapLabels = {
   comply: string;
   nonComply: string;
   nonComplyReason: string;
+  /** Plot card rows for plots analysed by KTN (Agriplot), not Earthline. */
+  ktn: { analysis: string; analysisText: string; agriplotId: string; land: string; risk: string; df: string; lb: string; prf: string };
   riskLow: string;
   riskMedium: string;
   riskHigh: string;
@@ -334,6 +337,7 @@ function mapLabels(t: Copy): ChainMapLabels {
     empty: t.mapEmpty,
     legendVillage: t.legendVillage,
     legendBuffer: t.legendBuffer,
+    legendPlot: t.legendPlot,
     legendPlots: t.legendPlots,
     legendMills: t.legendMills,
     legendAreas: t.legendAreas,
@@ -351,6 +355,16 @@ function mapLabels(t: Copy): ChainMapLabels {
     comply: t.comply,
     nonComply: t.nonComply,
     nonComplyReason: t.nonComplyReason,
+    ktn: {
+      analysis: t.ktnAnalysis,
+      analysisText: t.ktnAnalysisText,
+      agriplotId: t.ktnAgriplotId,
+      land: t.ktnLand,
+      risk: t.ktnRisk,
+      df: "DF_Comp",
+      lb: "LB_Comp",
+      prf: "PRF_Comp",
+    },
     riskLow: t.riskLow,
     riskMedium: t.riskMedium,
     riskHigh: t.riskHigh,
@@ -391,7 +405,7 @@ function mapLabels(t: Copy): ChainMapLabels {
 // Soft, low-saturation tones (redesign 2: "hindari warna yang berani") that
 // still read on top of dark canopy imagery — every outline also gets a dark
 // halo underneath. Mirrors the data tokens in styles.css.
-const TRACE_COLORS = { village: "#a9d6c3", buffer: "#e6cf9a", unknown: "#c9ccd1" };
+const TRACE_COLORS = { village: "#a9d6c3", buffer: "#e6cf9a", plot: "#b7c6e8", unknown: "#c9ccd1" };
 // Mill points with no traceability class (millColorExpression's fallback).
 const MILL_UNKNOWN_COLOR = "#e8eef4";
 const COMPLY_COLORS = { yes: "#9ed7b1", no: "#f0a197" };
@@ -408,6 +422,8 @@ const TYPE_COLORS: Record<string, string> = {
   "Independent Smallholder": "#a9d6c3",
   Company: "#b8c7e0",
   "Scheme Smallholder": "#e6cf9a",
+  // KTN (Agriplot) only — listed in the legend only when such plots are loaded.
+  "Field Boundary": "#d3c6e3",
 };
 const FALLBACK_COLOR = "#c9ccd1";
 // Dark halo drawn under every plot outline — a pink/green outline straight
@@ -480,7 +496,7 @@ function millColorExpression(distinctRefineries: string[]): any {
     distinctRefineries.forEach((r) => stops.push(r, refineryColorFor(r, distinctRefineries)));
     return ["match", ["get", "_refinery"], ...stops, MILL_UNKNOWN_COLOR];
   }
-  return ["match", ["get", "_trace"], "village", TRACE_COLORS.village, "buffer", TRACE_COLORS.buffer, MILL_UNKNOWN_COLOR];
+  return ["match", ["get", "_trace"], "village", TRACE_COLORS.village, "buffer", TRACE_COLORS.buffer, "plot", TRACE_COLORS.plot, MILL_UNKNOWN_COLOR];
 }
 
 type ColorBy = "trace" | "comply" | "risk" | "mitigation" | "type";
@@ -539,6 +555,8 @@ function fillColorExpression(colorBy: ColorBy): any {
         TYPE_COLORS.Company,
         "Scheme Smallholder",
         TYPE_COLORS["Scheme Smallholder"],
+        "Field Boundary",
+        TYPE_COLORS["Field Boundary"],
         FALLBACK_COLOR,
       ];
     default:
@@ -549,6 +567,8 @@ function fillColorExpression(colorBy: ColorBy): any {
         TRACE_COLORS.village,
         "buffer",
         TRACE_COLORS.buffer,
+        "plot",
+        TRACE_COLORS.plot,
         TRACE_COLORS.unknown,
       ];
   }
@@ -593,12 +613,14 @@ function legendEntries(
     }));
   }
   if (colorBy === "type") {
-    return Object.entries(TYPE_COLORS).map(([value, color]) => ({
-      label: typeNames[value] ?? value,
-      color,
-      count: countBy("TYPE", value),
-      value,
-    }));
+    return Object.entries(TYPE_COLORS)
+      .map(([value, color]) => ({
+        label: typeNames[value] ?? value,
+        color,
+        count: countBy("TYPE", value),
+        value,
+      }))
+      .filter((e) => e.value !== "Field Boundary" || e.count > 0);
   }
   return [
     {
@@ -613,6 +635,9 @@ function legendEntries(
       count: countBy("_trace", "buffer"),
       value: "buffer",
     },
+    ...(countBy("_trace", "plot") > 0
+      ? [{ label: labels.legendPlot, color: TRACE_COLORS.plot, count: countBy("_trace", "plot"), value: "plot" }]
+      : []),
   ];
 }
 
@@ -629,7 +654,7 @@ function filterUniverse(colorBy: ColorBy): string[] {
     case "type":
       return Object.keys(TYPE_COLORS);
     default:
-      return ["village", "buffer"];
+      return ["village", "buffer", "plot"];
   }
 }
 
@@ -769,6 +794,51 @@ function buildPlotDetail(
   const lat = Number(props.LAT ?? NaN);
   const lon = Number(props.LON ?? NaN);
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
+
+  // KTN's own analysis (Agriplot): its criteria instead of the Earthline
+  // risk / A–F rows — scripts/prepare-ktn-plots.py.
+  if (String(props.Analysis ?? "").startsWith("KTN")) {
+    const k = labels.ktn;
+    const status = (v: unknown) => (v === "Comply" ? labels.comply : v === "Non Comply" ? labels.nonComply : String(v || "—"));
+    const cls = (v: unknown) => (v === "Comply" ? ("ok" as const) : v === "Non Comply" ? ("bad" as const) : undefined);
+    const prfHa = Number(props.PRF_Ar) || 0;
+    const ktnRows: PlotDetail["rows"] = [
+      { label: labels.plotId, value: plotId || "—" },
+      { label: k.agriplotId, value: String(props.AgriplotID ?? "") || "—" },
+      { label: labels.company, value: company || "—" },
+      { label: labels.uml, value: uml || "—" },
+    ];
+    if (location) ktnRows.push({ label: labels.location, value: location });
+    ktnRows.push(
+      { label: labels.hectare, value: formatHa(ha, lang) },
+      { label: labels.compliance, value: comply, cls: complyClass },
+      { label: k.df, value: status(props.DF_Comp), cls: cls(props.DF_Comp) },
+      { label: k.lb, value: status(props.LB_Comp), cls: cls(props.LB_Comp) },
+      {
+        label: k.prf,
+        value: `${status(props.PRF_Comp)}${prfHa > 0 ? ` · ${formatHa(prfHa, lang)}` : ""}`,
+        cls: cls(props.PRF_Comp),
+      },
+      { label: k.land, value: String(props.Registered || "—") },
+      { label: k.risk, value: String(props.Risk_Dist || "—") },
+      { label: labels.type, value: type },
+    );
+    const reason =
+      complyDecorated === "no"
+        ? [`${String(props.PRF || "PRF")}${prfHa > 0 ? ` (${formatHa(prfHa, lang)})` : ""}`, String(props.Note_EQ ?? "")]
+            .filter(Boolean)
+            .join("; ")
+        : "";
+    return {
+      id: plotId || uml || mill,
+      title: mill || uml || "Plot",
+      rows: ktnRows,
+      coordinates: hasCoords ? { lat, lon } : null,
+      mitigation: { label: k.analysis, text: k.analysisText },
+      nonComplyReason: reason,
+      nonComplyDetail: null,
+    };
+  }
 
   const rows: PlotDetail["rows"] = [
     { label: labels.plotId, value: plotId || "—" },
@@ -934,6 +1004,8 @@ export function ChainMap({
       "Independent Smallholder": t.typeIndependent,
       Company: t.typeCompany,
       "Scheme Smallholder": t.typeScheme,
+      "Field Boundary": t.typeFieldBoundary,
+      Outgrower: t.typeOutgrower,
     }),
     [t],
   );
@@ -1552,11 +1624,14 @@ export function ChainMap({
     const out: { label: string; color: string }[] = [];
     if (seen.has("village")) out.push({ label: labels.legendVillage, color: TRACE_COLORS.village });
     if (seen.has("buffer")) out.push({ label: labels.legendBuffer, color: TRACE_COLORS.buffer });
-    if ([...seen].some((v) => v !== "village" && v !== "buffer")) out.push({ label: t.traceUnknown, color: MILL_UNKNOWN_COLOR });
+    if (seen.has("plot")) out.push({ label: labels.legendPlot, color: TRACE_COLORS.plot });
+    if ([...seen].some((v) => v !== "village" && v !== "buffer" && v !== "plot")) out.push({ label: t.traceUnknown, color: MILL_UNKNOWN_COLOR });
     return out;
   }, [millGeom, areas, labels, t]);
   const searchResults = useMemo(() => matchingPlots(plots, plotQuery), [plots, plotQuery]);
   const hasPlots = !!plots && plots.features.length > 0;
+  // KTN delivered its own analysis (Agriplot): the layer heading says so.
+  const ktnPlots = hasPlots && plots.features.every((f) => String(f.properties?.Analysis ?? "").startsWith("KTN"));
 
   function selectSearchResult(feature: Fc["features"][number]) {
     const map = mapRef.current as unknown as import("maplibre-gl").Map | null;
@@ -1744,7 +1819,7 @@ export function ChainMap({
                   own verdicts, the supply chain itself, and public EUDR
                   context — never mixed in one toggle. */}
               <section className="map-layer-group">
-                <p className="map-layers-kicker">{t.layerGroupAnalysis}</p>
+                <p className="map-layers-kicker">{ktnPlots ? t.layerGroupAnalysisKtn : t.layerGroupAnalysis}</p>
                 <label className="map-layer-toggle">
                   <input
                     type="checkbox"

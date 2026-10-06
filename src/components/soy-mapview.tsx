@@ -8,6 +8,7 @@ import {
   type SoyFeature,
   type SupplyColorBy,
 } from "@/components/soy-supply-map";
+import type { OtherPlant } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa } from "@/lib/format";
 import { SOY_GROUP_COLORS, soyGroupOf } from "@/lib/soy-copy";
@@ -118,6 +119,7 @@ export function SoyMapView({
   canDownload,
   showOwners = true,
   mode = "supply",
+  otherPlants = [],
 }: {
   data: SupplyData;
   cdlNames: Record<string, string>;
@@ -131,6 +133,8 @@ export function SoyMapView({
   showOwners?: boolean;
   /** "corridor": the Rail & river tab — fields shaded by distance to rail / the river system. */
   mode?: "supply" | "corridor";
+  /** The client's other crushing plants, shown as points until their catchments arrive. */
+  otherPlants?: OtherPlant[];
 }) {
   const corridor = mode === "corridor";
   const [band, setBand] = useState<Band>(10);
@@ -286,6 +290,9 @@ export function SoyMapView({
   const level = levelOf(scope);
   const node = (isCombo(scope) ? comboInfo(scope, data, c) : null) ?? infos.find((x) => x.id === scope) ?? infos[0]!;
   const parent = node.parent ? infos.find((x) => x.id === node.parent) : null;
+  // The levels above this one, top first (supply chain › supplier type › …).
+  const trail: CatchmentInfo[] = [];
+  for (let up = parent; up; up = up.parent ? infos.find((x) => x.id === up!.parent) : undefined) trail.unshift(up);
   // The search box and 6-state filter belong to the third-party list only.
   const q = node.id === "tp" ? listQuery.trim().toLowerCase() : "";
   const coreIds = new Set(data.thirdParty.filter((e) => e.core).map((e) => e.id));
@@ -372,6 +379,7 @@ export function SoyMapView({
           selectedField={p ? String(p.id) : null}
           onSelectField={(f) => pick(f)}
           focus={focus}
+          otherPlants={otherPlants}
           toolsSlot={
             <form className="map-card soy-find" onSubmit={find}>
               <label className="sr-only" htmlFor="soy-find">
@@ -390,6 +398,13 @@ export function SoyMapView({
               <button type="submit">{c.findGo}</button>
               {findMiss ? <p className="soy-find-miss">{c.findNone}</p> : null}
             </form>
+          }
+          backSlot={
+            parent ? (
+              <button type="button" className="map-card soy-map-back" onClick={() => choose(parent.id)}>
+                <span aria-hidden="true">←</span> {fill(c.backTo, { name: parent.name })}
+              </button>
+            ) : null
           }
         />
         <button
@@ -600,10 +615,19 @@ export function SoyMapView({
 
       <aside className="side-panel" aria-label={node.name}>
         <div className="panel-head">
-          {parent ? (
-            <button type="button" className="back-link" onClick={() => choose(parent.id)}>
-              ‹ {parent.name}
-            </button>
+          {trail.length ? (
+            // Where this catchment sits: every level above is a step back.
+            <nav className="soy-crumbs" aria-label={c.crumbsLabel}>
+              {trail.map((t) => (
+                <span key={t.id}>
+                  <button type="button" onClick={() => choose(t.id)}>
+                    {t.name}
+                  </button>
+                  <i aria-hidden="true">›</i>
+                </span>
+              ))}
+              <b aria-current="location">{node.name}</b>
+            </nav>
           ) : null}
           <div className="panel-title">
             <h2>{node.name}</h2>

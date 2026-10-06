@@ -308,7 +308,18 @@ const TOOLS: Record<string, { decl: object; run: (d: Data, a: Record<string, unk
         [t.group, m.group ?? "—"], [t.refinery, m.refinery ?? "—"], ["UML ID", m.umlId ?? "—"],
         [L ? "Pelabuhan" : "Port", m.port ?? "—"], [L ? "Ketertelusuran" : "Traceability", m.traceability ?? "—"],
       ];
-      if (s) {
+      if (s?.ktn && s.ktn.plots === s.totalPlots) {
+        // Analysed by KTN (Agriplot), not Earthline: its own criteria, no A–F.
+        const k = s.ktn;
+        rows.push(
+          [t.plots, s.totalPlots], [t.area, Math.round(s.totalAreaHa)], [t.compliant, pct(s.comply.yes, s.totalPlots)], [t.nc, s.comply.no],
+          [L ? "Analisis" : "Analysis", "KTN (Agriplot)"],
+          ...(["DF", "LB", "PRF"] as const).map((c) => [`${c}_Comp ${L ? "tidak patuh" : "non-compliant"}`, k.criteria[c].no]),
+          [L ? "Luas di dalam PRF (ha)" : "Area inside PRF (ha)", r1(k.prfHa)],
+          ...Object.entries(k.risk).map(([name, v]) => [`Risk_Dist: ${name}`, v.count]),
+          ...Object.entries(k.registered).map(([name, v]) => [`Registered: ${name}`, `${v.count} · ${Math.round(v.areaHa)} ha`]),
+        );
+      } else if (s) {
         rows.push(
           [t.plots, s.totalPlots], [t.area, Math.round(s.totalAreaHa)], [t.compliant, pct(s.comply.yes, s.totalPlots)], [t.nc, s.comply.no],
           ...LETTERS.map((l) => [`${L ? "Kelas" : "Class"} ${l}`, `${s.mitigation[l].count} · ${Math.round(s.mitigation[l].areaHa)} ha`]),
@@ -366,6 +377,7 @@ function systemPrompt(d: Data, ctx: AssistantContext) {
     "Answer only the user's latest message.",
     "Use the dashboard's own words: in Indonesian say \"plot\" (never \"persil\"), \"PKS\", \"patuh\" / \"tidak patuh\", \"kelas A–F\"; in English \"plot\", \"mill\", \"compliant\" / \"non-compliant\".",
     "A–F: A compliant/low-risk village, B compliant/medium, C compliant/high (enhanced checks), D non-compliant/low (likely mapping error, pending review), E non-compliant/medium (corrective plan), F non-compliant/high (excluded).",
+    "Group KTN is different: its plots and their analysis come from KTN itself (Agriplot), not Earthline. KTN plots have no A–F class, village risk or deforestation-by-year — zeros there mean 'not classified', never 'none'. KTN's own criteria are DF_Comp, LB_Comp (non-compliant = unregistered land) and PRF_Comp (the final status follows PRF), plus Risk_Dist and land registration. Say this when KTN is involved.",
     "Questions unrelated to this dashboard's data: say briefly that you can only answer about the supply-chain data shown here.",
     `Data as of ${DATA_AS_OF}. ${here} Groups available: ${groups}.`,
   ].join("\n");

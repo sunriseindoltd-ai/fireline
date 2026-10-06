@@ -227,6 +227,7 @@ function typeLabel(raw: string, t: Copy): string {
   if (raw === "Independent Smallholder") return t.typeIndependent;
   if (raw === "Company") return t.typeCompany;
   if (raw === "Scheme Smallholder") return t.typeScheme;
+  if (raw === "Field Boundary") return t.typeFieldBoundary;
   return raw;
 }
 
@@ -284,7 +285,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
 
   const canPresent = role === "admin" || role === "client";
   // Auditors are outside the company: they may look, not take files away.
-  const canDownload = role !== "auditor";
+  const canDownload = role !== "auditor" && role !== "viewer";
   const [presentStored, setPresent] = usePersistentState("palmtrace.present", false);
   const present = canPresent && presentStored;
   const [mapFocus, setMapFocus] = useState(false);
@@ -664,11 +665,11 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
               {t.requestsNav}
             </Link>
           ) : null}
-          {role === "admin" && !present ? (
+          {(role === "admin" || role === "viewer") && !present ? (
             <label className="tenant-switch">
               <span>{t.clientLabel}</span>
               <select value={tenant} onChange={(e) => void switchTenant(e.target.value as Tenant)}>
-                {TENANTS.map((tn) => (
+                {TENANTS.filter((tn) => role === "admin" || tn.commodity === "palm").map((tn) => (
                   <option key={tn.id} value={tn.id}>
                     {tn.label}
                   </option>

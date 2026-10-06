@@ -101,9 +101,55 @@ function bnsHasRealIssue(p) {
   return DEF_YEARS.some(([col]) => num(p[col]) >= BNS_DEFORESTATION_NOISE_THRESHOLD_HA);
 }
 
+// Plots analysed by the supplier, not by Earthline (KTN's Agriplot drop,
+// Analysis = "KTN (Agriplot)", scripts/prepare-ktn-plots.py): no A–F class
+// or village risk, but KTN's own criteria — kept in their own block so the
+// Summary can show them instead of the Earthline charts. Mirrored in
+// src/lib/eudr-aggregates.server.ts (KtnStats).
+const KTN_CRITERIA = [["DF", "DF_Comp"], ["LB", "LB_Comp"], ["PRF", "PRF_Comp"]];
+function emptyKtn() {
+  return {
+    plots: 0,
+    areaHa: 0,
+    criteria: Object.fromEntries(KTN_CRITERIA.map(([k]) => [k, { yes: 0, no: 0, noHa: 0 }])),
+    risk: {},
+    registered: {},
+    types: {},
+    prfHa: 0,
+    forestGfcHa: 0,
+    forestTmfHa: 0,
+  };
+}
+function addTo(rec, key, ha) {
+  const k = key || "—";
+  rec[k] ??= { count: 0, areaHa: 0 };
+  rec[k].count += 1;
+  rec[k].areaHa += ha;
+}
+function accumulateKtn(stats, p) {
+  const k = (stats.ktn ??= emptyKtn());
+  const ha = hectarage(p);
+  k.plots += 1;
+  k.areaHa += ha;
+  for (const [key, col] of KTN_CRITERIA) {
+    if (p[col] === "Comply") k.criteria[key].yes += 1;
+    else if (p[col] === "Non Comply") {
+      k.criteria[key].no += 1;
+      k.criteria[key].noHa += ha;
+    }
+  }
+  addTo(k.risk, String(p.Risk_Dist ?? "").trim(), ha);
+  addTo(k.registered, String(p.Registered ?? "").trim(), ha);
+  addTo(k.types, String(p.TYPE ?? "").trim(), ha);
+  k.prfHa += num(p.PRF_Ar);
+  k.forestGfcHa += num(p.Forest_GFC);
+  k.forestTmfHa += num(p.Forest_TMF);
+}
+
 // Matches src/lib/eudr-aggregates.server.ts's getEudrSummary per-feature
 // accumulation exactly (modulo the BNS-only adjustment above).
 function accumulate(stats, p, isBns) {
+  if (String(p.Analysis ?? "").startsWith("KTN")) accumulateKtn(stats, p);
   stats.totalPlots += 1;
   const ha = hectarage(p);
   stats.totalAreaHa += ha;

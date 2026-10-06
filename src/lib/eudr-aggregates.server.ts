@@ -9,7 +9,61 @@ export type EudrSummary = {
   deforestationByYear: Record<string, number>;
   forestOverlap: { HL: number; HP: number; HPK: number; HPT: number };
   plotType: Record<string, { count: number; areaHa: number }>;
+  /** Plots analysed by the supplier (KTN, Agriplot) rather than Earthline —
+   * their own criteria; absent when none are in scope. */
+  ktn?: KtnStats;
 };
+
+type Tally = Record<string, { count: number; areaHa: number }>;
+export type KtnStats = {
+  plots: number;
+  areaHa: number;
+  /** DF_Comp / LB_Comp / PRF_Comp: plot counts, and area of the non-compliant ones. */
+  criteria: Record<"DF" | "LB" | "PRF", { yes: number; no: number; noHa: number }>;
+  /** Risk_Dist as delivered ("Low Risk", "Standard Risk", "Medium Risk"). */
+  risk: Tally;
+  /** Registered: land title as delivered (SHM, HGU, Unregistered, …). */
+  registered: Tally;
+  types: Tally;
+  prfHa: number;
+  forestGfcHa: number;
+  forestTmfHa: number;
+};
+
+function addTally(target: Tally, src: Tally) {
+  for (const [k, v] of Object.entries(src)) {
+    target[k] ??= { count: 0, areaHa: 0 };
+    target[k].count += v.count;
+    target[k].areaHa += v.areaHa;
+  }
+}
+
+function addKtn(target: EudrSummary, src: KtnStats) {
+  const k = (target.ktn ??= {
+    plots: 0,
+    areaHa: 0,
+    criteria: { DF: { yes: 0, no: 0, noHa: 0 }, LB: { yes: 0, no: 0, noHa: 0 }, PRF: { yes: 0, no: 0, noHa: 0 } },
+    risk: {},
+    registered: {},
+    types: {},
+    prfHa: 0,
+    forestGfcHa: 0,
+    forestTmfHa: 0,
+  });
+  k.plots += src.plots;
+  k.areaHa += src.areaHa;
+  for (const c of ["DF", "LB", "PRF"] as const) {
+    k.criteria[c].yes += src.criteria[c].yes;
+    k.criteria[c].no += src.criteria[c].no;
+    k.criteria[c].noHa += src.criteria[c].noHa;
+  }
+  addTally(k.risk, src.risk);
+  addTally(k.registered, src.registered);
+  addTally(k.types, src.types);
+  k.prfHa += src.prfHa;
+  k.forestGfcHa += src.forestGfcHa;
+  k.forestTmfHa += src.forestTmfHa;
+}
 
 // Only Permata KIM's plots have been uploaded so far — most mills across
 // every other refinery/chain have no prepared stats entry at all. Silently
@@ -114,6 +168,7 @@ function addInto(target: EudrSummary, src: EudrSummary) {
     target.plotType[t].count += src.plotType[t].count;
     target.plotType[t].areaHa += src.plotType[t].areaHa;
   }
+  if (src.ktn) addKtn(target, src.ktn);
 }
 
 // Summing precomputed per-mill numbers is fast enough that this cache is

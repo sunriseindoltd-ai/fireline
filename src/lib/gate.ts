@@ -1,7 +1,7 @@
 import { createHash, scryptSync, timingSafeEqual } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { getCookie, setCookie } from "@tanstack/react-start/server";
-import { DEFAULT_TENANT, isTenant, type Tenant } from "@/lib/tenants";
+import { DEFAULT_TENANT, isSoyTenant, isTenant, type Tenant } from "@/lib/tenants";
 
 export const GATE_COOKIE = "kanopi_gate";
 const MAX_AGE = 60 * 60 * 12;
@@ -13,8 +13,10 @@ function secretKey() {
   return new TextEncoder().encode(s);
 }
 
-export type GateRole = "admin" | "client" | "supplier" | "auditor";
-const KNOWN_ROLES: readonly GateRole[] = ["admin", "client", "supplier", "auditor"];
+// "viewer": every PalmTrace client's data (switches between palm tenants
+// like an admin), view-only — no downloads, no requests inbox, never SoyTrace.
+export type GateRole = "admin" | "client" | "supplier" | "auditor" | "viewer";
+const KNOWN_ROLES: readonly GateRole[] = ["admin", "client", "supplier", "auditor", "viewer"];
 
 type GateAccount = { user: string; password: string };
 
@@ -31,7 +33,7 @@ type GateAccount = { user: string; password: string };
  * that role is meant for people outside the company. Supplier logins aren't
  * here — see SUPPLIER_ACCOUNTS below.
  */
-export function gateCredentials(): Record<Exclude<GateRole, "supplier">, GateAccount[]> {
+export function gateCredentials(): Record<Exclude<GateRole, "supplier" | "viewer">, GateAccount[]> {
   return {
     admin: [
       {
@@ -189,6 +191,23 @@ const ADMIN_HASHED_ACCOUNTS: readonly { user: string; salt: string; hash: string
   { user: "admin123", salt: "22c4ef49490d9814da275f765dae94f9", hash: "1077b600c6c44fb177155a96cebe8bdf4f0aba713900c9774865f5e3774aee6b" },
 ];
 
+/**
+ * PalmTrace-only, view-only logins (role "viewer", user decision 6 Oct 2026):
+ * all palm clients' data, no downloads, no SoyTrace. Hash only, like the rest.
+ */
+const VIEWER_ACCOUNTS: readonly { user: string; salt: string; hash: string }[] = [
+  { user: "alexcueladm", salt: "ab50cdcaffa0bb10d33841bce37b5e82", hash: "51a0a9a55840b4f69737c2595a57f51f803b8f4028dd7b6587241c5521c20717" },
+];
+
+function viewerAccount(user: string) {
+  return VIEWER_ACCOUNTS.find((a) => a.user === user);
+}
+
+/** Tenants a viewer may switch to: the palm ones only. */
+export function viewerMayUse(tenant: Tenant): boolean {
+  return !isSoyTenant(tenant);
+}
+
 function matchesSupplierHash(password: string, account: { salt: string; hash: string }) {
   const hash = scryptSync(password, Buffer.from(account.salt, "hex"), 32);
   return timingSafeEqual(hash, Buffer.from(account.hash, "hex"));
@@ -244,6 +263,8 @@ export function matchGateCredentials(
   }
   const master = ADMIN_HASHED_ACCOUNTS.find((a) => safeEqual(user, a.user));
   if (master && matchesSupplierHash(password, master)) return { role: "admin", tenant: DEFAULT_TENANT };
+  const viewer = viewerAccount(user);
+  if (viewer && matchesSupplierHash(password, viewer)) return { role: "viewer", tenant: DEFAULT_TENANT };
   const supplier = supplierAccount(user);
   if (supplier && matchesSupplierHash(password, supplier)) return { role: "supplier", tenant: DEFAULT_TENANT };
   const tenantClient = tenantClientAccount(user);
@@ -292,6 +313,10 @@ function tenantForSession(user: string, role: GateRole, claim: unknown): Tenant 
   const tenantClient = tenantClientAccount(user);
   if (tenantClient) return role === "client" ? tenantClient.tenant : null;
   if (role === "admin") return isTenant(claim) ? claim : DEFAULT_TENANT;
+  if (role === "viewer") {
+    if (!viewerAccount(user)) return null;
+    return isTenant(claim) && viewerMayUse(claim) ? claim : DEFAULT_TENANT;
+  }
   return DEFAULT_TENANT;
 }
 

@@ -20,7 +20,7 @@ export const Route = createFileRoute("/docs/$")({
         if (!doc) return new Response("Not found", { status: 404 });
 
         const download = url.searchParams.get("download") === "1";
-        if (download && session.role === "auditor") return new Response("Forbidden", { status: 403 });
+        if (download && (session.role === "auditor" || session.role === "viewer")) return new Response("Forbidden", { status: 403 });
         const disposition = `${download ? "attachment" : "inline"}; filename="${doc.file}"`;
 
         const { presignPrivateGet, readPrivateFile } = await import("@/lib/kanopi-data.server");

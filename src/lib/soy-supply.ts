@@ -188,6 +188,10 @@ export const US_STATES: Record<string, string> = {
   MS: "Mississippi", NC: "North Carolina", ND: "North Dakota", NE: "Nebraska", NJ: "New Jersey", NY: "New York",
   OH: "Ohio", OK: "Oklahoma", PA: "Pennsylvania", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee",
   VA: "Virginia", WI: "Wisconsin",
+  // The rest of the lower 48 (all US soybean fields reach a few of them).
+  AZ: "Arizona", CA: "California", CO: "Colorado", CT: "Connecticut", DC: "District of Columbia", FL: "Florida", ID: "Idaho",
+  MA: "Massachusetts", ME: "Maine", MT: "Montana", NH: "New Hampshire", NM: "New Mexico", NV: "Nevada", OR: "Oregon",
+  RI: "Rhode Island", TX: "Texas", UT: "Utah", VT: "Vermont", WA: "Washington", WV: "West Virginia", WY: "Wyoming",
 }; // prettier-ignore
 export const stateName = (st: string | null | undefined) => (st ? (US_STATES[st] ? `${US_STATES[st]} (${st})` : st) : "—");
 
