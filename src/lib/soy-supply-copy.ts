@@ -208,7 +208,7 @@ const en = {
     },
     {
       tab: "summary",
-      target: ".soy-side",
+      target: ".soy-related",
       title: "Pick a scope",
       body: "Choose a crushing plant, then tick the elevators and third parties related to it — or leave everything unticked for the whole supply chain. Ticks are combined and each field is counted once. The totals, charts and tables follow it.",
     },
@@ -705,7 +705,7 @@ const id: SoySupplyCopy = {
     },
     {
       tab: "summary",
-      target: ".soy-side",
+      target: ".soy-related",
       title: "Pilih cakupan",
       body: "Pilih pabrik crushing, lalu centang elevator dan pihak ketiga yang terkait — atau biarkan semuanya kosong untuk seluruh rantai pasok. Centang digabung dan tiap ladang dihitung sekali. Angka total, grafik, dan tabel ikut berubah.",
     },

@@ -5226,39 +5226,62 @@ html.soy-report-open body {
   color: var(--color-fg-2);
 }
 
-/* Summary sidebar: crushing plants, then the elevators and third parties related to them. */
+/* Summary: crushing plants and the related elevators / third parties on the left edge, as two cards
+   in a two-row grid — the plants card is as tall as the title beside it, the related card starts level
+   with the figures. */
 .soy-page-wide {
-  max-width: 1600px;
+  max-width: none;
+  margin: 0;
+  padding-left: 16px;
+  padding-right: clamp(16px, 2vw, 28px);
 }
 .soy-split {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 28px;
+  grid-template-columns: 292px minmax(0, 1fr);
+  grid-template-areas:
+    "plants head"
+    "related body";
+  column-gap: 24px;
+  row-gap: 16px;
   align-items: start;
 }
-.soy-main {
-  min-width: 0;
+.soy-plants {
+  grid-area: plants;
+  align-self: stretch;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 12px 12px 8px;
+  overflow: hidden;
 }
-.soy-side {
+.soy-head {
+  grid-area: head;
+  min-width: 0;
+  min-height: 184px;
+}
+.soy-head .summary-head {
+  margin-bottom: 10px;
+}
+.soy-related {
+  grid-area: related;
   position: sticky;
   top: 16px;
   max-height: calc(100vh - var(--header-h) - 32px);
   overflow-y: auto;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-  padding: 18px 16px 16px;
+  padding: 16px 14px 14px;
   scrollbar-width: thin;
+}
+.soy-body {
+  grid-area: body;
+  min-width: 0;
 }
 .soy-side-toggle {
   display: none;
 }
-.soy-side section + section {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-line-soft, var(--color-line));
-}
-.soy-side h2 {
-  margin: 0 0 8px;
+.soy-plants h2,
+.soy-related h2 {
+  margin: 0 0 6px;
   font: 600 13px var(--font-display);
   letter-spacing: -0.005em;
   color: var(--color-fg);
@@ -5272,7 +5295,7 @@ html.soy-report-open body {
 .side-head .btn-text {
   padding: 2px 8px;
   font-size: 12.5px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .side-note {
   margin: 6px 0 10px;
@@ -5285,7 +5308,7 @@ html.soy-report-open body {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 .side-plants button {
   width: 100%;
@@ -5293,11 +5316,11 @@ html.soy-report-open body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 4px 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   background: transparent;
-  font: 500 13.5px var(--font-sans);
+  font: 500 13px var(--font-sans);
   color: var(--color-fg-2);
   text-align: left;
   cursor: pointer;
@@ -5435,11 +5458,25 @@ html.soy-report-open body {
   font-size: 12.5px;
 }
 @media (max-width: 960px) {
+  .soy-head {
+    min-height: 0;
+  }
+  .soy-page-wide {
+    padding-left: clamp(16px, 3vw, 36px);
+  }
   .soy-split {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    grid-template-areas:
+      "head"
+      "plants"
+      "related"
+      "body";
+    row-gap: 12px;
   }
-  .soy-side {
+  .soy-plants {
+    align-self: auto;
+  }
+  .soy-related {
     position: static;
     max-height: none;
     padding: 12px 14px;

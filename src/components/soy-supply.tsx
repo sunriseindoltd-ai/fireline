@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiTile } from "@/components/kpi-tile";
-import { SoySide, type SidePlant } from "@/components/soy-side";
+import { SoyPlants, SoyRelated, type SidePlant } from "@/components/soy-side";
 import { SoyNationalView, type SoyNational } from "@/components/soy-national";
 import { loadNonCompliant, type SoyFeature } from "@/components/soy-supply-map";
 import type { OtherPlant } from "@/components/soy-supply-map";
@@ -253,8 +253,8 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
 
   return (
     <div className="soy-split">
-      <SoySide data={data} c={c} lang={lang} plants={plants} plantSel={plantSel} setPlantSel={setPlantSel} sel={sel} setSel={setSel} catchments={catchments} />
-      <div className="soy-main">
+      <SoyPlants c={c} plants={plants} plantSel={plantSel} setPlantSel={setPlantSel} />
+      <div className="soy-head">
         <div className="summary-head">
           <div>
             <h1>{c.supplyTitle}</h1>
@@ -266,7 +266,20 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
             </button>
           </div>
         </div>
-
+        {pending ? null : (
+          <p className="soy-showing">
+            <span>{c.sideShowing}</span>
+            <b>{plantName ? `${plantName} · ${selLabel}` : selLabel}</b>
+            {sel.length ? (
+              <button type="button" className="btn-text" onClick={() => setSel([])}>
+                × {c.sideClear}
+              </button>
+            ) : null}
+          </p>
+        )}
+      </div>
+      <SoyRelated data={data} c={c} lang={lang} plants={plants} plantSel={plantSel} sel={sel} setSel={setSel} catchments={catchments} />
+      <div className="soy-body">
         {pending ? (
           <section className="chart-card supply-pending">
             <h3>{pending.name}</h3>
@@ -277,16 +290,6 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
           </section>
         ) : (
           <>
-            <p className="soy-showing">
-              <span>{c.sideShowing}</span>
-              <b>{plantName ? `${plantName} · ${selLabel}` : selLabel}</b>
-              {sel.length ? (
-                <button type="button" className="btn-text" onClick={() => setSel([])}>
-                  × {c.sideClear}
-                </button>
-              ) : null}
-            </p>
-
             <div className="kpi-row soy-supply-kpis">
               <KpiTile value={countF(tot.fields)} label={c.kpiFields} hint={c.kpiFieldsHint} />
               <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />

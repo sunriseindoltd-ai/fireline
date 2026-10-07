@@ -21,13 +21,36 @@ type Props = {
   catchments: Map<string, Catchment>;
 };
 
+/** The crushing plants — a compact list, as tall as the page title beside it. */
+export function SoyPlants({ c, plants, plantSel, setPlantSel }: Pick<Props, "c" | "plants" | "plantSel" | "setPlantSel">) {
+  return (
+    <section className="soy-plants" aria-label={c.sidePlants}>
+      <h2>{c.sidePlants}</h2>
+      <ul className="side-plants">
+        <li>
+          <button type="button" className={!plantSel ? "on" : ""} aria-pressed={!plantSel} onClick={() => setPlantSel("")}>
+            {c.sideAllPlants}
+          </button>
+        </li>
+        {plants.map((p) => (
+          <li key={p.id}>
+            <button type="button" className={plantSel === p.id ? "on" : ""} aria-pressed={plantSel === p.id} onClick={() => setPlantSel(p.id)}>
+              {p.name}
+              {p.hasData ? null : <i className="supply-soon">{c.plantSoon}</i>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /**
- * The Summary's scope, as a sidebar: the crushing plants, and under them the
- * elevators and third parties related to the chosen plant (all plants when
+ * The elevators and third parties related to the chosen plant (all plants when
  * none is chosen). Nothing ticked = the whole supply chain; ticks combine and
  * each field is counted once. A single third party is viewed on its own.
  */
-export function SoySide({ data, c, lang, plants, plantSel, setPlantSel, sel, setSel, catchments }: Props) {
+export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catchments }: Omit<Props, "setPlantSel">) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const pending = plants.find((p) => p.id === plantSel && !p.hasData);
@@ -41,7 +64,6 @@ export function SoySide({ data, c, lang, plants, plantSel, setPlantSel, sel, set
     return tps.filter((e) => [e.company, e.county, e.state].filter(Boolean).join(" ").toLowerCase().includes(needle));
   }, [tps, q]);
   const siteIds = admSiteIds(data).filter((id) => sites.some((e) => e.id === id));
-  const withData = plants.filter((p) => p.hasData).length;
   const tpOpen = sel.some((id) => /^tp\d+$/.test(id));
   const nc = (id: string) => catchments.get(id)?.nonCompliant.fields ?? 0;
 
@@ -61,32 +83,12 @@ export function SoySide({ data, c, lang, plants, plantSel, setPlantSel, sel, set
   );
 
   return (
-    <aside className="soy-side" aria-label={c.scopeLabel}>
+    <aside className="soy-related" aria-label={c.sideRelated}>
       <button type="button" className="soy-side-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         {c.sideToggle}
         {sel.length ? <i>{sel.length}</i> : null}
       </button>
       <div className={`soy-side-body ${open ? "open" : ""}`}>
-        <section>
-          <h2>{c.sidePlants}</h2>
-          <ul className="side-plants">
-            <li>
-              <button type="button" className={!plantSel ? "on" : ""} aria-pressed={!plantSel} onClick={() => setPlantSel("")}>
-                {c.sideAllPlants}
-              </button>
-            </li>
-            {plants.map((p) => (
-              <li key={p.id}>
-                <button type="button" className={plantSel === p.id ? "on" : ""} aria-pressed={plantSel === p.id} onClick={() => setPlantSel(p.id)}>
-                  {p.name}
-                  {p.hasData ? null : <i className="supply-soon">{c.plantSoon}</i>}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <p className="side-note">{fill(c.plantsWithData, { n: withData, total: plants.length })}</p>
-        </section>
-
         <section>
           <div className="side-head">
             <h2>{c.sideRelated}</h2>
