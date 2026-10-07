@@ -1,0 +1,158 @@
+import { useMemo, useState } from "react";
+import type { Lang } from "@/lib/copy";
+import { fill, formatCount } from "@/lib/format";
+import type { SoySupplyCopy } from "@/lib/soy-supply-copy";
+import { admSiteIds, toggleSel, type Catchment, type SupplyData } from "@/lib/soy-supply";
+
+/** A crushing plant in the list: Quincy has its supply chain, the others wait for ADM's data. */
+export type SidePlant = { id: string; name: string; hasData: boolean };
+
+type Props = {
+  data: SupplyData;
+  c: SoySupplyCopy;
+  lang: Lang;
+  plants: SidePlant[];
+  /** "" = all plants. */
+  plantSel: string;
+  setPlantSel: (id: string) => void;
+  /** Ticked catchment ids; none = the whole chain. */
+  sel: string[];
+  setSel: (ids: string[]) => void;
+  catchments: Map<string, Catchment>;
+};
+
+/**
+ * The Summary's scope, as a sidebar: the crushing plants, and under them the
+ * elevators and third parties related to the chosen plant (all plants when
+ * none is chosen). Nothing ticked = the whole supply chain; ticks combine and
+ * each field is counted once. A single third party is viewed on its own.
+ */
+export function SoySide({ data, c, lang, plants, plantSel, setPlantSel, sel, setSel, catchments }: Props) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const pending = plants.find((p) => p.id === plantSel && !p.hasData);
+  const forPlant = (e: { plants?: string[] }) => !plantSel || (e.plants ?? ["quincy"]).includes(plantSel);
+  const showDirect = !plantSel || plantSel === "quincy";
+  const sites = useMemo(() => data.admElevators.filter((e) => e.radiusM && forPlant(e)), [data, plantSel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tps = useMemo(() => data.thirdParty.filter(forPlant), [data, plantSel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tpMatches = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return tps;
+    return tps.filter((e) => [e.company, e.county, e.state].filter(Boolean).join(" ").toLowerCase().includes(needle));
+  }, [tps, q]);
+  const siteIds = admSiteIds(data).filter((id) => sites.some((e) => e.id === id));
+  const withData = plants.filter((p) => p.hasData).length;
+  const tpOpen = sel.some((id) => /^tp\d+$/.test(id));
+  const nc = (id: string) => catchments.get(id)?.nonCompliant.fields ?? 0;
+
+  const row = (id: string, label: string, sub?: string) => (
+    <label key={id} className={`side-row ${sel.includes(id) ? "on" : ""}`}>
+      <input type="checkbox" checked={sel.includes(id)} onChange={() => setSel(toggleSel(sel, id))} />
+      <span className="side-label">
+        {label}
+        {sub ? <small>{sub}</small> : null}
+      </span>
+      {nc(id) > 0 ? (
+        <b className="side-nc tabular-nums" title={c.colNcN}>
+          {formatCount(nc(id), lang)}
+        </b>
+      ) : null}
+    </label>
+  );
+
+  return (
+    <aside className="soy-side" aria-label={c.scopeLabel}>
+      <button type="button" className="soy-side-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {c.sideToggle}
+        {sel.length ? <i>{sel.length}</i> : null}
+      </button>
+      <div className={`soy-side-body ${open ? "open" : ""}`}>
+        <section>
+          <h2>{c.sidePlants}</h2>
+          <ul className="side-plants">
+            <li>
+              <button type="button" className={!plantSel ? "on" : ""} aria-pressed={!plantSel} onClick={() => setPlantSel("")}>
+                {c.sideAllPlants}
+              </button>
+            </li>
+            {plants.map((p) => (
+              <li key={p.id}>
+                <button type="button" className={plantSel === p.id ? "on" : ""} aria-pressed={plantSel === p.id} onClick={() => setPlantSel(p.id)}>
+                  {p.name}
+                  {p.hasData ? null : <i className="supply-soon">{c.plantSoon}</i>}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="side-note">{fill(c.plantsWithData, { n: withData, total: plants.length })}</p>
+        </section>
+
+        <section>
+          <div className="side-head">
+            <h2>{c.sideRelated}</h2>
+            {sel.length ? (
+              <button type="button" className="btn-text" onClick={() => setSel([])}>
+                {c.sideClear}
+              </button>
+            ) : null}
+          </div>
+          {pending ? (
+            <p className="side-note">{c.sidePending}</p>
+          ) : (
+            <>
+              <p className="side-note">{c.sideHint}</p>
+
+              {showDirect ? (
+                <fieldset className="side-group">
+                  <legend>{c.sideDirect}</legend>
+                  {row("q40", c.comboQ40)}
+                  {row("q80", c.comboQ80)}
+                  {row("q80r", c.scopeQ80r)}
+                </fieldset>
+              ) : null}
+
+              {sites.length ? (
+                <fieldset className="side-group">
+                  <legend>
+                    {c.scopeAdm} · {sites.length}
+                  </legend>
+                  <div className="side-quick">
+                    <button type="button" onClick={() => setSel([...new Set([...sel.filter((x) => !siteIds.includes(x)), ...siteIds])])} disabled={siteIds.every((id) => sel.includes(id))}>
+                      {c.comboAllSites}
+                    </button>
+                    <button type="button" onClick={() => setSel(sel.filter((x) => !siteIds.includes(x)))} disabled={!siteIds.some((id) => sel.includes(id))}>
+                      {c.comboNoSites}
+                    </button>
+                  </div>
+                  {sites.map((e) => row(e.id, [e.city ?? e.name, e.state].filter(Boolean).join(", ")))}
+                </fieldset>
+              ) : null}
+
+              {tps.length ? (
+                <fieldset className="side-group">
+                  <legend>
+                    {c.scopeTp} · {tps.length}
+                  </legend>
+                  {row("tp", c.sideTpAll, formatCount(tps.length, lang))}
+                  {row("tpcore", c.scopeTp56, formatCount(tps.filter((e) => e.core).length, lang))}
+                  <details className="side-tp" open={tpOpen}>
+                    <summary>{c.sideTpPick}</summary>
+                    <input className="side-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={c.sideSearchTp} aria-label={c.sideSearchTp} />
+                    <div className="side-tp-list">
+                      {tpMatches.length ? (
+                        tpMatches.map((e) => row(e.id, e.company ?? e.id, [e.county, e.state].filter(Boolean).join(", ")))
+                      ) : (
+                        <p className="side-note">{c.sideNoTp}</p>
+                      )}
+                    </div>
+                    <p className="side-note">{c.sideOnlyOne}</p>
+                  </details>
+                </fieldset>
+              ) : null}
+            </>
+          )}
+        </section>
+      </div>
+    </aside>
+  );
+}

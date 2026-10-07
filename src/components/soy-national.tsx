@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { KpiTile } from "@/components/kpi-tile";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa } from "@/lib/format";
@@ -29,12 +30,15 @@ export function SoyNationalView({ nat, data, c, lang }: { nat: SoyNational; data
   const acF = (n: number) => formatAcres(n, lang);
   const pctF = (p: number) => formatSharePct(p, lang);
   const all8 = nat.soyYears.find((y) => y.years === 8)?.fields ?? 0;
+  // The 25 largest states first (as many as the county list); the long tail on request.
+  const [allStates, setAllStates] = useState(false);
+  const states = allStates ? nat.states : nat.states.slice(0, 25);
 
   return (
     <section className="chart-card soy-national">
       <h3>{c.natTitle}</h3>
       <p className="chart-note">{fill(c.natIntro, { states: countF(nat.states.length), counties: countF(nat.counties) })}</p>
-      <div className="kpi-row compact">
+      <div className="kpi-row soy-nat-kpis">
         <KpiTile value={countF(nat.fields)} label={c.natFields} sub={fill(c.natAll8, { n: countF(all8), p: pctF(pct(all8, nat.fields)) })} />
         <KpiTile value={acF(nat.acres)} label={c.natAcres} sub={formatHa(nat.acres * AC_TO_HA, lang)} />
         <KpiTile tone="comply" value={pctF(pct(chainAcres, nat.acres))} label={c.natShare} hint={c.natShareHint} sub={acF(chainAcres)} />
@@ -54,7 +58,7 @@ export function SoyNationalView({ nat, data, c, lang }: { nat: SoyNational; data
                 </tr>
               </thead>
               <tbody>
-                {nat.states.map((s) => {
+                {states.map((s) => {
                   const inChain = chainByState.get(s.state) ?? 0;
                   return (
                     <tr key={s.state}>
@@ -69,6 +73,11 @@ export function SoyNationalView({ nat, data, c, lang }: { nat: SoyNational; data
               </tbody>
             </table>
           </div>
+          {nat.states.length > 25 ? (
+            <button type="button" className="btn-text soy-more" onClick={() => setAllStates((v) => !v)}>
+              {allStates ? c.showFewer : fill(c.showAllN, { n: countF(nat.states.length) })}
+            </button>
+          ) : null}
         </div>
         <div>
           <h3 className="soy-subhead">{c.natCounties}</h3>

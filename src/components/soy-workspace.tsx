@@ -26,7 +26,7 @@ import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/s
 import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
 import { SoyMapView } from "@/components/soy-mapview";
 import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
-import type { SupplyData } from "@/lib/soy-supply";
+import { idsFromScope, scopeForSel, type SupplyData } from "@/lib/soy-supply";
 import { soySupplyCopy } from "@/lib/soy-supply-copy";
 import { usePersistentState } from "@/lib/use-persistent";
 import { TENANTS, type Tenant } from "@/lib/tenants";
@@ -105,6 +105,18 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const supplyCatchments = useMemo(() => (supply ? new Map(supply.catchments.map((k) => [k.id, k])) : null), [supply]);
   // A scope remembered from an earlier data version may no longer exist.
   const scope = !supplyCatchments || supplyCatchments.has(scopeStored) || scopeStored.startsWith("combo:") ? scopeStored : "all";
+  // The Summary's sidebar selection (ticked catchment ids, none = the whole chain). The map's scope
+  // is derived from it; when the map changes the scope on its own, the ticks follow the scope.
+  const [selStored, setSelStored] = usePersistentState<string[]>("soytrace.sel", []);
+  const [plantSel, setPlantSel] = usePersistentState<string>("soytrace.plant", "");
+  const sel = useMemo(() => {
+    if (!supply) return [];
+    return scopeForSel(selStored, supply) === scope ? selStored : idsFromScope(scope, supply);
+  }, [selStored, scope, supply]);
+  const setSel = (ids: string[]) => {
+    setSelStored(ids);
+    if (supply) setScope(scopeForSel(ids, supply));
+  };
   const navigate = useNavigate();
   const [data, setData] = useState<SoyData | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -311,7 +323,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               otherPlants={otherPlants}
             />
           ) : (
-            <div className="page soy-page">
+            <div className={`page soy-page ${tab === "summary" ? "soy-page-wide" : ""}`}>
               {tab === "summary" ? (
                 <SoySupplyView
                   data={supply}
@@ -324,6 +336,11 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   present={present}
                   onOpenMap={() => setTab("map")}
                   national={national}
+                  otherPlants={otherPlants}
+                  sel={sel}
+                  setSel={setSel}
+                  plantSel={plantSel}
+                  setPlantSel={setPlantSel}
                 />
               ) : (
                 <SoyDocsView data={supply} c={ssc} lang={lang} present={present} />

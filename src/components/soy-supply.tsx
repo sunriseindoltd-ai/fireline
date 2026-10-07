@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiTile } from "@/components/kpi-tile";
+import { SoySide, type SidePlant } from "@/components/soy-side";
 import { SoyNationalView, type SoyNational } from "@/components/soy-national";
 import { loadNonCompliant, type SoyFeature } from "@/components/soy-supply-map";
+import type { OtherPlant } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa, formatLarge } from "@/lib/format";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, type SoyCopy } from "@/lib/soy-copy";
@@ -11,14 +13,16 @@ import {
   AC_TO_HA,
   FIELD_COLOR,
   NC_COLOR,
-  comboScope,
   comboTotals,
+  idsFromScope,
   inScope,
+  statsKey,
   stateName,
   pct,
   type Catchment,
   type ComboTotals,
   type SupplyData,
+  type SupplyNcStats,
 } from "@/lib/soy-supply";
 
 type Common = {
@@ -34,10 +38,15 @@ type Common = {
   onOpenMap: () => void;
   /** All US soybean fields (national.json), when loaded. */
   national?: SoyNational | null;
+  /** ADM's other crushing plants: listed beside Quincy until their catchments arrive. */
+  otherPlants?: OtherPlant[];
+  /** The sidebar's selection (ticked catchment ids; none = the whole chain) and chosen plant ("" = all). */
+  sel: string[];
+  setSel: (ids: string[]) => void;
+  plantSel: string;
+  setPlantSel: (id: string) => void;
 };
 
-/** Level 1 and the three supplier types (level 2) — the tabs above the figures. */
-const TIERS = ["all", "direct", "adm", "tp"] as const;
 /** Rows of the true-scale table. */
 
 function tierLabel(id: string, c: SoySupplyCopy) {
@@ -65,43 +74,59 @@ export function catchmentLabel(id: string, data: SupplyData, c: SoySupplyCopy) {
   return id;
 }
 
-function ScopeTabs({
-  scope,
-  setScope,
-  data,
-  c,
-}: {
-  scope: string;
-  setScope: (id: string) => void;
-  data: SupplyData;
-  c: SoySupplyCopy;
-}) {
-  const single = !(TIERS as readonly string[]).includes(scope);
+/** The largest states, the rest folded into one "other states" row. */
+function topStates(rows: { state: string; fields: number }[], n: number) {
+  const sorted = [...rows].sort((a, b) => b.fields - a.fields);
+  if (sorted.length <= n + 1) return sorted.map((r) => ({ ...r, n: 1 }));
+  const rest = sorted.slice(n);
+  return [
+    ...sorted.slice(0, n).map((r) => ({ ...r, n: 1 })),
+    { state: "other", fields: rest.reduce((s, r) => s + r.fields, 0), n: rest.length },
+  ];
+}
+
+/** ADM's non-compliant fields, loaded when a combination needs them. */
+function useNcFeatures(enabled: boolean) {
+  const [nc, setNc] = useState<SoyFeature[] | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    void loadNonCompliant()
+      .then((fc) => live && setNc(fc.features))
+      .catch(() => live && setNc([]));
+    return () => {
+      live = false;
+    };
+  }, [enabled]);
+  return nc;
+}
+
+/** The non-compliant statistics of a combination, counted from the fields themselves. */
+function ncForSelection(features: SoyFeature[], sel: string[], tpl: SupplyNcStats): SupplyNcStats {
+  const inside = features.filter((f) => sel.some((id) => inScope(id, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") })));
+  const tally = (key: string, none: string) =>
+    inside.reduce<Record<string, number>>((acc, f) => {
+      const v = String(f.properties[key] ?? none);
+      acc[v] = (acc[v] ?? 0) + 1;
+      return acc;
+    }, {});
+  return {
+    ...tpl,
+    fields: inside.length,
+    byYear: tpl.byYear.map(({ year }) => ({ year, fields: inside.filter((f) => Number(f.properties.y) === year).length })),
+    byBefore: tally("b", "unknown"),
+    byUse: tally("u", "unknown"),
+    byState: Object.entries(tally("s", "—"))
+      .map(([state, fields]) => ({ state, fields }))
+      .sort((a, b) => b.fields - a.fields),
+  };
+}
+
+function Chevron({ open }: { open?: boolean }) {
   return (
-    <div className="supply-scope">
-      <div className="seg soy-plant-seg" role="tablist" aria-label={c.scopeLabel}>
-        {TIERS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={scope === id}
-            className={scope === id ? "on" : ""}
-            onClick={() => setScope(id)}
-          >
-            {tierLabel(id, c)}
-          </button>
-        ))}
-      </div>
-      {single ? (
-        <p className="supply-selected">
-          <span>{c.selectedElevator}:</span> <b>{catchmentLabel(scope, data, c)}</b>
-          <button type="button" className="btn-text" onClick={() => setScope("all")}>
-            × {c.backToAll}
-          </button>
-        </p>
-      ) : null}
-    </div>
+    <svg className={`soy-combo-caret${open ? " open" : ""}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+      <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -179,163 +204,208 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
   );
 }
 
-/** The Quincy supply chain: catchments, fields, non-compliant fields at true scale. */
-export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onOpenMap, national }: Common) {
+/** Summary: the supply chain of the chosen plant(s), narrowed by the sidebar's ticks. */
+export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel }: Common) {
   const catchments = useCatchments(data);
-  const k = catchments.get(scope) ?? catchments.get("all")!;
+  const plants = useMemo<SidePlant[]>(
+    () => [
+      { id: "quincy", name: data.plant.city || data.plant.name, hasData: true },
+      ...otherPlants.map((p) => ({ id: p.id, name: p.name.replace(/^ADM /, ""), hasData: false })),
+    ],
+    [data, otherPlants],
+  );
+  const pending = plants.find((p) => p.id === plantSel && !p.hasData);
+  // One catchment's own statistics, or null for a combination of several.
+  const rawKey = statsKey(sel, data);
+  const key = rawKey && !catchments.has(rawKey) ? "all" : rawKey;
+  const k = key ? catchments.get(key)! : null;
   const countF = (n: number) => formatCount(n, lang);
   // Areas in acres (the client's unit); hectares as the secondary figure.
   const haF = (acres: number) => formatAcres(acres, lang);
   const acF = (acres: number) => formatHa(acres * AC_TO_HA, lang);
-  const nck = k.nonCompliant;
-  const share = pct(nck.acres, k.compliant.acres + nck.acres);
+  const tot: ComboTotals = k
+    ? { fields: k.compliant.fields, acres: k.compliant.acres, ncFields: k.nonCompliant.fields, ncAcres: k.nonCompliant.acres, defo: 0 }
+    : (comboTotals(data, sel) ?? { fields: 0, acres: 0, ncFields: 0, ncAcres: 0, defo: 0 });
+  const share = pct(tot.ncAcres, tot.acres + tot.ncAcres);
   // "All catchments" shows ADM's whole list, including the fields outside every catchment.
   const ncAll = data.nonCompliantAll;
-  const ncForCard = scope === "all" ? ncAll : nck;
+  const ncFeatures = useNcFeatures(!k);
+  const ncCombo = !k && ncFeatures ? ncForSelection(ncFeatures, sel, ncAll) : null;
+  const ncForCard = k ? (key === "all" ? ncAll : k.nonCompliant) : ncCombo;
   const outside = ncAll.fields - (catchments.get("all")?.nonCompliant.fields ?? 0);
   // A statistics row opens the map on that scope (the whole chain for an empty list).
   const openIds = (ids: string[]) => {
-    setScope(ids.length ? comboTarget(ids) : "all");
+    setSel(ids);
     onOpenMap();
   };
-  const beforeRows: [string, number][] = [
-    [c.ncBeforeTreed, ncForCard.byBefore.treed ?? 0],
-    [c.ncBeforeNatural, ncForCard.byBefore.natural ?? 0],
-    [c.ncBeforeCrop, ncForCard.byBefore.crop ?? 0],
-    [c.unknown, ncForCard.byBefore.unknown ?? 0],
-  ];
+  const beforeRows: [string, number][] = ncForCard
+    ? [
+        [c.ncBeforeTreed, ncForCard.byBefore.treed ?? 0],
+        [c.ncBeforeNatural, ncForCard.byBefore.natural ?? 0],
+        [c.ncBeforeCrop, ncForCard.byBefore.crop ?? 0],
+        [c.unknown, ncForCard.byBefore.unknown ?? 0],
+      ]
+    : [];
+  // What the figures are about, in words.
+  const names = key ? [catchmentLabel(key, data, c)] : sel.map((id) => catchmentLabel(id, data, c));
+  const selLabel = names.length > 3 ? `${names.slice(0, 3).join(" + ")} ${fill(c.sideMore, { n: names.length - 3 })}` : names.join(" + ");
+  const plantName = plants.find((p) => p.id === plantSel)?.name;
 
   return (
-    <>
-      <div className="summary-head">
-        <div>
-          <h1>{c.supplyTitle}</h1>
-          <p className="summary-sub">{c.supplyIntro}</p>
-        </div>
-        <div className="summary-tools">
-          <button type="button" className="btn-secondary" onClick={onOpenMap}>
-            {c.openMap}
-          </button>
-        </div>
-      </div>
-      <ScopeTabs scope={scope} setScope={setScope} data={data} c={c} />
-
-      <div className="kpi-row soy-supply-kpis">
-        <KpiTile value={countF(k.compliant.fields)} label={c.kpiFields} hint={c.kpiFieldsHint} />
-        <KpiTile
-          value={haF(k.compliant.acres)}
-          label={c.kpiArea}
-          hint={c.kpiAreaHint}
-          sub={`${acF(k.compliant.acres)} · ${fill(c.ofAreaShare, { p: formatSharePct(100 - share, lang) })}`}
-        />
-        <KpiTile tone="danger" value={countF(nck.fields)} label={c.kpiNcFields} hint={c.kpiNcFieldsHint} />
-        <KpiTile
-          tone="danger"
-          value={haF(nck.acres)}
-          label={c.kpiNcArea}
-          hint={c.kpiNcAreaHint}
-        />
-        <KpiTile
-          tone="comply"
-          value={formatSharePct(pct(k.compliant.acres, k.compliant.acres + nck.acres), lang)}
-          label={c.kpiCompliantShare}
-          hint={c.kpiNcShareHint}
-          sub={fill(c.ncShareSub, { p: formatSharePct(share, lang) })}
-        />
-      </div>
-
-      <ComboBuilder data={data} c={c} lang={lang} open={openIds} />
-      <ComboTable data={data} c={c} lang={lang} open={openIds} />
-
-      <div className="chart-grid soy-charts">
-        <section className="chart-card">
-          <h3>{c.ncTitle}</h3>
-          <p className="chart-note">
-            {fill(c.ncIntro, {
-              n: countF(ncAll.fields),
-              states: countF(ncAll.byState.length),
-              outside: countF(outside),
-            })}
-          </p>
-          <h3 className="soy-subhead">{c.ncByYear}</h3>
-          <ResponsiveContainer width="100%" height={170}>
-            <BarChart data={ncForCard.byYear} margin={{ top: 8, left: 8, right: 8 }}>
-              <XAxis dataKey="year" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis tickLine={false} axisLine={false} fontSize={11} width={44} allowDecimals={false} />
-              <Tooltip formatter={(v: number) => [countF(v), c.colFields]} />
-              <Bar dataKey="fields" fill={NC_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="chart-note">{c.ncByYearNote}</p>
-          <h3 className="soy-subhead">{c.ncBefore}</h3>
-          <table className="data-table soy-table">
-            <tbody>
-              {beforeRows
-                .filter(([, v]) => v > 0)
-                .map(([label, v]) => (
-                  <tr key={label}>
-                    <td>{label}</td>
-                    <td className="num tabular-nums">{countF(v)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <p className="chart-note">{c.ncBeforeNote}</p>
-          <h3 className="soy-subhead">{c.ncByState}</h3>
-          <div className="soy-table-wrap short">
-            <table className="data-table soy-table">
-              <tbody>
-                {ncForCard.byState.map((s) => (
-                  <tr key={s.state}>
-                    <td>{s.state}</td>
-                    <td className="num tabular-nums">{countF(s.fields)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div className="soy-split">
+      <SoySide data={data} c={c} lang={lang} plants={plants} plantSel={plantSel} setPlantSel={setPlantSel} sel={sel} setSel={setSel} catchments={catchments} />
+      <div className="soy-main">
+        <div className="summary-head">
+          <div>
+            <h1>{c.supplyTitle}</h1>
+            <p className="summary-sub">{c.supplyIntro}</p>
           </div>
-          {present ? null : (
-            <p className="chart-note">
-              {fill(c.ncDual, { n: countF(ncAll.alsoCompliant) })} {fill(c.ncPointOnly, { n: countF(ncAll.pointOnly) })}
+          <div className="summary-tools">
+            <button type="button" className="btn-secondary" onClick={onOpenMap}>
+              {c.openMap}
+            </button>
+          </div>
+        </div>
+
+        {pending ? (
+          <section className="chart-card supply-pending">
+            <h3>{pending.name}</h3>
+            <p>{c.plantPending}</p>
+            <button type="button" className="btn-secondary" onClick={onOpenMap}>
+              {c.openMap}
+            </button>
+          </section>
+        ) : (
+          <>
+            <p className="soy-showing">
+              <span>{c.sideShowing}</span>
+              <b>{plantName ? `${plantName} · ${selLabel}` : selLabel}</b>
+              {sel.length ? (
+                <button type="button" className="btn-text" onClick={() => setSel([])}>
+                  × {c.sideClear}
+                </button>
+              ) : null}
             </p>
-          )}
-        </section>
 
-        <section className="chart-card soy-nc-use">
-          <h3>{c.ncWhyTitle}</h3>
-          <p className="chart-note">{c.ncWhyIntro}</p>
-          <h3 className="soy-subhead">{c.ncUseTitle}</h3>
-          <table className="data-table soy-table">
-            <tbody>
-              {(
-                [
-                  ["crop", c.ncUseCrop],
-                  ["pasture", c.ncUsePasture],
-                  ["nonag", c.ncUseNonAg],
-                  ["unknown", c.unknown],
-                ] as const
-              )
-                .filter(([key]) => (ncForCard.byUse?.[key] ?? 0) > 0)
-                .map(([key, label]) => (
-                  <tr key={key}>
-                    <td>{label}</td>
-                    <td className="num tabular-nums">{countF(ncForCard.byUse?.[key] ?? 0)}</td>
-                    <td className="num tabular-nums">{formatSharePct(pct(ncForCard.byUse?.[key] ?? 0, ncForCard.fields), lang)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <p className="chart-note">{c.ncUseNote}</p>
-        </section>
+            <div className="kpi-row soy-supply-kpis">
+              <KpiTile value={countF(tot.fields)} label={c.kpiFields} hint={c.kpiFieldsHint} />
+              <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />
+              <KpiTile tone="danger" value={countF(tot.ncFields)} label={c.kpiNcFields} hint={c.kpiNcFieldsHint} />
+              <KpiTile tone="danger" value={haF(tot.ncAcres)} label={c.kpiNcArea} hint={c.kpiNcAreaHint} />
+              <KpiTile
+                tone="comply"
+                value={formatSharePct(pct(tot.acres, tot.acres + tot.ncAcres), lang)}
+                label={c.kpiCompliantShare}
+                hint={c.kpiNcShareHint}
+                sub={fill(c.ncShareSub, { p: formatSharePct(share, lang) })}
+              />
+            </div>
+
+            <ComboTable data={data} c={c} lang={lang} open={openIds} />
+
+            <div className="chart-grid soy-charts">
+              {ncForCard ? (
+                <>
+                  <section className="chart-card">
+                    <h3>{c.ncTitle}</h3>
+                    <p className="chart-note">
+                      {k
+                        ? fill(c.ncIntro, { n: countF(ncAll.fields), states: countF(ncAll.byState.length), outside: countF(outside) })
+                        : `${c.sideNcTitle} · ${countF(ncForCard.fields)}`}
+                    </p>
+                    <h3 className="soy-subhead">{c.ncByYear}</h3>
+                    <ResponsiveContainer width="100%" height={170}>
+                      <BarChart data={ncForCard.byYear} margin={{ top: 8, left: 8, right: 8 }}>
+                        <XAxis dataKey="year" tickLine={false} axisLine={false} fontSize={12} />
+                        <YAxis tickLine={false} axisLine={false} fontSize={11} width={44} allowDecimals={false} />
+                        <Tooltip formatter={(v: number) => [countF(v), c.colFields]} />
+                        <Bar dataKey="fields" fill={NC_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <p className="chart-note">{c.ncByYearNote}</p>
+                    <h3 className="soy-subhead">{c.ncBefore}</h3>
+                    <table className="data-table soy-table">
+                      <tbody>
+                        {beforeRows
+                          .filter(([, v]) => v > 0)
+                          .map(([label, v]) => (
+                            <tr key={label}>
+                              <td>{label}</td>
+                              <td className="num tabular-nums">{countF(v)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                    <p className="chart-note">{c.ncBeforeNote}</p>
+                    {present || !k ? null : (
+                      <p className="chart-note">
+                        {fill(c.ncDual, { n: countF(ncAll.alsoCompliant) })} {fill(c.ncPointOnly, { n: countF(ncAll.pointOnly) })}
+                      </p>
+                    )}
+                  </section>
+
+                  <section className="chart-card soy-nc-use">
+                    <h3>{c.ncWhyTitle}</h3>
+                    <p className="chart-note">{c.ncWhyIntro}</p>
+                    <h3 className="soy-subhead">{c.ncUseTitle}</h3>
+                    <table className="data-table soy-table">
+                      <tbody>
+                        {(
+                          [
+                            ["crop", c.ncUseCrop],
+                            ["pasture", c.ncUsePasture],
+                            ["nonag", c.ncUseNonAg],
+                            ["unknown", c.unknown],
+                          ] as const
+                        )
+                          .filter(([ukey]) => (ncForCard.byUse?.[ukey] ?? 0) > 0)
+                          .map(([ukey, label]) => (
+                            <tr key={ukey}>
+                              <td>{label}</td>
+                              <td className="num tabular-nums">{countF(ncForCard.byUse?.[ukey] ?? 0)}</td>
+                              <td className="num tabular-nums">{formatSharePct(pct(ncForCard.byUse?.[ukey] ?? 0, ncForCard.fields), lang)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                    <p className="chart-note">{c.ncUseNote}</p>
+                    <h3 className="soy-subhead">{c.ncByState}</h3>
+                    <table className="data-table soy-table">
+                      <tbody>
+                        {topStates(ncForCard.byState, 8).map((st) => (
+                          <tr key={st.state}>
+                            <td>{st.state === "other" ? fill(c.otherStates, { n: countF(st.n) }) : stateName(st.state)}</td>
+                            <td className="num tabular-nums">{countF(st.fields)}</td>
+                            <td className="num tabular-nums">{formatSharePct(pct(st.fields, ncForCard.fields), lang)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </section>
+                </>
+              ) : (
+                <section className="chart-card">
+                  <p className="chart-note">{c.comboLoadingNc}</p>
+                </section>
+              )}
+            </div>
+
+            <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={key ?? "all"} setScope={(id) => setSel(idsFromScope(id, data))} />
+
+            {national && key === "all" ? <SoyNationalView nat={national} data={data} c={c} lang={lang} /> : null}
+
+            {k ? (
+              <CropCharts k={k} c={c} sc={sc} lang={lang} />
+            ) : (
+              <section className="chart-card supply-wide">
+                <p className="chart-note">{c.noChartsCombo}</p>
+              </section>
+            )}
+            {present ? null : <DataNotes c={c} />}
+          </>
+        )}
       </div>
-
-      <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={scope} setScope={setScope} />
-
-      {national ? <SoyNationalView nat={national} data={data} c={c} lang={lang} /> : null}
-
-      <CropCharts k={k} c={c} sc={sc} lang={lang} />
-      {present ? null : <DataNotes c={c} />}
-    </>
+    </div>
   );
 }
 
@@ -491,10 +561,9 @@ function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps)
       onKeyDown={(e) => onOpen && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
     >
       <td>
-        {onOpen ? <span className="soy-combo-caret" aria-hidden="true">{expanded ? "▾" : "▸"}</span> : null}
-        {label}
-        <span className="scale-bar" aria-hidden="true">
-          <i style={{ width: `${Math.max(p, 0.4)}%` }} />
+        <span className="soy-combo-label">
+          {onOpen ? <Chevron open={expanded} /> : null}
+          {label}
         </span>
       </td>
       <td className="num tabular-nums">{formatCount(t.fields, lang)}</td>
@@ -523,23 +592,52 @@ function ComboHead({ c }: { c: SoySupplyCopy }) {
   );
 }
 
-/** What is inside one statistics row: its catchments one by one, and the
- * non-compliant fields in it (2025 land use, states). */
-function ComboDetail({
-  data,
-  c,
-  lang,
-  ids,
-  parts,
-  onMap,
-}: {
-  data: SupplyData;
-  c: SoySupplyCopy;
-  lang: Lang;
-  ids: string[];
-  parts: [string, string[]][];
-  onMap: () => void;
-}) {
+/** Each catchment inside an opened statistics row, as rows of the same
+ * table (same columns); long lists (third parties) show the first few. */
+function ComboParts({ data, c, lang, parts }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; parts: [string, string[]][] }) {
+  const [all, setAll] = useState(false);
+  if (parts.length < 2) return null;
+  const LIMIT = 14;
+  // A long list (third parties) goes largest first, so the cut keeps what matters.
+  const ordered = parts.length > LIMIT ? [...parts].sort((a, b) => (comboTotals(data, b[1])?.acres ?? 0) - (comboTotals(data, a[1])?.acres ?? 0)) : parts;
+  const shown = all ? ordered : ordered.slice(0, LIMIT);
+  return (
+    <>
+      <tr className="soy-combo-part-head">
+        <td colSpan={7}>{c.comboParts}</td>
+      </tr>
+      {shown.map(([label, pids]) => {
+        const t = comboTotals(data, pids);
+        if (!t) return null;
+        const p = pct(t.ncAcres, t.acres + t.ncAcres);
+        return (
+          <tr key={label} className="soy-combo-part">
+            <td>{label}</td>
+            <td className="num tabular-nums">{formatCount(t.fields, lang)}</td>
+            <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
+            <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
+            <td className="num tabular-nums">{formatAcres(t.ncAcres, lang)}</td>
+            <td className="num tabular-nums comply">{formatSharePct(100 - p, lang)}</td>
+            <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
+          </tr>
+        );
+      })}
+      {parts.length > LIMIT ? (
+        <tr className="soy-combo-part soy-combo-more">
+          <td colSpan={7}>
+            <button type="button" className="btn-text" onClick={() => setAll((v) => !v)}>
+              {all ? c.showFewer : fill(c.showAllN, { n: formatCount(parts.length, lang) })}
+            </button>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+/** Below the per-catchment rows: the non-compliant fields in the row's scope
+ * (2025 land use, states) and the way to the map. */
+function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; ids: string[]; onMap: () => void }) {
   const [nc, setNc] = useState<SoyFeature[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -552,92 +650,58 @@ function ComboDetail({
   }, []);
   const inside = (nc ?? []).filter((f) => ids.some((id) => inScope(id, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") })));
   const count = (key: string, val: string) => inside.filter((f) => String(f.properties[key] ?? "unknown") === val).length;
-  const states = Object.entries(
-    inside.reduce<Record<string, number>>((acc, f) => {
-      const st = String(f.properties.s ?? "—");
-      acc[st] = (acc[st] ?? 0) + 1;
-      return acc;
-    }, {}),
-  ).sort((a, b) => b[1] - a[1]);
+  const states = topStates(
+    Object.entries(
+      inside.reduce<Record<string, number>>((acc, f) => {
+        const st = String(f.properties.s ?? "—");
+        acc[st] = (acc[st] ?? 0) + 1;
+        return acc;
+      }, {}),
+    ).map(([state, fields]) => ({ state, fields })),
+    6,
+  );
   const n = inside.length;
   const shareOf = (v: number) => (n ? formatSharePct(pct(v, n), lang) : "—");
   const small = (title: string, rows: [string, number][]) => (
-    <div>
-      <p className="soy-combo-sub">{title}</p>
-      <table className="data-table soy-table soy-combo-mini">
-        <thead>
-          <tr>
-            <th />
-            <th className="num">{c.colFieldsShort}</th>
-            <th className="num">{c.colShareShort}</th>
+    <table className="data-table soy-table soy-combo-mini">
+      <thead>
+        <tr>
+          <th>{title}</th>
+          <th className="num">{c.colFieldsShort}</th>
+          <th className="num">{c.colShareShort}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(([label, v]) => (
+          <tr key={label}>
+            <td>{label}</td>
+            <td className="num tabular-nums">{formatCount(v, lang)}</td>
+            <td className="num tabular-nums">{shareOf(v)}</td>
           </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label, v]) => (
-            <tr key={label}>
-              <td>{label}</td>
-              <td className="num tabular-nums">{formatCount(v, lang)}</td>
-              <td className="num tabular-nums">{shareOf(v)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
   return (
     <div className="soy-combo-detail">
-      {parts.length > 1 ? (
-        <div className="soy-combo-parts">
-          <p className="eyebrow">{c.comboParts}</p>
-          <div className="soy-table-wrap short">
-            <table className="data-table soy-table soy-combo-mini">
-              <thead>
-                <tr>
-                  <th>{c.colCatchment}</th>
-                  <th className="num">{c.colCompliantN}</th>
-                  <th className="num">{c.colCompliantA}</th>
-                  <th className="num">{c.colNcN}</th>
-                  <th className="num">{c.colCompliantShareA}</th>
-                  <th className="num">{c.colNcShareA}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {parts.map(([label, pids]) => {
-                  const t = comboTotals(data, pids);
-                  if (!t) return null;
-                  return (
-                    <tr key={label}>
-                      <td>{label}</td>
-                      <td className="num tabular-nums">{formatCount(t.fields, lang)}</td>
-                      <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
-                      <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
-                      <td className="num tabular-nums comply">{formatSharePct(pct(t.acres, t.acres + t.ncAcres), lang)}</td>
-                      <td className="num tabular-nums">{formatSharePct(pct(t.ncAcres, t.acres + t.ncAcres), lang)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <p className="soy-combo-detail-title">
+        {c.comboNcIn} · {formatCount(n, lang)}
+      </p>
+      {nc == null ? (
+        <p className="chart-note">{c.comboLoadingNc}</p>
+      ) : n === 0 ? null : (
+        <div className="soy-combo-nc-grid">
+          {small(c.ncUseTitle, [
+            [c.ncUseCrop, count("u", "crop")],
+            [c.ncUsePasture, count("u", "pasture")],
+            [c.ncUseNonAg, count("u", "nonag")],
+          ])}
+          {small(
+            c.comboNcStates,
+            states.map((x) => [x.state === "other" ? fill(c.otherStates, { n: formatCount(x.n, lang) }) : stateName(x.state), x.fields] as [string, number]),
+          )}
         </div>
-      ) : null}
-      <div className="soy-combo-nc">
-        <p className="eyebrow">
-          {c.comboNcIn} · {formatCount(n, lang)}
-        </p>
-        {nc == null ? (
-          <p className="chart-note">{c.comboLoadingNc}</p>
-        ) : (
-          <div className="soy-combo-nc-grid">
-            {small(c.ncUseTitle, [
-              [c.ncUseCrop, count("u", "crop")],
-              [c.ncUsePasture, count("u", "pasture")],
-              [c.ncUseNonAg, count("u", "nonag")],
-            ])}
-            {small(c.comboNcStates, states.map(([st, v]) => [stateName(st), v] as [string, number]))}
-          </div>
-        )}
-      </div>
+      )}
       <div className="soy-combo-actions">
         {ids.includes("tp") || ids.includes("tpcore") ? <p className="chart-note">{c.comboTpMap}</p> : <span />}
         <button type="button" className="btn-primary" onClick={onMap}>
@@ -645,102 +709,6 @@ function ComboDetail({
         </button>
       </div>
     </div>
-  );
-}
-
-/** Map scope for a set of catchment ids; third parties open their list (too many fields to draw). */
-function comboTarget(ids: string[]): string {
-  if (ids.includes("tp") || ids.includes("tpcore")) {
-    const rest = ids.filter((x) => x !== "tp" && x !== "tpcore");
-    return rest.length ? "all" : ids.includes("tp") ? "tp" : "tpcore";
-  }
-  return comboScope(ids);
-}
-
-/** The user's ask: build any union — Quincy 0–40 / 0–80 NM, any ADM elevators,
- * third parties — compliant and non-compliant together, each field once. */
-function ComboBuilder({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; open: (ids: string[]) => void }) {
-  const sites = data.admElevators.filter((e) => e.radiusM);
-  const siteIds = sites.map((e) => e.id);
-  const [quincy, setQuincy] = useState<"none" | "q40" | "q80">("q40");
-  const [picked, setPicked] = useState<string[]>(siteIds);
-  const [tp, setTp] = useState<"none" | "tp" | "tpcore">("none");
-  const ids = [...(quincy === "none" ? [] : [quincy]), ...picked, ...(tp === "none" ? [] : [tp])];
-  const [expanded, setExpanded] = useState(false);
-  const parts: [string, string[]][] = [
-    ...(quincy === "none" ? [] : [[quincy === "q40" ? c.comboQ40 : c.comboQ80, [quincy]] as [string, string[]]]),
-    ...sites.filter((e) => picked.includes(e.id)).map((e) => [e.name, [e.id]] as [string, string[]]),
-    ...(tp === "none" ? [] : [[tp === "tp" ? fill(c.comboTp, { n: data.thirdParty.length }) : c.scopeTp56, [tp]] as [string, string[]]]),
-  ];
-  const togglePick = (id: string) => setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
-  return (
-    <section className="chart-card supply-wide soy-combo soy-combo-builder">
-      <h3>{c.comboBuild}</h3>
-      <div className="soy-combo-build">
-        <div className="soy-combo-line">
-          <span>{c.comboQuincy}</span>
-          <div className="seg" role="group" aria-label={c.comboQuincy}>
-            {(["none", "q40", "q80"] as const).map((v) => (
-              <button key={v} type="button" className={quincy === v ? "on" : ""} aria-pressed={quincy === v} onClick={() => setQuincy(v)}>
-                {v === "none" ? c.comboNone : v === "q40" ? c.comboQ40 : c.comboQ80}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="soy-combo-line top">
-          <span>
-            {c.comboAdmPick} · {picked.length}/{sites.length}
-          </span>
-          <div className="soy-combo-sites">
-            <div className="soy-combo-quick">
-              <button type="button" className="btn-text" onClick={() => setPicked(siteIds)}>
-                {c.comboAllSites}
-              </button>
-              <button type="button" className="btn-text" onClick={() => setPicked([])}>
-                {c.comboNoSites}
-              </button>
-            </div>
-            {sites.map((e) => (
-              <label key={e.id} className="check-inline">
-                <input type="checkbox" checked={picked.includes(e.id)} onChange={() => togglePick(e.id)} />
-                {e.city ?? e.name}
-                {e.state ? `, ${e.state}` : ""}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="soy-combo-line">
-          <span>{c.comboTpPick}</span>
-          <div className="seg" role="group" aria-label={c.comboTpPick}>
-            {(["none", "tp", "tpcore"] as const).map((v) => (
-              <button key={v} type="button" className={tp === v ? "on" : ""} aria-pressed={tp === v} onClick={() => setTp(v)}>
-                {v === "none" ? c.comboNone : v === "tp" ? c.comboAllSites : c.comboTpCore}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      {ids.length ? (
-        <div className="soy-table-wrap">
-          <table className="data-table soy-table scale-table">
-            <ComboHead c={c} />
-            <tbody>
-              <ComboRow label={c.comboCustom} t={comboTotals(data, ids)} cls="custom" lang={lang} expanded={expanded} onOpen={() => setExpanded((v) => !v)} />
-              {expanded ? (
-                <tr className="soy-combo-detail-row">
-                  <td colSpan={7}>
-                    <ComboDetail data={data} c={c} lang={lang} ids={ids} parts={parts} onMap={() => open(ids)} />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="chart-note">{c.comboPickSome}</p>
-      )}
-      <p className="chart-note">{c.comboOpen}</p>
-    </section>
   );
 }
 
@@ -770,7 +738,7 @@ function ComboTable({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCop
         {c.comboIntro} {c.comboOpen}
       </p>
       <div className="soy-table-wrap">
-        <table className="data-table soy-table scale-table">
+        <table className="data-table soy-table soy-combo-table">
           <ComboHead c={c} />
           <tbody>
             {presets.map(([key, label, ids, parts]) => (
@@ -784,20 +752,20 @@ function ComboTable({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCop
                   onOpen={() => setOpenKey(openKey === key ? null : key)}
                 />
                 {openKey === key ? (
-                  <tr className="soy-combo-detail-row">
-                    <td colSpan={7}>
-                      <ComboDetail data={data} c={c} lang={lang} ids={ids} parts={parts} onMap={() => open(key === "all" ? [] : ids)} />
-                    </td>
-                  </tr>
+                  <>
+                    <ComboParts data={data} c={c} lang={lang} parts={parts} />
+                    <tr className="soy-combo-detail-row">
+                      <td colSpan={7}>
+                        <ComboDetail c={c} lang={lang} ids={ids} onMap={() => open(key === "all" ? [] : ids)} />
+                      </td>
+                    </tr>
+                  </>
                 ) : null}
               </Fragment>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="chart-note scale-legend">
-        <i style={{ background: FIELD_COLOR }} /> {c.scaleCompliant} <i style={{ background: NC_COLOR }} /> {c.scaleNonCompliant}
-      </p>
     </section>
   );
 }

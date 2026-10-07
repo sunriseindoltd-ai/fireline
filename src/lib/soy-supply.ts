@@ -64,6 +64,8 @@ export type AdmElevator = {
   radiusM: number | null;
   /** The catchment this point belongs to (its site's first point). */
   site?: string;
+  /** Crushing plants this elevator delivers to (ids from `plantsOf`); absent = Quincy only, as delivered. */
+  plants?: string[];
   railMi: number;
   riverMi: number;
   missingAttrs: boolean;
@@ -81,6 +83,8 @@ export type ThirdParty = {
   radiusM: number;
   /** One of the 56 in IL, IA, MO, KY, MN, IN. */
   core: boolean;
+  /** Crushing plants this elevator delivers to; absent = Quincy only, as delivered. */
+  plants?: string[];
   railMi: number;
   riverMi: number;
 };
@@ -270,6 +274,55 @@ export function inScope(scope: string | null, f: { flags: number; k?: string }):
   if (isCombo(scope)) return comboMembers(scope!).some((m) => inScope(m, f));
   if (scope === "q40") return has(FLAG.q40);
   return (f.k ?? "").split("|").includes(scope);
+}
+
+/**
+ * The Summary's selection (the sidebar) is a list of catchment ids: none =
+ * the whole chain; one or more are combined, each field counted once.
+ * Members: q40, q80 (0–80 NM), q80r (40–80 NM ring, alone), adm<n> (ADM
+ * elevators), tp / tpcore (all third parties / the 6 states) and tp<n> (one
+ * third party, alone). The map's scope string is derived from it.
+ */
+export const isExclusiveId = (id: string) => id === "q80r" || /^tpd+$/.test(id);
+
+/** The ADM elevator sites that have a catchment (one id per site). */
+export function admSiteIds(data: SupplyData): string[] {
+  return data.admElevators.filter((e) => e.radiusM).map((e) => e.id);
+}
+
+/** Selection ids for a scope string (the map's tree, a stored scope). */
+export function idsFromScope(scope: string | null, data: SupplyData): string[] {
+  if (!scope || scope === "all") return [];
+  if (isCombo(scope)) return comboMembers(scope);
+  if (scope === "direct") return ["q80"];
+  if (scope === "adm") return admSiteIds(data);
+  return [scope];
+}
+
+/** The one catchment whose own statistics a selection equals, or null for a true combination. */
+export function statsKey(sel: string[], data: SupplyData): string | null {
+  if (!sel.length) return "all";
+  const set = new Set(sel);
+  if (set.has("q80")) set.delete("q40"); // 0–40 NM lies inside 0–80 NM
+  if (set.size === 1) return [...set][0]!;
+  const adm = admSiteIds(data);
+  if (set.size === adm.length && adm.every((id) => set.has(id))) return "adm";
+  return null;
+}
+
+/** The map-safe scope for a selection (third parties are too many fields to draw with others). */
+export function scopeForSel(sel: string[], data: SupplyData): string {
+  const key = statsKey(sel, data);
+  if (key) return key;
+  if (sel.includes("tp") || sel.includes("tpcore")) return "all";
+  return comboScope(sel);
+}
+
+/** Toggle one member: exclusive ids (one third party, the 40–80 NM ring) stand alone. */
+export function toggleSel(sel: string[], id: string): string[] {
+  if (sel.includes(id)) return sel.filter((x) => x !== id);
+  if (isExclusiveId(id)) return [id];
+  return [...sel.filter((x) => !isExclusiveId(x)), id];
 }
 
 /** Points along a circle of radiusM from bearing b0 to b1 (degrees, clockwise from north). */
