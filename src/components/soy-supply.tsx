@@ -16,11 +16,14 @@ import {
   comboTotals,
   idsFromScope,
   inScope,
+  plantById,
   statsKey,
+  unitName,
   stateName,
   pct,
   type Catchment,
   type ComboTotals,
+  type Plant,
   type SupplyData,
   type SupplyNcStats,
 } from "@/lib/soy-supply";
@@ -38,7 +41,7 @@ type Common = {
   onOpenMap: () => void;
   /** All US soybean fields (national.json), when loaded. */
   national?: SoyNational | null;
-  /** ADM's other crushing plants: listed beside Quincy until their catchments arrive. */
+  /** Crushing plants announced without catchments yet (none since the 7 Oct data). */
   otherPlants?: OtherPlant[];
   /** The sidebar's selection (ticked catchment ids; none = the whole chain) and chosen plant ("" = all). */
   sel: string[];
@@ -54,18 +57,14 @@ function tierLabel(id: string, c: SoySupplyCopy) {
     {
       all: c.scopeAll,
       direct: c.scopeDirect,
-      q40: c.scopeQ40,
-      q80r: c.scopeQ80r,
-      q80: c.scopeQ80,
       adm: c.scopeAdm,
-      tpcore: c.scopeTp56,
       tp: c.scopeTp,
     } as Record<string, string>
   )[id];
 }
 
 export function catchmentLabel(id: string, data: SupplyData, c: SoySupplyCopy) {
-  const t = tierLabel(id, c);
+  const t = tierLabel(id, c) ?? unitName(id, data, c);
   if (t) return t;
   const adm = data.admElevators.find((e) => e.id === id);
   if (adm) return adm.name;
@@ -209,14 +208,17 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
   const catchments = useCatchments(data);
   const plants = useMemo<SidePlant[]>(
     () => [
-      { id: "quincy", name: data.plant.city || data.plant.name, hasData: true },
+      ...data.plants.map((p) => ({ id: p.id, name: p.city || p.name, hasData: true })),
       ...otherPlants.map((p) => ({ id: p.id, name: p.name.replace(/^ADM /, ""), hasData: false })),
     ],
     [data, otherPlants],
   );
   const pending = plants.find((p) => p.id === plantSel && !p.hasData);
+  const plant = plantSel ? plantById(data, plantSel) : undefined;
+  // Nothing ticked: the chosen plant's whole catchment, or the whole chain.
+  const effSel = sel.length ? sel : plant ? [`${plant.key}80`] : [];
   // One catchment's own statistics, or null for a combination of several.
-  const rawKey = statsKey(sel, data);
+  const rawKey = statsKey(effSel, data);
   const key = rawKey && !catchments.has(rawKey) ? "all" : rawKey;
   const k = key ? catchments.get(key)! : null;
   const countF = (n: number) => formatCount(n, lang);
@@ -225,12 +227,12 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
   const acF = (acres: number) => formatHa(acres * AC_TO_HA, lang);
   const tot: ComboTotals = k
     ? { fields: k.compliant.fields, acres: k.compliant.acres, ncFields: k.nonCompliant.fields, ncAcres: k.nonCompliant.acres, defo: 0 }
-    : (comboTotals(data, sel) ?? { fields: 0, acres: 0, ncFields: 0, ncAcres: 0, defo: 0 });
+    : (comboTotals(data, effSel) ?? { fields: 0, acres: 0, ncFields: 0, ncAcres: 0, defo: 0 });
   const share = pct(tot.ncAcres, tot.acres + tot.ncAcres);
   // "All catchments" shows ADM's whole list, including the fields outside every catchment.
   const ncAll = data.nonCompliantAll;
   const ncFeatures = useNcFeatures(!k);
-  const ncCombo = !k && ncFeatures ? ncForSelection(ncFeatures, sel, ncAll) : null;
+  const ncCombo = !k && ncFeatures ? ncForSelection(ncFeatures, effSel, ncAll) : null;
   const ncForCard = k ? (key === "all" ? ncAll : k.nonCompliant) : ncCombo;
   const outside = ncAll.fields - (catchments.get("all")?.nonCompliant.fields ?? 0);
   // A statistics row opens the map on that scope (the whole chain for an empty list).
@@ -247,9 +249,8 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
       ]
     : [];
   // What the figures are about, in words.
-  const names = key ? [catchmentLabel(key, data, c)] : sel.map((id) => catchmentLabel(id, data, c));
+  const names = key ? [catchmentLabel(key, data, c)] : effSel.map((id) => catchmentLabel(id, data, c));
   const selLabel = names.length > 3 ? `${names.slice(0, 3).join(" + ")} ${fill(c.sideMore, { n: names.length - 3 })}` : names.join(" + ");
-  const plantName = plants.find((p) => p.id === plantSel)?.name;
 
   return (
     <div className="soy-split">
@@ -269,7 +270,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
         {pending ? null : (
           <p className="soy-showing">
             <span>{c.sideShowing}</span>
-            <b>{plantName ? `${plantName} · ${selLabel}` : selLabel}</b>
+            <b>{selLabel}</b>
             {sel.length ? (
               <button type="button" className="btn-text" onClick={() => setSel([])}>
                 × {c.sideClear}
@@ -291,7 +292,12 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
         ) : (
           <>
             <div className="kpi-row soy-supply-kpis">
-              <KpiTile value={countF(tot.fields)} label={c.kpiFields} hint={c.kpiFieldsHint} />
+              <KpiTile
+                value={countF(tot.fields)}
+                label={c.kpiFields}
+                hint={c.kpiFieldsHint}
+                sub={k?.compliant.doubleCropFields ? fill(c.kpiDoubleCrop, { n: countF(k.compliant.doubleCropFields), area: haF(k.compliant.doubleCropAcres ?? 0) }) : undefined}
+              />
               <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />
               <KpiTile tone="danger" value={countF(tot.ncFields)} label={c.kpiNcFields} hint={c.kpiNcFieldsHint} />
               <KpiTile tone="danger" value={haF(tot.ncAcres)} label={c.kpiNcArea} hint={c.kpiNcAreaHint} />
@@ -304,7 +310,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
               />
             </div>
 
-            <ComboTable data={data} c={c} lang={lang} open={openIds} />
+            <ComboTable data={data} c={c} lang={lang} open={openIds} plant={plant} />
 
             <div className="chart-grid soy-charts">
               {ncForCard ? (
@@ -340,9 +346,9 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
                       </tbody>
                     </table>
                     <p className="chart-note">{c.ncBeforeNote}</p>
-                    {present || !k ? null : (
+                    {present || !k || (!ncAll.alsoCompliant && !ncAll.pointOnly) ? null : (
                       <p className="chart-note">
-                        {fill(c.ncDual, { n: countF(ncAll.alsoCompliant) })} {fill(c.ncPointOnly, { n: countF(ncAll.pointOnly) })}
+                        {ncAll.alsoCompliant ? fill(c.ncDual, { n: countF(ncAll.alsoCompliant) }) : null} {ncAll.pointOnly ? fill(c.ncPointOnly, { n: countF(ncAll.pointOnly) }) : null}
                       </p>
                     )}
                   </section>
@@ -393,7 +399,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
               )}
             </div>
 
-            <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={key ?? "all"} setScope={(id) => setSel(idsFromScope(id, data))} />
+            <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={key ?? "all"} setScope={(id) => setSel(idsFromScope(id, data))} plant={plant} />
 
             {national && key === "all" ? <SoyNationalView nat={national} data={data} c={c} lang={lang} /> : null}
 
@@ -419,8 +425,8 @@ function csvCell(v: unknown) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** ADM's ask: compliant vs non-compliant polygons for the whole Quincy supply
- * chain and per facility (the crushing plant and every elevator). */
+/** ADM's ask: compliant vs non-compliant polygons for the whole supply chain
+ * and per facility (each crushing plant and every elevator). */
 function FacilityTable({
   data,
   catchments,
@@ -428,6 +434,7 @@ function FacilityTable({
   lang,
   scope,
   setScope,
+  plant,
 }: {
   data: SupplyData;
   catchments: Map<string, Catchment>;
@@ -435,21 +442,28 @@ function FacilityTable({
   lang: Lang;
   scope: string;
   setScope: (id: string) => void;
+  /** One plant chosen: its rows only (elevators aren't tied to a plant). */
+  plant?: Plant;
 }) {
   const [kind, setKind] = useState<"all" | FacilityKind>("all");
   const [query, setQuery] = useState("");
   const countF = (n: number) => formatCount(n, lang);
   const acF = (n: number) => formatAcres(n, lang);
-  const plantPlace = [data.plant.city, data.plant.state].filter(Boolean).join(", ");
-  const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = [
-    { id: "all", kind: "chain", name: c.scopeAll, place: plantPlace },
-    { id: "direct", kind: "plant", name: `${data.plant.name} · ${c.scopeQ80}`, place: plantPlace },
-    { id: "q40", kind: "plant", name: c.scopeQ40, place: plantPlace, sub: true },
-    ...data.admElevators
-      .filter((e) => e.radiusM)
-      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
-    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
-  ];
+  const place = (p: Plant) => [p.city, p.state].filter(Boolean).join(", ");
+  const plantRows = (plant ? [plant] : data.plants).flatMap((p) => [
+    { id: `${p.key}80`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ80}`, place: place(p) },
+    { id: `${p.key}40`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ40}`, place: place(p), sub: true },
+  ]);
+  const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = plant
+    ? plantRows
+    : [
+        { id: "all", kind: "chain", name: c.scopeAll, place: fill(c.chainSub, { p: data.plants.length, a: data.admElevators.filter((e) => e.radiusM).length, t: data.thirdParty.length }) },
+        ...plantRows,
+        ...data.admElevators
+          .filter((e) => e.radiusM)
+          .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
+        ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
+      ];
   const q = query.trim().toLowerCase();
   const shown = rows.filter((r) => (kind === "all" || r.kind === kind || r.kind === "chain") && (!q || r.kind === "chain" || `${r.name} ${r.place}`.toLowerCase().includes(q)));
   const kindLabel: Record<FacilityKind, string> = { chain: c.facChain, plant: c.kindPlant, adm: c.kindAdm, tp: c.kindTp };
@@ -472,7 +486,7 @@ function FacilityTable({
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "soytrace-quincy-compliance-by-facility.csv";
+    a.download = plant ? `soytrace-${plant.id}-compliance-by-facility.csv` : "soytrace-compliance-by-facility.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -489,7 +503,7 @@ function FacilityTable({
       </div>
       <div className="supply-tp-tools">
         <div className="seg" role="group" aria-label={c.facTitle}>
-          {(["all", "plant", "adm", "tp"] as const).map((v) => (
+          {(plant ? (["plant"] as const) : (["all", "plant", "adm", "tp"] as const)).map((v) => (
             <button key={v} type="button" className={kind === v ? "on" : ""} aria-pressed={kind === v} onClick={() => setKind(v)}>
               {v === "all" ? c.statusAll : kindLabel[v]}
             </button>
@@ -706,7 +720,7 @@ function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; id
         </div>
       )}
       <div className="soy-combo-actions">
-        {ids.includes("tp") || ids.includes("tpcore") ? <p className="chart-note">{c.comboTpMap}</p> : <span />}
+        {ids.includes("tp") ? <p className="chart-note">{c.comboTpMap}</p> : <span />}
         <button type="button" className="btn-primary" onClick={onMap}>
           {c.comboOpenMap} →
         </button>
@@ -715,9 +729,10 @@ function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; id
   );
 }
 
-/** The user's ask: statistics for Quincy 0–40 / 0–80 NM, all ADM elevators,
- * their combinations and third parties; a row opens it on the map. */
-function ComboTable({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; open: (ids: string[]) => void }) {
+/** The user's ask: statistics for the plants' 0–40 / 0–80 NM catchments, all
+ * ADM elevators, their combinations and third parties; a row opens it on the
+ * map. With one plant chosen: that plant's rings only. */
+function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; open: (ids: string[]) => void; plant?: Plant }) {
   const sites = data.admElevators.filter((e) => e.radiusM);
   const siteIds = sites.map((e) => e.id);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -725,15 +740,27 @@ function ComboTable({ data, c, lang, open }: { data: SupplyData; c: SoySupplyCop
   const tpParts = data.thirdParty.map((e) => [[e.company, [e.county, e.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "), [e.id]] as [string, string[]]);
   const admLabel = fill(c.comboAdm, { n: sites.length });
   const tpLabel = fill(c.comboTp, { n: data.thirdParty.length });
-  const presets: [string, string, string[], [string, string[]][]][] = [
-    ["q40", c.comboQ40, ["q40"], []],
-    ["q80", c.comboQ80, ["q80"], []],
-    ["adm", admLabel, siteIds, siteParts],
-    ["q40adm", c.comboQ40Adm, ["q40", ...siteIds], [[c.comboQ40, ["q40"]], [admLabel, siteIds], ...siteParts]],
-    ["q80adm", c.comboQ80Adm, ["q80", ...siteIds], [[c.comboQ80, ["q80"]], [admLabel, siteIds], ...siteParts]],
-    ["tp", tpLabel, ["tp"], [[c.scopeTp56, ["tpcore"]], ...tpParts]],
-    ["all", c.comboAll, ["q80", ...siteIds, "tp"], [[c.comboQ80, ["q80"]], [admLabel, siteIds], [tpLabel, ["tp"]]]],
-  ];
+  const p40 = data.plants.map((p) => `${p.key}40`);
+  const p80 = data.plants.map((p) => `${p.key}80`);
+  const parts40 = data.plants.map((p) => [unitName(`${p.key}40`, data, c)!, [`${p.key}40`]] as [string, string[]]);
+  const parts80 = data.plants.map((p) => [unitName(`${p.key}80`, data, c)!, [`${p.key}80`]] as [string, string[]]);
+  const plants40 = fill(c.comboPlants40, { n: data.plants.length });
+  const plants80 = fill(c.comboPlants80, { n: data.plants.length });
+  const presets: [string, string, string[], [string, string[]][]][] = plant
+    ? [
+        ["p40", unitName(`${plant.key}40`, data, c)!, [`${plant.key}40`], []],
+        ["p80r", unitName(`${plant.key}80r`, data, c)!, [`${plant.key}80r`], []],
+        ["p80", unitName(`${plant.key}80`, data, c)!, [`${plant.key}80`], []],
+      ]
+    : [
+        ["p40", plants40, p40, parts40],
+        ["p80", plants80, p80, parts80],
+        ["adm", admLabel, siteIds, siteParts],
+        ["p40adm", fill(c.comboPlusAdm, { a: plants40 }), [...p40, ...siteIds], [[plants40, p40], [admLabel, siteIds]]],
+        ["p80adm", fill(c.comboPlusAdm, { a: plants80 }), [...p80, ...siteIds], [[plants80, p80], [admLabel, siteIds]]],
+        ["tp", tpLabel, ["tp"], tpParts],
+        ["all", c.comboAll, [...p80, ...siteIds, "tp"], [[plants80, p80], [admLabel, siteIds], [tpLabel, ["tp"]]]],
+      ];
   return (
     <section className="chart-card supply-wide soy-combo">
       <h3>{c.comboTitle}</h3>

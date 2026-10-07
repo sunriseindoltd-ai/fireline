@@ -22,8 +22,11 @@ import {
   comboMembers,
   inScope,
   isCombo,
+  isPlantUnit,
   pct,
+  plantUnit,
   levelOf,
+  ringRadius,
   scopeBounds,
   unitParts,
   type Band,
@@ -275,11 +278,10 @@ export function SoySupplyMap({
         pmtilesProtocol = true;
       }
       if (cancelled || !containerRef.current) return;
-      const q80 = data.rings.find((r) => r.id === "q80");
       map = new maplibregl.Map({
         container: containerRef.current,
         style: basemapStyle(basemap) as never,
-        bounds: circleBounds(data.plant.lon, data.plant.lat, (q80?.radiusM ?? 150000) * 2.2),
+        bounds: scopeBounds("direct", data) ?? circleBounds(data.plant.lon, data.plant.lat, 300000),
         fitBoundsOptions: { padding: 30 },
         attributionControl: { compact: true },
       });
@@ -306,33 +308,35 @@ export function SoySupplyMap({
         for (const r of REMOTE) map.addSource(r, { type: "geojson", data: EMPTY as never });
         map.addSource("rings", {
           type: "geojson",
-          data: { type: "FeatureCollection", features: data.rings.map((r) => ring(data.plant.lon, data.plant.lat, r.radiusM, { id: r.id })) } as never,
+          data: { type: "FeatureCollection", features: data.plants.flatMap((p) => p.rings.map((r) => ring(p.lon, p.lat, r.radiusM, { id: r.id }))) } as never,
         });
-        const r40 = data.rings.find((r) => r.id === "q40")!.radiusM;
-        const r80 = data.rings.find((r) => r.id === "q80")!.radiusM;
-        // The area of the chosen direct catchment: 0–40 mi disc, 40–80 mi ring, 0–80 mi disc.
-        const disc40 = circle(data.plant.lon, data.plant.lat, r40);
-        const disc80 = circle(data.plant.lon, data.plant.lat, r80);
+        // The area of the chosen direct catchment: 0–40 NM disc, 40–80 NM ring, 0–80 NM disc, per plant.
         map.addSource("direct-area", {
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: [
-              { type: "Feature", properties: { id: "q40" }, geometry: { type: "Polygon", coordinates: [disc40] } },
-              { type: "Feature", properties: { id: "q80r" }, geometry: { type: "Polygon", coordinates: [disc80, [...disc40].reverse()] } },
-              { type: "Feature", properties: { id: "q80" }, geometry: { type: "Polygon", coordinates: [disc80] } },
-            ],
+            features: data.plants.flatMap((p) => {
+              const disc40 = circle(p.lon, p.lat, ringRadius(p, 40));
+              const disc80 = circle(p.lon, p.lat, ringRadius(p, 80));
+              return [
+                { type: "Feature", properties: { id: `${p.key}40` }, geometry: { type: "Polygon", coordinates: [disc40] } },
+                { type: "Feature", properties: { id: `${p.key}80r` }, geometry: { type: "Polygon", coordinates: [disc80, [...disc40].reverse()] } },
+                { type: "Feature", properties: { id: `${p.key}80` }, geometry: { type: "Polygon", coordinates: [disc80] } },
+              ];
+            }),
           } as never,
         });
-        // Radius labels on each circle, due north of the plant.
+        // Radius labels on each circle, due north of its plant.
         map.addSource("ring-pt", {
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: data.rings.map((r) => {
-              const at = arc(data.plant.lon, data.plant.lat, r.radiusM, 0, 0, 1)[0]!;
-              return pt(at[0]!, at[1]!, { id: r.id, name: fill(live.current.c.ringMiles, { n: r.nm }) });
-            }),
+            features: data.plants.flatMap((p) =>
+              p.rings.map((r) => {
+                const at = arc(p.lon, p.lat, r.radiusM, 0, 0, 1)[0]!;
+                return pt(at[0]!, at[1]!, { id: r.id, name: fill(live.current.c.ringMiles, { n: r.nm }) });
+              }),
+            ),
           } as never,
         });
         map.addSource("adm-catch", {
@@ -348,7 +352,11 @@ export function SoySupplyMap({
         });
         map.addSource("plant", {
           type: "geojson",
-          data: { type: "FeatureCollection", features: [pt(data.plant.lon, data.plant.lat, { name: data.plant.name })] } as never,
+          data: { type: "FeatureCollection", features: data.plants.map((p) => pt(p.lon, p.lat, { id: p.id, name: p.name })) } as never,
+        });
+        map.addSource("terminal", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: (data.terminals ?? []).map((t, i) => pt(t.lon, t.lat, { id: `t${i}`, name: t.name })) } as never,
         });
         map.addSource("adm", {
           type: "geojson",
@@ -644,6 +652,13 @@ export function SoySupplyMap({
           source: "plant",
           paint: { "circle-radius": 8, "circle-color": PLANT_COLOR, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.8 },
         });
+        // The export terminal: a dark point beside the plants.
+        map.addLayer({
+          id: "terminal",
+          type: "circle",
+          source: "terminal",
+          paint: { "circle-radius": 7, "circle-color": "#1d1d1f", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.4 },
+        });
         const label = (id: string, source: string, minzoom: number, size: number) =>
           map!.addLayer({
             id,
@@ -701,9 +716,10 @@ export function SoySupplyMap({
         map.setLayoutProperty("ring-label", "visibility", "none");
         label("adm-label", "adm", 5.5, 12);
         label("plant-label", "plant", 0, 13.5);
+        label("terminal-label", "terminal", 0, 12.5);
         label("plants-other-label", "plants-other", 0, 13);
 
-        for (const layer of ["plant", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"]) {
+        for (const layer of ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"]) {
           map.on("mouseenter", layer, () => map && (map.getCanvas().style.cursor = "pointer"));
           map.on("mouseleave", layer, () => map && (map.getCanvas().style.cursor = ""));
         }
@@ -722,7 +738,7 @@ export function SoySupplyMap({
         };
         map.on("click", (e) => {
           if (!map) return;
-          const layers = ["plant", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"].filter((l) => map!.getLayer(l));
+          const layers = ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"].filter((l) => map!.getLayer(l));
           const hit = map.queryRenderedFeatures(e.point, { layers })[0];
           const { data: dt, c: cc, lang: l, catchments: cm, cdlNames: names, onSelectField: pick } = live.current;
           if (!hit) {
@@ -742,14 +758,24 @@ export function SoySupplyMap({
           const lid = hit.layer.id;
           const pid = String(hit.properties?.id ?? "");
           if (lid === "plant") {
-            const p = dt.plant;
+            const p = dt.plants.find((x) => x.id === pid) ?? dt.plant;
             open(
               e.lngLat,
               `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popPlant)}</p><p class="soy-pop-title">${esc(p.name)}</p>
-              ${row(cc.location, [p.city, p.state].filter(Boolean).join(", "))}
+              ${row(cc.location, p.address || [p.city, p.state].filter(Boolean).join(", "))}
               ${row(cc.toRail, mi(p.railMi))}${row(cc.toRiver, mi(p.riverMi))}
-              ${catchLine("q40")}${catchLine("q80")}${btn("q40")}</div>`,
-              "q40",
+              ${catchLine(`${p.key}40`)}${catchLine(`${p.key}80`)}${btn(`${p.key}80`)}</div>`,
+              `${p.key}80`,
+            );
+            return;
+          }
+          if (lid === "terminal") {
+            const t = (dt.terminals ?? [])[Number(pid.slice(1))];
+            if (!t) return;
+            open(
+              e.lngLat,
+              `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popTerminal)}</p><p class="soy-pop-title">${esc(t.name)}</p>
+              ${t.address ? row(cc.location, t.address) : ""}</div>`,
             );
             return;
           }
@@ -766,7 +792,7 @@ export function SoySupplyMap({
           if (lid === "adm") {
             const el = dt.admElevators.find((x) => x.id === pid);
             if (!el) return;
-            const catchId = el.radiusM ? el.id : (dt.admElevators.find((x) => x.radiusM && x.city === el.city)?.id ?? el.id);
+            const catchId = el.radiusM ? el.id : (el.site ?? el.id);
             open(
               e.lngLat,
               `<div class="soy-pop"><p class="soy-pop-kicker">${esc(cc.popAdm)}</p><p class="soy-pop-title">${esc(el.name)}</p>
@@ -997,10 +1023,10 @@ export function SoySupplyMap({
     const group = groupOf(selected);
     set(["fields", "fields-line", "sel-line"], on.fields);
     set(["nc-fill", "nc-line", "nc-halo", "nc-dot", "sel-nc-line"], on.nc);
-    set(["rings", "plant", "plant-label"], on.rings);
+    set(["rings", "plant", "plant-label", "terminal", "terminal-label"], on.rings);
     set(["plants-other", "plants-other-label"], on.plants);
     const combo = isCombo(selected) ? comboMembers(selected!) : null;
-    set(["direct-area", "ring-label"], on.rings && (group === "direct" || !!combo?.some((m) => m === "q40" || m === "q80")));
+    set(["direct-area", "ring-label"], on.rings && (group === "direct" || !!combo?.some((m) => isPlantUnit(m))));
     set(["adm", "adm-catch", "adm-label"], on.adm && (!group || group === "adm"));
     set(["tp", "tp-catch", "tp-label"], on.tp && (group ? group === "tp" : !combo));
     set(["rail", "rail-casing"], on.rail);
@@ -1077,7 +1103,14 @@ export function SoySupplyMap({
     const one = (x: string) => ["==", ["get", "id"], x];
     const direct = groupOf(id) === "direct";
     const mem = isCombo(id) ? comboMembers(id) : [id];
-    const strong = mem.includes("q80") ? ["q80"] : mem.includes("q40") ? ["q40"] : id === "q80r" || id === "direct" ? ["q40", "q80"] : [];
+    // The plant circles to draw strong: the chosen ring(s), both for a 40–80 NM ring, all for "direct".
+    const strong =
+      id === "direct"
+        ? data.plants.flatMap((p) => p.rings.map((r) => r.id))
+        : mem.flatMap((m) => {
+            const u = plantUnit(m);
+            return !u ? [] : u.ring === "80r" ? [`${u.key}40`, `${u.key}80`] : [`${u.key}${u.ring}`];
+          });
     const admSel = mem.filter((m) => /^adm\d/.test(m));
     map.setPaintProperty("rings", "line-width", (strong.length ? ["match", ["get", "id"], strong, 3.4, 2.2] : 2.2) as never);
     map.setFilter("direct-area", ["in", ["get", "id"], ["literal", mem]] as never);
@@ -1132,7 +1165,7 @@ export function SoySupplyMap({
       map.setPaintProperty("direct-area", "fill-color", ink);
       map.setPaintProperty("direct-area", "fill-opacity", light ? 0.07 : 0.14);
     }
-    for (const id of ["ring-label", "plant-label", "plants-other-label", "adm-label", "tp-label", "states-label", "counties-label"]) {
+    for (const id of ["ring-label", "plant-label", "terminal-label", "plants-other-label", "adm-label", "tp-label", "states-label", "counties-label"]) {
       if (!map.getLayer(id)) continue;
       map.setPaintProperty(id, "text-color", ink);
       map.setPaintProperty(id, "text-halo-color", light ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.78)");
@@ -1251,10 +1284,11 @@ export function SoySupplyMap({
       ),
     },
   };
-  const order: LayerKey[] =
+  const order: LayerKey[] = (
     mode === "corridor"
-      ? ["fields", "us", "rail", "rivers", "corridors", "rings", "plants", "adm", "tp", "nc", "roads", "states", "counties", "nlcd"]
-      : ["fields", "us", "nc", "rings", "plants", "adm", "tp", "rail", "rivers", "roads", "states", "counties", "nlcd"];
+      ? (["fields", "us", "rail", "rivers", "corridors", "rings", "plants", "adm", "tp", "nc", "roads", "states", "counties", "nlcd"] as LayerKey[])
+      : (["fields", "us", "nc", "rings", "plants", "adm", "tp", "rail", "rivers", "roads", "states", "counties", "nlcd"] as LayerKey[])
+  ).filter((k) => k !== "plants" || otherPlants.length > 0); // announced plants only while some have no catchments yet
 
   return (
     <div className="soy-map supply-map">

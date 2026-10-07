@@ -303,6 +303,12 @@ async function loadSoyBinary(stored: string, r2Rel: string): Promise<ArrayBuffer
 }
 
 const NATIONAL_PMTILES = "layers/national/soy.pmtiles";
+// The soy files rebuilt from ADM's 7 Oct 2026 data (four plants, 50 ADM
+// elevators, double crops) live under v2/ in the soy bucket, so a deployment
+// still on the earlier data keeps reading its own. Mirrored in
+// scripts/upload-soy-fields-to-r2.mjs (--v2).
+const SOY_V2 = /^(fields\/units\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
+const soyKey = (rel: string) => (SOY_V2.test(rel) ? `v2/${rel}` : rel);
 const RANGE = /^bytes=(\d+)-(\d+)?$/;
 // Anything bigger than one tile or directory read is refused (Vercel caps a response at 4.5 MB).
 const MAX_RANGE = 2 * 1048576;
@@ -401,12 +407,12 @@ export async function serveKanopiData(request: Request): Promise<Response> {
   // archive the map reads in small byte ranges — forwarded to the soy bucket.
   if (rel === NATIONAL_PMTILES) {
     if (!isSoyTenant(tenant)) return new Response("Not found", { status: 404 });
-    return serveSoyRange(stored, rel, request.headers.get("range"));
+    return serveSoyRange(stored, soyKey(rel), request.headers.get("range"));
   }
 
   if (NLCD_TILE.test(rel)) {
     if (!isSoyTenant(tenant)) return new Response("Not found", { status: 404 });
-    const png = await loadSoyBinary(stored, rel);
+    const png = await loadSoyBinary(stored, soyKey(rel));
     if (png === "error") return new Response("Upstream storage error", { status: 502 });
     return new Response(png ?? EMPTY_PNG, {
       headers: { "content-type": "image/png", "cache-control": "private, max-age=604800" },
@@ -426,7 +432,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
     // single objects; only the per-area field files of the older view come
     // in parts — skip the part probe (an extra R2 request) for the rest.
     const single = rel.startsWith("fields/units/") || rel === "fields/noncomply.geojson" || rel.startsWith("layers/");
-    const result = single ? await loadPlotRel(stored, r2Soy, rel) : await loadPlotFeatureCollection(stored, r2Soy, rel);
+    const result = single ? await loadPlotRel(stored, r2Soy, soyKey(rel)) : await loadPlotFeatureCollection(stored, r2Soy, rel);
     if (!result.ok) {
       return new Response("Upstream storage error", { status: result.reason === "not-found" ? 404 : 502 });
     }

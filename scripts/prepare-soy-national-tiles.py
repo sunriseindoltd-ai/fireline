@@ -47,7 +47,8 @@ from pmtiles.writer import Writer
 from pyproj import Transformer
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-SRC = r"D:\000 Work\000 Databases\002 Request\999 Request Lainnya\ADM Soybean\Soy_National1825\Soy_National1825.gdb"
+# Delivered 7 Oct 2026 (single and double-crop soybeans; before: soybeans alone, 2.4 million fields).
+SRC = os.path.join(ROOT, "Data Storage", "ADM Soy", "Data Baru", "Soy_National1825.gdb")
 LAYER = "Soy_National1825"
 OUT_DIR = os.path.join(ROOT, "private-data", "tenants", "adm-soy", "layers")
 PMTILES = os.path.join(OUT_DIR, "national", "soy.pmtiles")

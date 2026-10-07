@@ -1,6 +1,6 @@
 import { MAX_ROWS, norm, pct, r1, type AssistantContext, type Kit, type Lang, type ToolOut } from "@/lib/assistant.server";
 import { soySupplyCopy, type SoySupplyCopy } from "@/lib/soy-supply-copy";
-import { AC_TO_HA, comboTotals, stateName, type Catchment, type SupplyData } from "@/lib/soy-supply";
+import { AC_TO_HA, comboTotals, plantOfScope, plantUnit, plantByKey, ringRadius, stateName, unitName, type Catchment, type SupplyData } from "@/lib/soy-supply";
 import type { Tenant } from "@/lib/tenants";
 
 /**
@@ -23,7 +23,7 @@ const T = {
     value: "Value", radius: "Radius (client buffer)", states: "States (soybean acres)", counties: "Top counties (acres)", rail: "Rail",
     river: "River", either: "Rail or river", band: "Within", toRail: "Facility to rail (mi)", toRiver: "Facility to river (mi)",
     overview: "All catchments", top: "Facilities by", combined: "Combined, each field once", soy8: "Fields in soybeans all 8 seasons",
-    railRiver: "Soybean acres near rail and river", ncStates: "Non-compliant fields by state", covered: "share of acres in the 7 states with rail/river data",
+    railRiver: "Soybean acres near rail and river", ncStates: "Non-compliant fields by state", covered: "share of acres with rail/river data",
   },
   id: {
     scope: "Catchment", kind: "Tipe", place: "Lokasi", cf: "Ladang comply", nf: "Ladang non-comply", ca: "Luas comply (acre)",
@@ -31,22 +31,29 @@ const T = {
     value: "Nilai", radius: "Radius (buffer klien)", states: "Negara bagian (acre kedelai)", counties: "County teratas (acre)", rail: "Rel",
     river: "Sungai", either: "Rel atau sungai", band: "Dalam", toRail: "Fasilitas ke rel (mi)", toRiver: "Fasilitas ke sungai (mi)",
     overview: "Semua catchment", top: "Fasilitas menurut", combined: "Gabungan, tiap ladang sekali", soy8: "Ladang kedelai 8 musim penuh",
-    railRiver: "Luas kedelai dekat rel dan sungai", ncStates: "Ladang non-comply per negara bagian", covered: "porsi luas di 7 negara bagian yang punya data rel/sungai",
+    railRiver: "Luas kedelai dekat rel dan sungai", ncStates: "Ladang non-comply per negara bagian", covered: "porsi luas yang punya data rel/sungai",
   },
 } as const;
 
-const OVERVIEW = ["all", "direct", "q40", "adm", "tp", "tpcore"] as const;
+/** The overview rows: whole chain, all plants, each plant's 0–80 / 0–40 NM, ADM elevators, third parties. */
+function overviewIds(data: SupplyData): string[] {
+  return ["all", "direct", ...data.plants.flatMap((p) => [`${p.key}80`, `${p.key}40`]), "adm", "tp"];
+}
 
 function facilitiesOf(data: SupplyData, c: SoySupplyCopy): Facility[] {
   const k = new Map(data.catchments.map((x) => [x.id, x]));
-  const plantPlace = [data.plant.city, data.plant.state].filter(Boolean).join(", ");
   const out: Omit<Facility, "k">[] = [
-    { id: "all", kind: "chain", name: c.scopeAll, place: plantPlace },
-    { id: "direct", kind: "plant", name: `${data.plant.name} · ${c.scopeQ80}`, place: plantPlace },
-    { id: "q40", kind: "plant", name: `${data.plant.name} · ${c.scopeQ40}`, place: plantPlace },
+    { id: "all", kind: "chain", name: c.scopeAll, place: "" },
+    { id: "direct", kind: "chain", name: c.scopeDirect, place: data.plants.map((p) => p.city).join(", ") },
+    ...data.plants.flatMap((p) => {
+      const place = [p.city, p.state].filter(Boolean).join(", ");
+      return [
+        { id: `${p.key}80`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ80}`, place },
+        { id: `${p.key}40`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ40}`, place },
+      ];
+    }),
     { id: "adm", kind: "chain", name: c.scopeAdm, place: "" },
     { id: "tp", kind: "chain", name: c.scopeTp, place: "" },
-    { id: "tpcore", kind: "chain", name: c.scopeTp56, place: "" },
     ...data.admElevators
       .filter((e) => e.radiusM)
       .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
@@ -59,14 +66,21 @@ function kindLabel(s: Soy, f: Facility) {
   return { chain: s.c.facChain, plant: s.c.kindPlant, adm: s.c.kindAdm, tp: s.c.kindTp }[f.kind];
 }
 
-/** A catchment by id ("q40", "adm3", "tp17", "direct"…) or by (part of) its name/place. */
+/** A catchment by id ("q40", "ln80", "adm3", "tp17", "direct"…) or by (part of) its name/place. */
 function findFacilities(s: Soy, q: string): Facility[] {
   const raw = q.trim();
   if (s.byId.has(raw)) return [s.byId.get(raw)!];
   const n = norm(raw);
   if (!n) return [];
-  if (/^(quincy )?0 ?40( nm)?$|^40( nm)?$/.test(n)) return [s.byId.get("q40")!];
-  if (/^(quincy )?0 ?80( nm)?$|^80( nm)?$|^quincy$|^direct$|^langsung( ke quincy)?$/.test(n)) return [s.byId.get("direct")!];
+  if (/^(direct|plants|crushing plants|langsung( ke pabrik)?|pabrik( crushing)?)$/.test(n)) return [s.byId.get("direct")!];
+  // "Lincoln", "Quincy 0-40", "des moines 80 nm": a plant's own catchment (0–80 NM unless 40 is named).
+  for (const p of s.data.plants) {
+    const city = norm(p.city ?? "");
+    if (!city || !(n === city || n.startsWith(`${city} `) || n === norm(p.name) || n.startsWith(`${norm(p.name)} `))) continue;
+    const id = /\b0? ?40( nm)?$/.test(n) ? `${p.key}40` : `${p.key}80`;
+    const hit = s.byId.get(id);
+    if (hit) return [hit];
+  }
   const exact = s.facilities.filter((f) => norm(f.name) === n);
   if (exact.length) return exact;
   return s.facilities.filter((f) => norm(`${f.name} ${f.place} ${f.id}`).includes(n));
@@ -88,7 +102,8 @@ const line = (s: Soy, f: Facility) => {
   return [
     f.name, kindLabel(s, f), f.place || "—",
     k.compliant.fields, k.nonCompliant.fields, acres(k.compliant.acres), acres(k.nonCompliant.acres),
-    compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)), share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres),
+    // As text: the table formats bare numbers as counts, which turned 0.015% into "0".
+    pctText(s, compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres))), pctText(s, share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)),
   ];
 };
 const lineCols = (t: (typeof T)[Lang]) => [t.scope, t.kind, t.place, t.cf, t.nf, t.ca, t.na, t.cs, t.ns];
@@ -119,10 +134,12 @@ const METRIC_LABEL: Record<Lang, Record<Metric, string>> = {
 function radiusText(s: Soy, f: Facility): string {
   const d = s.data.delivered;
   const fmt = (x: { m: number; unit: string }) => (x.unit === "NM" ? `${Math.round(x.m / 1852)} NM` : `${Math.round(x.m / 1609.344)} mi (${Math.round(x.m / 1000)} km)`);
-  if (f.id === "q40") return fmt(d.q40);
-  if (f.id === "direct") return fmt(d.q80);
-  if (f.kind === "adm" || f.id === "adm") return fmt(d.adm);
-  if (f.kind === "tp" || f.id === "tp" || f.id === "tpcore") return fmt(d.tp);
+  const u = plantUnit(f.id);
+  const p = u ? plantByKey(s.data, u.key) : undefined;
+  if (p) return fmt({ m: ringRadius(p, u!.ring === "40" ? 40 : 80), unit: "NM" });
+  if (f.id === "direct" && d.plant80) return fmt(d.plant80);
+  if (f.kind === "adm" || f.id === "adm") return fmt(d.adm!);
+  if (f.kind === "tp" || f.id === "tp") return fmt(d.tp!);
   return "—";
 }
 
@@ -130,12 +147,12 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
   list_catchments: {
     decl: {
       name: "list_catchments",
-      description: "Overview of the supply chain's main catchments (whole chain, direct to the plant 0–80 NM, 0–40 NM, all ADM elevators, all third parties, third parties in 6 states): compliant and non-compliant fields and acres, shares by area.",
+      description: "Overview of the supply chain's main catchments (whole chain, all crushing plants, each plant's 0–80 NM and 0–40 NM, all ADM elevators, all third parties): compliant and non-compliant fields and acres, shares by area.",
       parameters: { type: "object", properties: {} },
     },
     run: (s) => {
       const t = T[s.lang];
-      const list = OVERVIEW.map((id) => s.byId.get(id)).filter((f): f is Facility => !!f);
+      const list = overviewIds(s.data).map((id) => s.byId.get(id)).filter((f): f is Facility => !!f);
       return {
         result: { catchments: list.map((f) => brief(s, f)), note: "A field can be in several catchments; use combined_catchments for unions." },
         table: { title: t.overview, columns: lineCols(t), rows: list.map((f) => line(s, f)), millIds: list.map((f) => f.id) },
@@ -145,8 +162,8 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
   catchment_summary: {
     decl: {
       name: "catchment_summary",
-      description: "Everything about one catchment: the plant's 0–40 / 0–80 NM catchment, one elevator (ADM or third party), or a tier (all, ADM elevators, third parties). Fields and acres compliant/non-compliant, shares, radius, states, top counties, seasons in soybeans, distance of the facility to rail and river.",
-      parameters: { type: "object", properties: { catchment: { type: "string", description: "Catchment id (q40, direct, adm, tp, adm3, tp17…) or a facility name / place, e.g. Burlington, Bunge Decatur" } }, required: ["catchment"] },
+      description: "Everything about one catchment: a crushing plant's 0–40 / 0–80 NM catchment, one elevator (ADM or third party), or a tier (all, all plants, ADM elevators, third parties). Fields and acres compliant/non-compliant, shares, radius, states, top counties, seasons in soybeans, distance of the facility to rail and river.",
+      parameters: { type: "object", properties: { catchment: { type: "string", description: "Catchment id (q40, q80 Quincy; dw40, dw80 Decatur West; ln40, ln80 Lincoln; dm40, dm80 Des Moines; direct, adm, tp, adm3, tp17…) or a facility name / place, e.g. Lincoln, Burlington, Bunge Decatur" } }, required: ["catchment"] },
     },
     run: (s, a) => {
       const t = T[s.lang];
@@ -159,7 +176,7 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
       const all8 = k.compliant.soyYears.find((y) => y.years === 8)?.fields ?? 0;
       const adm = s.data.admElevators.find((e) => e.id === f.id);
       const tp = s.data.thirdParty.find((e) => e.id === f.id);
-      const plant = f.id === "q40" || f.id === "direct" ? s.data.plant : null;
+      const plant = plantOfScope(f.id, s.data) ?? null;
       const dist = adm ?? tp ?? plant;
       const rows: (string | number)[][] = [
         [t.kind, kindLabel(s, f)],
@@ -170,9 +187,9 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
         [L ? "Luas comply (ha)" : "Compliant hectares", acres(k.compliant.acres * AC_TO_HA)],
         [t.nf, k.nonCompliant.fields],
         [t.na, acres(k.nonCompliant.acres)],
-        [t.cs, compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres))],
-        [t.ns, share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)],
-        [t.nsf, share(k.nonCompliant.fields, k.compliant.fields + k.nonCompliant.fields)],
+        [t.cs, pctText(s, compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)))],
+        [t.ns, pctText(s, share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres))],
+        [t.nsf, pctText(s, share(k.nonCompliant.fields, k.compliant.fields + k.nonCompliant.fields))],
         [t.soy8, all8],
         [t.states, k.compliant.states.slice(0, 4).map((x) => `${stateName(x.state)} ${acres(x.acres).toLocaleString(L ? "id-ID" : "en-US")}`).join(" · ") || "—"],
         [t.counties, k.compliant.topCounties.slice(0, 3).map((x) => `${x.county}, ${x.state} ${acres(x.acres).toLocaleString(L ? "id-ID" : "en-US")}`).join(" · ") || "—"],
@@ -227,7 +244,7 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
   combined_catchments: {
     decl: {
       name: "combined_catchments",
-      description: "Totals for a union of catchments with every field counted once (a field can sit in several catchments). Ids: q40, q80 (plant 0–80 NM), adm (all ADM elevators), adm<n>, tp (all third parties), tpcore. E.g. the plant plus ADM elevators = ['q80','adm'].",
+      description: "Totals for a union of catchments with every field counted once (a field can sit in several catchments). Ids: <plant>40 / <plant>80 (q Quincy, dw Decatur West, ln Lincoln, dm Des Moines, e.g. ln80), direct (all plants 0–80 NM), adm (all ADM elevators), adm<n>, tp (all third parties). E.g. Quincy plus ADM elevators = ['q80','adm'].",
       parameters: { type: "object", properties: { catchments: { type: "array", items: { type: "string" } } }, required: ["catchments"] },
     },
     run: (s, a) => {
@@ -235,19 +252,21 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
       const bits = s.data.combos?.bits ?? {};
       const asked = Array.isArray(a.catchments) ? (a.catchments as unknown[]).map(String) : [];
       const ids = new Set<string>();
+      const plants80 = s.data.plants.map((p) => `${p.key}80`);
       for (const x of asked) {
-        const id = x === "direct" ? "q80" : x;
-        if (id === "adm") Object.keys(bits).filter((b) => /^adm\d+$/.test(b)).forEach((b) => ids.add(b));
-        else if (bits[id] != null) ids.add(id);
+        if (x === "direct") plants80.forEach((b) => ids.add(b));
+        else if (x === "adm") Object.keys(bits).filter((b) => /^adm\d+$/.test(b)).forEach((b) => ids.add(b));
+        else if (bits[x] != null) ids.add(x);
         else {
           const hit = findFacilities(s, x)[0];
-          if (hit) ids.add(hit.id === "direct" ? "q80" : hit.id);
+          if (hit?.id === "direct") plants80.forEach((b) => ids.add(b));
+          else if (hit) ids.add(hit.id);
         }
       }
       const known = [...ids].filter((id) => bits[id] != null);
       const tot = comboTotals(s.data, known);
       if (!tot || !known.length) return { result: { error: "no matching catchments", allowed: Object.keys(bits) } };
-      const names = known.map((id) => s.byId.get(id === "q80" ? "direct" : id)?.name ?? id);
+      const names = known.map((id) => s.byId.get(id)?.name ?? unitName(id, s.data, s.c) ?? id);
       const nc = share(tot.ncAcres, tot.acres + tot.ncAcres);
       return {
         result: { catchments: names, compliantFields: tot.fields, nonCompliantFields: tot.ncFields, compliantAcres: acres(tot.acres), nonCompliantAcres: acres(tot.ncAcres), compliantShareByArea: pctText(s, compliantShare(nc)), nonCompliantShareByArea: pctText(s, nc) },
@@ -256,7 +275,7 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
           columns: [t.item, t.value],
           rows: [
             [t.scope, names.length > 6 ? `${names.slice(0, 6).join(", ")} … (+${names.length - 6})` : names.join(", ")],
-            [t.cf, tot.fields], [t.ca, acres(tot.acres)], [t.nf, tot.ncFields], [t.na, acres(tot.ncAcres)], [t.cs, compliantShare(nc)], [t.ns, nc],
+            [t.cf, tot.fields], [t.ca, acres(tot.acres)], [t.nf, tot.ncFields], [t.na, acres(tot.ncAcres)], [t.cs, pctText(s, compliantShare(nc))], [t.ns, pctText(s, nc)],
           ],
         },
       };
@@ -265,7 +284,7 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
   rail_river: {
     decl: {
       name: "rail_river",
-      description: "How much of a catchment's compliant soybean area lies within 5, 10 and 20 statute miles (straight line) of active rail and of the major river system. Only fields in the 7 states with rail/river data count.",
+      description: "How much of a catchment's compliant soybean area lies within 5, 10 and 20 statute miles (straight line) of active rail and of the main river system.",
       parameters: { type: "object", properties: { catchment: { type: "string", description: "Catchment id or facility name (default: whole chain)" } } },
     },
     run: (s, a) => {
@@ -314,7 +333,7 @@ function systemPrompt(s: Soy, ctx: AssistantContext) {
   const elevators = s.facilities.filter((f) => f.kind === "adm").length;
   const tps = s.facilities.filter((f) => f.kind === "tp").length;
   return [
-    `You are the data assistant inside SoyTrace, a dashboard of the soybean supply chain of ${d.plant.name} (crushing plant, ${d.plant.city}, ${d.plant.state}): the plant's own catchments (0–40 and 0–80 nautical miles), ${elevators} ADM elevator catchments (20 NM each) and ${tps} third-party elevator catchments (20 statute miles / 32 km each), with the 2025 soybean fields inside them (USDA Crop Sequence Boundaries). Each field is compliant or non-compliant according to the client's own classification; SoyTrace shows it and does not re-assess it.`,
+    `You are the data assistant inside SoyTrace, a dashboard of ADM's soybean supply chain: ${d.plants.length} crushing plants (${d.plants.map((p) => `${p.name}, ${p.state}`).join("; ")}) each with its own catchments (0–40 and 0–80 nautical miles), ${elevators} ADM elevator catchments and ${tps} third-party elevator catchments (20 NM each), with the 2025 soybean fields inside them (USDA Crop Sequence Boundaries, single and double crop). The elevators are one network beside the plants; which plant each delivers to is not in the data, so never link an elevator to a plant. Each field is compliant or non-compliant according to the client's own classification; SoyTrace shows it and does not re-assess it.`,
     `Reply in ${s.lang === "id" ? "Indonesian (Bahasa Indonesia, plain and friendly)" : "English"}.`,
     "Answer ONLY from tool results. Never invent or estimate a number; if a tool does not have it, say the dashboard does not show it.",
     "The tool's table is shown to the user below your text, so do not repeat the table. Write 1–3 short sentences in plain text (no markdown, no bullet lists): the direct answer and the one or two numbers that matter.",

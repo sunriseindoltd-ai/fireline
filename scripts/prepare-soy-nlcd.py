@@ -9,7 +9,7 @@ Input: Data Storage/ADM Soy/NLCD/Annual_NLCD_LndCov_<year>_CU_C1V*.zip
   the GeoTIFF inside is extracted next to the zip on first run).
 Output: private-data/tenants/adm-soy/layers/nlcd/<year>/<z>/<x>/<y>.png
   — paletted PNG, official NLCD colours, transparent outside the catchments
-  (crushing plant 0–80 NM, ADM elevators 20 NM, third parties 32 km, from
+  (crushing plants 0–80 NM, ADM and third-party elevators 20 NM, from
   supply.json) and where NLCD has no data. Zoom 5–12 (z12 ≈ 30 m pixels; the
   map overzooms past it). Tiles with nothing to show are not written; the
   server answers those with an empty tile.
@@ -56,8 +56,9 @@ for code, hx in COLORS.items():
 
 def catchments():
     d = json.load(open(SUPPLY, encoding="utf-8"))
-    p = d["plant"]
-    out = [(p["lon"], p["lat"], max(r["radiusM"] for r in d["rings"]))]
+    # Every crushing plant's 0–80 NM circle (supply.json "plants" since 7 Oct 2026; "plant" before).
+    plants = d.get("plants") or [{**d["plant"], "rings": d["rings"]}]
+    out = [(p["lon"], p["lat"], max(r["radiusM"] for r in p["rings"])) for p in plants]
     out += [(e["lon"], e["lat"], e["radiusM"]) for e in d["admElevators"] if e.get("radiusM")]
     out += [(e["lon"], e["lat"], e["radiusM"]) for e in d["thirdParty"]]
     return out

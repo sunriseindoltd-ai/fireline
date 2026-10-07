@@ -1,57 +1,54 @@
 """
-Offline admin step for SoyTrace's Quincy supply-chain and rail & river views
-(tenant `adm-soy`), from the client's ADM_SOY.gdb (delivered 30 Sep 2026):
+Offline admin step for SoyTrace's supply-chain and rail & river views (tenant
+`adm-soy`), from the client's ADM_Facilities.gdb (delivered 7 Oct 2026):
 
-  Crushing_Plant_Quincy            ADM Quincy (IL) crushing plant
-  Buffer_Quincy_40NM / _80NM       its two catchments (nautical miles)
-  Point_Elevator_ADM (+ Buffer_…)  ADM elevators, 20 NM catchments
-  Point_ThirdParty_Polygons        98 third-party elevators, 20-mile catchments
-  Point_ThirdParty_Elevator_3_Estate   the 56 of them in IL/IA/MO/KY/MN/IN
-  CP_Compliant_Polygons_40NM/_80NM, Compliant_Elevator_ADM_Polygons,
-  ThirdParty_Compliant_Polygons    compliant 2025 soybean fields per tier
-                                   (USDA Crop Sequence Boundaries 2018–2025)
-  Non_Compliant_Polygons + Point_Non_Compliant   non-compliant fields
-  (+ Data Storage/ADM Soy/Non_Compliant_Polygon_Tambahan: outlines for points
-     that came without one, 1 Oct 2026)
-  RailWay (FRA 07/2025), River (NHD areas)       7 states: IL IN IA KY MN MO WI
+  ADM_Crushing_4Sites (+ _Buffer_40NM / _80NM)   4 crushing plants (Quincy,
+                                   Decatur West, Lincoln, Des Moines) and their
+                                   40 / 80 NM catchments
+  ADM_Facilities_Elevators (+ _Buffer_20NM)      50 ADM elevators, 20 NM each
+  ThirdParty_Facilities (+ _Buffer_20NM)         98 third-party elevators, 20 NM
+  Soy_ADM_Crushing_4Sites_Buffer_40NM/_80NM,
+  Soy_ADM_Facilities_Elevators_Buffer_20NM,
+  Soy_ThirdParty_Facilities_Buffer_20NM          2025 soybean fields (USDA Crop
+                                   Sequence Boundaries 2018–2025) per tier,
+                                   single and double crop (CDL 5, 26, 239, 240,
+                                   241, 254)
+  Non_Compliant_Polygon + Point_Non_Compliant    ADM's non-compliant fields (the
+                                   polygons carry no CSBID: joined to the points
+                                   by their Longitude/Latitude; crops as names)
+  Nola_Terminal                    the export terminal (Port Sulphur, LA)
+  Railway (FRA, whole US), River (one connected polygon: the main river system)
+
+The client has not said which plant each elevator or third party delivers to,
+so they form one network beside the plants and are not tied to any of them.
 
 Output (private-data/tenants/adm-soy/):
-  supply.json                 facilities, catchment statistics, non-compliant
-                              summary, rail & river proximity, density grid —
-                              bundled, read by the workspace
+  supply.json                 plants, facilities, catchment statistics,
+                              non-compliant summary, rail & river proximity,
+                              density grid — bundled, read by the workspace
   fields/units/<id>.geojson   the fields of one catchment, like PalmTrace's
-                              plot file per mill: q40 (0–40 mi), q80r (the
-                              40–80 mi ring; 0–80 mi = q40 + q80r), adm<n> (one per ADM
-                              elevator site), tp<n> (each third party); each
-                              field lists every catchment it's in ("k")
-  fields/noncomply.geojson    non-compliant fields at their true shape (+ the
-                              points delivered without a polygon)
-  layers/rail.geojson, layers/rivers.geojson   replace the old USA_diaz layers
-  layers/corridors.geojson    5- and 10-mile bands around active rail and the
-                              main river system
-  layers/grid.json            finer soybean density grids for zooming in
-  (layers/roads.geojson is left as it was — the gdb has no roads.)
-fields/ and layers/ go to the soy R2 bucket: scripts/upload-soy-fields-to-r2.mjs.
+                              plot file per mill: <p>40 (0–40 NM) and <p>80r
+                              (the 40–80 NM ring; 0–80 NM = both) per plant
+                              (p = q Quincy, dw Decatur West, ln Lincoln, dm Des
+                              Moines), adm<n> (one per ADM elevator site),
+                              tp<n> (each third party); each field lists every
+                              catchment it's in ("k")
+  fields/noncomply.geojson    non-compliant fields at their true shape
+  layers/rail.geojson, layers/rivers.geojson, layers/corridors.geojson
+                              (5- and 10-mile bands), layers/grid.json
+                              (finer soybean density grids)
+fields/ and layers/ go to the soy R2 bucket (under v2/):
+  node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs --v2
 
 Definitions (stated in the app too):
-  - Catchments are the client's own buffers, in nautical miles (ADM's
-    request, 1 Oct 2026): Quincy 40 and 80 NM (74.08 / 148.16 km), each ADM
-    elevator 20 NM (37.07 km). The third-party buffer was delivered at
-    32.19 km (20 statute miles ≈ 17.4 NM, though the layer is named "20NM")
-    and its fields only reach that far, so it stays as delivered.
+  - Catchments are the client's own buffers, in nautical miles: plants 40 and
+    80 NM (74.08 / 148.16 km), every elevator 20 NM (37.04 km).
   - A field is in a catchment when its outline touches ADM's buffer polygon
-    for that facility (geodesic; reproduces the delivered sets), taken from the client's layer for that
-    tier (Quincy from CP_80NM, ADM elevators from Compliant_Elevator_ADM,
-    third parties from ThirdParty_Compliant). Non-compliant fields likewise
-    (points without an outline: inside the circle).
+    for that facility, taken from the client's layer for that tier.
+  - Compliant = every delivered soybean field that is not on ADM's
+    non-compliant list.
   - Distances run from a field's centroid to the nearest active rail line
-    (railusage M/O; X is shown but left out) and to the main river system:
-    every connected set of NHD river areas of at least 50 km² (the
-    Mississippi, Missouri, Ohio, Illinois, Tennessee and other large rivers;
-    lakes on a river split it, so it can be several sets). Only fields in the 7
-    states the rail/river data covers get a distance.
-  - Conversion year / earlier cover of a non-compliant field come from its
-    field-level CDL series; ADM's own flag uses the changed part (Change_Acr).
+    (railusage M/O; X is shown but left out) and to the main river system.
 
 Run with the system Python (fiona, shapely 2, pyproj, numpy):
   python scripts/prepare-adm-soy-supply.py
@@ -60,51 +57,48 @@ import collections
 import json
 import math
 import os
+import re
 import time
 
 import fiona
 import numpy as np
 import shapely
-from pyproj import Transformer
+from pyproj import CRS, Transformer
 from shapely import STRtree
 from shapely.geometry import shape
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GDB = os.path.join(ROOT, "Data Storage", "ADM Soy", "Data Backup", "ADM_SOY.gdb")
-# ADM's complete non-compliant points with owner name and mailing address.
-NC_OWNERS = os.path.join(ROOT, "Data Storage", "ADM Soy", "Non_Compliant", "Non_Compliant.gdb")
-# Outlines sent later (1 Oct 2026) for non-compliant points that came without
-# a polygon; same CSB attributes and Albers projection as Non_Compliant_Polygons.
-NC_EXTRA = [
-    os.path.join(ROOT, "Data Storage", "ADM Soy", "Non_Compliant_Polygon_Tambahan", "Non_Compliant_Tambahan.shp"),
-    # 3 more found by CSBID in USDA's national CSB (soybean 2025 subset); see its README.
-    os.path.join(ROOT, "Data Storage", "ADM Soy", "Non_Compliant_Polygon_Tambahan_CSB", "Non_Compliant_Tambahan_CSB.shp"),
-]
+GDB = os.path.join(ROOT, "Data Storage", "ADM Soy", "Data Baru", "ADM_Facilities.gdb")
 OUT = os.path.join(ROOT, "private-data", "tenants", "adm-soy")
+# Working projection: the fields' own (USGS CONUS Albers, NAD83, latitude of
+# origin 23°); everything else is reprojected into it.
+WORK = CRS.from_proj4("+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs")
 GRID_DEG = 0.2
-# Finer density grids for zooming in (layers/grid.json, loaded on demand):
-# (cell size in degrees, first zoom it shows at) — about 6–13 px per cell.
 GRID_LEVELS = [(0.1, 6.5), (0.05, 7.5), (0.025, 8.5)]
 M_PER_MI = 1609.344
 AC_TO_HA = 0.40468564224
 BANDS_MI = [5, 10, 20]
-MAJOR_KM2 = 50
-# Field / non-compliant membership bits (mirrored in src/lib/soy-supply.ts).
-FLAG_Q40, FLAG_Q80, FLAG_ADM, FLAG_TP, FLAG_CORE, FLAG_DUAL = 1, 2, 4, 8, 16, 32
-COVERAGE = {"IL", "IN", "IA", "KY", "MN", "MO", "WI"}
+# Field / non-compliant membership bits (mirrored in src/lib/soy-supply.ts):
+# any plant 0–40 NM, any plant 0–80 NM, any ADM elevator, any third party,
+# (unused: the old 6-state third parties), also on the non-compliant list,
+# double crop in 2025.
+FLAG_Q40, FLAG_Q80, FLAG_ADM, FLAG_TP, FLAG_CORE, FLAG_DUAL, FLAG_DC = 1, 2, 4, 8, 16, 32, 64
+# Plant city in the gdb (Field2) → id, unit key prefix (unit ids: q40, q80r, q80, dw40…).
+PLANTS = [("Quincy", "quincy", "q"), ("Decatur (West)", "decatur-west", "dw"), ("Lincoln", "lincoln", "ln"), ("Des Moines", "des-moines", "dm")]
 FIPS = {
-    "01": "AL", "05": "AR", "10": "DE", "13": "GA", "17": "IL", "18": "IN", "19": "IA", "20": "KS",
-    "21": "KY", "22": "LA", "24": "MD", "26": "MI", "27": "MN", "28": "MS", "29": "MO", "31": "NE",
-    "34": "NJ", "36": "NY", "37": "NC", "38": "ND", "39": "OH", "40": "OK", "42": "PA", "45": "SC",
-    "46": "SD", "47": "TN", "51": "VA", "55": "WI",
-}
+    "01": "AL", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL", "13": "GA",
+    "16": "ID", "17": "IL", "18": "IN", "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME", "24": "MD", "25": "MA",
+    "26": "MI", "27": "MN", "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH", "34": "NJ", "35": "NM",
+    "36": "NY", "37": "NC", "38": "ND", "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD",
+    "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI", "56": "WY",
+}  # fmt: skip
 STATE_NAMES = {
-    "Illinois": "IL", "Iowa": "IA", "Missouri": "MO", "Indiana": "IN", "Kentucky": "KY", "Minnesota": "MN",
-    "Wisconsin": "WI", "MN": "MN", "KY": "KY", "Arkansas": "AR", "Tennessee": "TN", "Mississippi": "MS",
-    "Louisiana": "LA", "Ohio": "OH", "Michigan": "MI", "Nebraska": "NE", "Kansas": "KS", "Virginia": "VA",
-    "North Carolina": "NC", "South Carolina": "SC", "Georgia": "GA", "Maryland": "MD", "Delaware": "DE",
-    "New York": "NY", "New Jersey": "NJ", "Pennsylvania": "PA", "North Dakota": "ND", "Oklahoma": "OK",
-}
+    "Alabama": "AL", "Arkansas": "AR", "Delaware": "DE", "Georgia": "GA", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA",
+    "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA", "Maryland": "MD", "Michigan": "MI", "Minnesota": "MN",
+    "Mississippi": "MS", "Missouri": "MO", "Nebraska": "NE", "New Jersey": "NJ", "New York": "NY", "North Carolina": "NC",
+    "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Pennsylvania": "PA", "South Carolina": "SC", "South Dakota": "SD",
+    "Tennessee": "TN", "Texas": "TX", "Virginia": "VA", "West Virginia": "WV", "Wisconsin": "WI", "Ontario": "ON",
+}  # fmt: skip
 SOY = {5, 26, 239, 240, 241, 254}
 CORN = {1, 12, 13, 225, 226, 228, 237}
 GRASS = {36, 37, 58, 59, 60, 62, 176, 224}
@@ -114,8 +108,13 @@ NATURAL = TREED | {64, 152, 176, 195, 62}
 DEVELOPED = {111, 121, 122, 123, 124, 131}
 YEARS = list(range(2018, 2026))
 GROUPS = ["soy", "corn", "other", "grass", "fallow", "noncrop"]
+# USDA CDL names missing from soy.json's table (the non-compliant layers name crops instead of coding them).
+CDL_EXTRA = {
+    "Cotton": 2, "Peanuts": 10, "Tobacco": 11, "Canola": 31, "Rape Seed": 34, "Sweet Potatoes": 46, "Pecans": 74,
+    "Grass/Pasture": 176, "Broccoli": 214, "Dbl Crop Barley/Corn": 237, "Blueberries": 242,
+}  # fmt: skip
 
-to_wgs = Transformer.from_crs("ESRI:102003", "EPSG:4326", always_xy=True)
+to_wgs = Transformer.from_crs(WORK, "EPSG:4326", always_xy=True)
 
 
 def wgs(geoms, dp=5):
@@ -161,14 +160,30 @@ def clean(s):
     return " ".join(str(s).split()) if s is not None and str(s).strip() else None
 
 
+def state_abbr(s):
+    s = clean(s)
+    return STATE_NAMES.get(s or "", s)
+
+
 def owner_props(o):
     """Owner name, mailing address and previous owner of a non-compliant field."""
     if not o:
         return {}
+    st = state_abbr(o.get("ST"))
     addr = ", ".join(x for x in (clean(o.get("Address")), clean(o.get("City")),
-                                 " ".join(x for x in (clean(o.get("ST")), clean(o.get("Zip"))) if x)) if x)
+                                 " ".join(x for x in (st, clean(o.get("Zip"))) if x)) if x)
     out = {"on": clean(o.get("Name")), "oa": addr or None, "pv": clean(o.get("Previous_Owner"))}
     return {k: v for k, v in out.items() if v}
+
+
+def city_of(name):
+    """"ADM Northern Illinois - Ottawa North (DCX)" → "Ottawa North"."""
+    s = clean(name) or ""
+    s = re.sub(r"^ADM\s+(Grain\s+(Co\.?|Inc)?\s*|GRAIN CO\.?\s*|Northern Illinois\s*|Agris-Industries ltd\.\s*)?", "", s, flags=re.I)
+    s = re.sub(r"^[-\s]+", "", s)
+    s = re.sub(r"\s*\((Elevator[^)]*|DCX)\)\s*$", "", s)
+    s = re.sub(r"[,\s]+[A-Z]{2}$", "", s)
+    return s.strip() or None
 
 
 def log(msg, t0=[time.time()]):
@@ -178,18 +193,22 @@ def log(msg, t0=[time.time()]):
 def read(layer, geom=True):
     rows, geoms = [], []
     with fiona.open(GDB, layer=layer) as src:
+        tr = None
+        if geom and not CRS.from_wkt(src.crs_wkt).equals(WORK, ignore_axis_order=True):
+            tr = Transformer.from_crs(CRS.from_wkt(src.crs_wkt), WORK, always_xy=True)
         for f in src:
             rows.append(dict(f["properties"]))
             if geom:
-                g = shape(f["geometry"])
-                geoms.append(shapely.force_2d(g))
+                g = shapely.force_2d(shape(f["geometry"]))
+                if tr is not None:
+                    g = shapely.transform(g, lambda xy: np.column_stack(tr.transform(xy[:, 0], xy[:, 1])))
+                geoms.append(g)
     return rows, (np.array(geoms, dtype=object) if geom else None)
 
 
 def write_json(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
-        # numpy scalars (int64 etc.) -> plain Python numbers
         json.dump(obj, fh, separators=(",", ":"), ensure_ascii=False, default=lambda o: o.item() if hasattr(o, "item") else str(o))
     return os.path.getsize(path)
 
@@ -207,82 +226,33 @@ def write_fc(path, geoms_wgs, props):
     return os.path.getsize(path)
 
 
+def tiles_of(geom, size):
+    """A large polygon cut into size×size pieces, so nearest-distance queries stay fast."""
+    x0, y0, x1, y1 = geom.bounds
+    boxes = [shapely.box(x, y, x + size, y + size) for x in np.arange(x0, x1, size) for y in np.arange(y0, y1, size)]
+    boxes = np.array(boxes, dtype=object)
+    boxes = boxes[shapely.intersects(boxes, geom)]
+    parts = shapely.intersection(boxes, geom)
+    return parts[~shapely.is_empty(parts)]
+
+
 def main():
     # ---------------------------------------------------------------- network
     log("rail & rivers")
-    rail_rows, rail_g = read("RailWay")
+    rail_rows, rail_g = read("Railway")
     usage = np.array([r["railusage"] for r in rail_rows])
     active = np.isin(usage, ["M", "O"])
     rail_active = shapely.simplify(rail_g[active], 25)
     rail_tree = STRtree(rail_active)
 
-    riv_rows, riv_g = read("River")
-    ftype = np.array([r["ftype"] for r in riv_rows])
-    keep = np.isin(ftype, [460, 336, 398, 343])
-    riv_g = shapely.make_valid(riv_g[keep])
-    riv_ft = ftype[keep]
-    rt = STRtree(riv_g)
-    a, b = rt.query(riv_g, predicate="intersects")
-    parent = np.arange(len(riv_g))
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    for i, j in zip(a, b):
-        ri, rj = find(i), find(j)
-        if ri != rj:
-            parent[ri] = rj
-    roots = np.array([find(i) for i in range(len(riv_g))])
-    areas = shapely.area(riv_g)
-    comp = collections.Counter()
-    for r, ar in zip(roots, areas):
-        comp[r] += ar
-    # Lakes and reservoirs on the rivers (Lake Pepin, Kentucky Lake, …) are
-    # NHD waterbodies, not river areas, so one river can split into several
-    # systems here; every connected system of at least MAJOR_KM2 counts.
-    major_roots = {r for r, a in comp.items() if a >= MAJOR_KM2 * 1e6}
-    is_main = np.isin(roots, list(major_roots))
-    major_km2 = sum(comp[r] for r in major_roots) / 1e6
-    log(f"major river systems: {len(major_roots)} ({is_main.sum()} polygons, {major_km2:,.0f} km²)")
-    river_main = shapely.simplify(riv_g[is_main], 25)
-    river_tree = STRtree(river_main)
-
-    # ------------------------------------------------------------- facilities
-    # Catchments = the client's buffers (BUFF_DIST, metres): nautical miles for
-    # Quincy 40/80 and ADM elevators 20; third parties as delivered (32.19 km —
-    # their fields were selected with that radius, so a 20 NM circle could not
-    # be filled from the data).
-    log("facilities")
-    plant_rows, plant_g = read("Crushing_Plant_Quincy")
-    q40_rows, _ = read("Buffer_Quincy_40NM", geom=False)
-    q80_rows, _ = read("Buffer_Quincy_80NM", geom=False)
-    plant_xy = shapely.get_coordinates(plant_g)[0]
-    R40, R80 = float(q40_rows[0]["BUFF_DIST"]), float(q80_rows[0]["BUFF_DIST"])
-    rings = [
-        {"id": "q40", "nm": 40, "radiusM": R40, "deliveredM": R40, "deliveredUnit": "NM"},
-        {"id": "q80", "nm": 80, "radiusM": R80, "deliveredM": R80, "deliveredUnit": "NM"},
-    ]
-    adm_rows, adm_g = read("Point_Elevator_ADM")
-    adm_buf_rows, _ = read("Buffer_Elevator_ADM_20NM", geom=False)
-    tp_rows, tp_g = read("Point_ThirdParty_Polygons")
-    tp56_rows, _ = read("Point_ThirdParty_Elevator_3_Estate", geom=False)
-    tp_buf_rows, _ = read("Buffer_ThirdParty_Elevator_20NM", geom=False)
-    core_names = {r["TRACT_Naming_Convention"] for r in tp56_rows}
-    R20 = float(adm_buf_rows[0]["BUFF_DIST"])  # ADM elevators: 20 NM
-    R_TP = float(tp_buf_rows[0]["BUFF_DIST"])  # third parties: as delivered
-    delivered = {
-        "q40": {"m": q40_rows[0]["BUFF_DIST"], "unit": "NM"},
-        "q80": {"m": q80_rows[0]["BUFF_DIST"], "unit": "NM"},
-        "adm": {"m": adm_buf_rows[0]["BUFF_DIST"], "unit": "NM"},
-        "tp": {"m": tp_buf_rows[0]["BUFF_DIST"], "unit": "mi"},
-    }
+    _, riv_g = read("River")
+    river = shapely.make_valid(shapely.union_all(riv_g))
+    river_km2 = shapely.area(river) / 1e6
+    river_pieces = tiles_of(shapely.make_valid(shapely.simplify(river, 25, preserve_topology=True)), 20000)
+    river_tree = STRtree(river_pieces)
+    log(f"main river system: {river_km2:,.0f} km² ({len(river_pieces)} pieces for distances)")
 
     def near(points):
-        # One nearest geometry per input (ties would otherwise return several),
-        # mapped back to input order.
         points = np.asarray(points, dtype=object)
         out = []
         for tree in (rail_tree, river_tree):
@@ -292,12 +262,49 @@ def main():
             out.append(d / M_PER_MI)
         return out[0], out[1]
 
+    # ------------------------------------------------------------- facilities
+    log("facilities")
+    plant_rows, plant_g = read("ADM_Crushing_4Sites")
+    b40_rows, b40_g = read("ADM_Crushing_4Sites_Buffer_40NM")
+    b80_rows, b80_g = read("ADM_Crushing_4Sites_Buffer_80NM")
+    plant_rd, plant_vd = near(plant_g)
+    plant_ll = wgs(plant_g)
+    by_city = {clean(r["Field2"]): i for i, r in enumerate(plant_rows)}
+    b40_by = {clean(r["Field2"]): g for r, g in zip(b40_rows, b40_g)}
+    b80_by = {clean(r["Field2"]): g for r, g in zip(b80_rows, b80_g)}
+    plants = []
+    for city, pid, key in PLANTS:
+        i = by_city[city]
+        r = plant_rows[i]
+        x, y = shapely.get_coordinates(plant_ll[i])[0]
+        r40 = float(next(b["BUFF_DIST"] for b in b40_rows if clean(b["Field2"]) == city))
+        r80 = float(next(b["BUFF_DIST"] for b in b80_rows if clean(b["Field2"]) == city))
+        plants.append({
+            "id": pid, "key": key, "name": f"{clean(r['Buyer'])} {city.replace(' (West)', ' West')}", "company": clean(r["Buyer"]),
+            "city": city.replace(" (West)", " West"), "state": state_abbr(r["State"]),
+            "address": clean(re.sub(r",\s*Estados Unidos$", "", r["Address"] or "")),
+            "lat": round(y, 5), "lon": round(x, 5), "f50": clean(r["F50"]), "f100": clean(r["F100"]),
+            "railMi": round(float(plant_rd[i]), 2), "riverMi": round(float(plant_vd[i]), 2),
+            "rings": [{"id": f"{key}40", "nm": 40, "radiusM": r40}, {"id": f"{key}80", "nm": 80, "radiusM": r80}],
+            "_xy": shapely.get_coordinates(plant_g[i])[0], "_b40": b40_by[city], "_b80": b80_by[city],
+        })
+
+    adm_rows, adm_g = read("ADM_Facilities_Elevators")
+    adm_buf_rows, adm_buf_g = read("ADM_Facilities_Elevators_Buffer_20NM")
+    tp_rows, tp_g = read("ThirdParty_Facilities")
+    tp_buf_rows, tp_buf_g = read("ThirdParty_Facilities_Buffer_20NM")
+    R20 = float(adm_buf_rows[0]["BUFF_DIST"])
+    R_TP = float(tp_buf_rows[0]["BUFF_DIST"])
+    delivered = {
+        "plant40": {"m": plants[0]["rings"][0]["radiusM"], "unit": "NM"},
+        "plant80": {"m": plants[0]["rings"][1]["radiusM"], "unit": "NM"},
+        "adm": {"m": R20, "unit": "NM"},
+        "tp": {"m": R_TP, "unit": "NM"},
+    }
     adm_rd, adm_vd = near(adm_g)
     tp_rd, tp_vd = near(tp_g)
-    plant_rd, plant_vd = near(plant_g)
     adm_ll = wgs(adm_g)
     tp_ll = wgs(tp_g)
-    plant_ll = wgs(plant_g)[0]
 
     # Evansville is listed three times (an elevator and two grain terminals)
     # at separate points; each keeps its own row, but only one catchment.
@@ -305,18 +312,15 @@ def main():
     seen_catch = {}
     for i, r in enumerate(adm_rows):
         x, y = shapely.get_coordinates(adm_ll[i])[0]
-        name = clean(r["Facility_N"]) or clean(r["Facility"]) or f"ADM elevator {i + 1}"
-        key = clean(r["Facility"]) or name
-        catch = key not in seen_catch
-        seen_catch.setdefault(key, i)
+        name = clean(r["Facility_Name"]) or f"ADM elevator {i + 1}"
+        catch = name not in seen_catch
+        seen_catch.setdefault(name, i)
         adm.append({
-            "id": f"adm{i + 1}", "name": name, "city": clean(r["Facility"]), "county": clean(r["County"]),
-            "state": STATE_NAMES.get(clean(r["State"]) or "", clean(r["State"])), "river": clean(r["River"]),
-            "type": clean(r["Type_of_fa"]), "f50": clean(r["F50"]), "f100": clean(r["F100"]),
-            "lat": round(y, 5), "lon": round(x, 5), "radiusM": R20 if catch else None,
-            "site": f"adm{seen_catch[key] + 1}",
+            "id": f"adm{i + 1}", "name": name, "code": clean(r["STACT_Naming_Convention"]), "city": city_of(name),
+            "county": clean(r["County"]), "state": state_abbr(r["State"]), "address": clean(r["Address"]),
+            "type": clean(r["Type_of_facility"]), "lat": round(y, 5), "lon": round(x, 5),
+            "radiusM": R20 if catch else None, "site": f"adm{seen_catch[name] + 1}",
             "railMi": round(float(adm_rd[i]), 2), "riverMi": round(float(adm_vd[i]), 2),
-            "missingAttrs": r["Latitude"] is None,
         })
     tp = []
     for i, r in enumerate(tp_rows):
@@ -324,31 +328,34 @@ def main():
         tp.append({
             "id": f"tp{i + 1}", "tract": clean(r["TRACT_Naming_Convention"]), "company": clean(r["Company_Name"]),
             "county": clean(r["County"]), "state": clean(r["State"]), "type": clean(r["Type_of_facility"]),
-            "lat": round(y, 5), "lon": round(x, 5), "radiusM": R_TP,
-            "core": r["TRACT_Naming_Convention"] in core_names,
+            "lat": round(y, 5), "lon": round(x, 5), "radiusM": R_TP, "core": False,
             "railMi": round(float(tp_rd[i]), 2), "riverMi": round(float(tp_vd[i]), 2),
         })
-    px, py = shapely.get_coordinates(plant_ll)[0]
-    pr = plant_rows[0]
-    plant = {
-        "name": f"{clean(pr['Buyer'])} {clean(pr['Field2'])}", "company": clean(pr["Buyer"]), "city": clean(pr["Field2"]),
-        "state": STATE_NAMES.get(clean(pr["State"]) or "", clean(pr["State"])), "lat": round(py, 5), "lon": round(px, 5),
-        "f50": clean(pr["F50"]), "f100": clean(pr["F100"]),
-        "railMi": round(float(plant_rd[0]), 2), "riverMi": round(float(plant_vd[0]), 2),
-    }
+    nola_rows, nola_g = read("Nola_Terminal")
+    terminals = []
+    for r, g in zip(nola_rows, wgs(nola_g)):
+        x, y = shapely.get_coordinates(g)[0]
+        terminals.append({"name": clean(r["Name"]), "address": clean(r["Snippet"]), "lat": round(y, 5), "lon": round(x, 5)})
+
+    # ------------------------------------------------------- non-compliant ids
+    nc_pt_rows, nc_pt_g = read("Point_Non_Compliant")
+    nc_ids = {str(r["CSBID"]) for r in nc_pt_rows}
 
     # ----------------------------------------------------------------- fields
-    # Pools: which of the client's layers a field came from (bit per layer).
-    POOLS = [("CP_Compliant_Polygons_40NM", 1), ("CP_Compliant_Polygons_80NM", 2),
-             ("Compliant_Elevator_ADM_Polygons", 4), ("ThirdParty_Compliant_Polygons", 8)]
+    POOLS = [("Soy_ADM_Crushing_4Sites_Buffer_40NM", 1), ("Soy_ADM_Crushing_4Sites_Buffer_80NM", 2),
+             ("Soy_ADM_Facilities_Elevators_Buffer_20NM", 4), ("Soy_ThirdParty_Facilities_Buffer_20NM", 8)]
     idx = {}
     geoms, rows_out = [], []
+    on_nc_list = 0
     for layer, bit in POOLS:
         log(f"reading {layer}")
         with fiona.open(GDB, layer=layer) as src:
             for f in src:
                 p = f["properties"]
                 cid = str(p["CSBID"])
+                if cid in nc_ids:
+                    on_nc_list += 1
+                    continue
                 k = idx.get(cid)
                 if k is None:
                     idx[cid] = len(rows_out)
@@ -363,48 +370,50 @@ def main():
     geoms = np.array(geoms, dtype=object)
     n_all = len(rows_out)
     pool = np.array([r["pool"] for r in rows_out])
-    log(f"distinct compliant fields delivered: {n_all:,}")
+    double = np.array([r["cdl"][-1] != 5 for r in rows_out])
+    log(f"distinct compliant fields delivered: {n_all:,} ({double.sum():,} double crop; {on_nc_list} rows on the non-compliant list left out)")
 
-    # Membership: a field belongs to a catchment when its outline touches
-    # ADM's own buffer polygon for that facility (geodesic, so not a perfect
-    # circle in Albers — up to ~1.4 km wider than a planar circle). This
-    # reproduces the delivered sets exactly (Quincy 40/80 NM, ADM elevators).
     log("catchment membership (ADM's buffer polygons)")
     tree = STRtree(geoms)
-    buffers = {
-        "q40": read("Buffer_Quincy_40NM")[1],
-        "q80": read("Buffer_Quincy_80NM")[1],
-        "adm": read("Buffer_Elevator_ADM_20NM")[1],
-        "tp": read("Buffer_ThirdParty_Elevator_20NM")[1],
-    }
-    buffer_centres = {k: shapely.get_coordinates(shapely.centroid(v)) for k, v in buffers.items()}
 
-    def area_for(center_xy, radius, kind):
-        # The delivered buffer around this facility (nearest centre); a plain
-        # circle only if none is within 2 km (should not happen).
-        d = np.hypot(*(buffer_centres[kind] - center_xy).T)
+    def nearest_buffer(center_xy, bufs):
+        cents = shapely.get_coordinates(shapely.centroid(bufs))
+        d = np.hypot(*(cents - center_xy).T)
         i = int(np.argmin(d))
-        if d[i] < 2000:
-            return buffers[kind][i]
-        log(f"  no delivered {kind} buffer near {center_xy}; using a circle")
-        return shapely.Point(center_xy).buffer(radius, quad_segs=64)
+        if d[i] > 2000:
+            log(f"  no delivered buffer within 2 km of {center_xy} (nearest {d[i]:.0f} m)")
+        return bufs[i]
 
-    def touching(center_xy, radius, pool_bit, kind):
-        ix = tree.query(area_for(center_xy, radius, kind), predicate="intersects")
-        return np.sort(ix[(pool[ix] & pool_bit) != 0])
+    def touching(area, pool_bits):
+        ix = tree.query(area, predicate="intersects")
+        return np.sort(ix[(pool[ix] & pool_bits) != 0])
 
-    q80_ix = touching(plant_xy, R80, 2, "q80")
-    q40_ix = touching(plant_xy, R40, 2, "q40")
-    outer_ix = np.setdiff1d(q80_ix, q40_ix)
-    cent = shapely.point_on_surface(geoms)
+    units = {}
+    unit_sets = {}
+    direct_units = []
+    plant_members = {}
+    in_q40 = np.zeros(n_all, bool)
+    in_q80 = np.zeros(n_all, bool)
+    for pl in plants:
+        k = pl["key"]
+        ix80 = touching(pl["_b80"], 3)
+        ix40 = touching(pl["_b40"], 3)
+        units[f"{k}40"] = ix40
+        units[f"{k}80r"] = np.setdiff1d(ix80, ix40)
+        unit_sets[f"{k}80"] = [f"{k}40", f"{k}80r"]
+        direct_units += [f"{k}40", f"{k}80r", f"{k}80"]
+        plant_members[pl["id"]] = (ix40, ix80)
+        in_q40[ix40] = True
+        in_q80[ix80] = True
+        log(f"  {pl['name']}: 0–40 NM {len(ix40):,}, 0–80 NM {len(ix80):,}")
     adm_xy = shapely.get_coordinates(adm_g)
     tp_xy = shapely.get_coordinates(tp_g)
-    adm_members = {e["id"]: touching(adm_xy[i], R20, 4, "adm") for i, e in enumerate(adm) if e["radiusM"]}
-    tp_members = {e["id"]: touching(tp_xy[i], R_TP, 8, "tp") for i, e in enumerate(tp)}
-
-    # Load units: one file per catchment the map can show (q40, the 40–80 mi
-    # ring, each ADM elevator site, each third party); 0–80 mi loads q40 + q80r.
-    units = {"q40": q40_ix, "q80r": outer_ix, **adm_members, **tp_members}
+    adm_area = {e["id"]: nearest_buffer(adm_xy[i], adm_buf_g) for i, e in enumerate(adm) if e["radiusM"]}
+    tp_area = {e["id"]: nearest_buffer(tp_xy[i], tp_buf_g) for i, e in enumerate(tp)}
+    adm_members = {sid: touching(a, 4) for sid, a in adm_area.items()}
+    tp_members = {sid: touching(a, 8) for sid, a in tp_area.items()}
+    units.update(adm_members)
+    units.update(tp_members)
     member_of = collections.defaultdict(list)
     for uid, ix in units.items():
         for k in ix:
@@ -412,145 +421,103 @@ def main():
     keep = np.array(sorted(member_of))
     log(f"fields in any catchment: {len(keep):,} of {n_all:,}")
 
-    in_q40 = np.zeros(n_all, bool); in_q40[q40_ix] = True  # noqa: E702
-    in_q80 = np.zeros(n_all, bool); in_q80[q80_ix] = True  # noqa: E702
     in_adm = np.zeros(n_all, bool)
     for ix in adm_members.values():
         in_adm[ix] = True
     in_tp = np.zeros(n_all, bool)
-    in_core = np.zeros(n_all, bool)
-    for e in tp:
-        in_tp[tp_members[e["id"]]] = True
-        if e["core"]:
-            in_core[tp_members[e["id"]]] = True
+    for ix in tp_members.values():
+        in_tp[ix] = True
+    flags = (in_q40 * FLAG_Q40) | (in_q80 * FLAG_Q80) | (in_adm * FLAG_ADM) | (in_tp * FLAG_TP) | (double * FLAG_DC)
 
-    nc_poly_rows, nc_poly_g = read("Non_Compliant_Polygons")
-    known = {str(r["CSBID"]) for r in nc_poly_rows}
-    extra_rows, extra_g = [], []
-    for path in NC_EXTRA:
-        if not os.path.exists(path):
-            continue
-        with fiona.open(path) as src, fiona.open(GDB, layer="Non_Compliant_Polygons") as ref:
-            # Its Albers has latitude of origin 23° (USGS CONUS), the gdb's
-            # 37.5° (ESRI:102003): same shape, shifted — reproject.
-            to_gdb = Transformer.from_crs(src.crs_wkt, ref.crs_wkt, always_xy=True)
-            for f in src:
-                if str(f["properties"]["CSBID"]) in known:
-                    continue
-                known.add(str(f["properties"]["CSBID"]))
-                extra_rows.append(dict(f["properties"]))
-                g = shapely.force_2d(shape(f["geometry"]))
-                extra_g.append(shapely.transform(g, lambda xy: np.column_stack(to_gdb.transform(xy[:, 0], xy[:, 1]))))
-    if extra_rows:
-        log(f"non-compliant outlines added later: {len(extra_rows)}")
-        nc_poly_rows = nc_poly_rows + extra_rows
-        nc_poly_g = np.concatenate([nc_poly_g, np.array(extra_g, dtype=object)])
-    nc_pt_rows, nc_pt_g = read("Point_Non_Compliant")
-    nc_ids = {str(r["CSBID"]) for r in nc_poly_rows} | {str(r["CSBID"]) for r in nc_pt_rows}
-    dual = np.zeros(n_all, bool)
-    for cid in nc_ids:
-        k = idx.get(cid)
-        if k is not None:
-            dual[k] = True
-    flags = (in_q40 * FLAG_Q40) | (in_q80 * FLAG_Q80) | (in_adm * FLAG_ADM) | (in_tp * FLAG_TP) | (in_core * FLAG_CORE) | (dual * FLAG_DUAL)
-
-    in_cov = np.array([r["st"] in COVERAGE for r in rows_out])
     log("distances to rail / rivers")
+    cent = shapely.point_on_surface(geoms)
     rail_mi = np.full(n_all, np.nan)
     river_mi = np.full(n_all, np.nan)
-    sel = np.intersect1d(np.where(in_cov)[0], keep)
-    rail_mi[sel], river_mi[sel] = near(cent[sel])
+    rail_mi[keep], river_mi[keep] = near(cent[keep])
 
-    # Non-compliant fields: polygons, plus points that came without one.
+    # ----------------------------------------------------------- non-compliant
     log("non-compliant")
-    pt_by = {str(r["CSBID"]): (r, g) for r, g in zip(nc_pt_rows, nc_pt_g)}
-    nc = []
-    nc_geoms = []
-    for r, g in zip(nc_poly_rows, nc_poly_g):
-        cid = str(r["CSBID"])
-        pt = pt_by.get(cid, (None, None))[0]
-        nc.append((cid, r, pt, False))
-        nc_geoms.append(g)
-    poly_ids = {str(r["CSBID"]) for r in nc_poly_rows}
-    for cid, (pt, g) in pt_by.items():
-        if cid not in poly_ids:
-            nc.append((cid, None, pt, True))
-            nc_geoms.append(g)
-    nc_geoms = np.array(nc_geoms, dtype=object)
-    nc_tree = STRtree(nc_geoms)
-
-    def nc_touching(center_xy, radius, kind):
-        m = np.zeros(len(nc), bool)
-        m[nc_tree.query(area_for(center_xy, radius, kind), predicate="intersects")] = True
-        return m
-
-    nc_q40 = nc_touching(plant_xy, R40, "q40")
-    nc_q80 = nc_touching(plant_xy, R80, "q80")
-    nc_outer = nc_q80 & ~nc_q40
-    nc_units = {"q40": nc_q40, "q80r": nc_outer}
-    for i, e in enumerate(adm):
-        if e["radiusM"]:
-            nc_units[e["id"]] = nc_touching(adm_xy[i], R20, "adm")
-    for i, e in enumerate(tp):
-        nc_units[e["id"]] = nc_touching(tp_xy[i], R_TP, "tp")
-    nc_member = [[u for u, m in nc_units.items() if m[k]] for k in range(len(nc))]
-    nc_adm = np.any([nc_units[e["id"]] for e in adm if e["radiusM"]], axis=0)
-    nc_tp = np.any([nc_units[e["id"]] for e in tp], axis=0)
-    nc_core = np.any([nc_units[e["id"]] for e in tp if e["core"]], axis=0)
-
-    comp_ids = set(idx)
-    # Owner of each non-compliant field (ADM's complete point file, 1 Oct
-    # 2026): shown on the field card to signed-in users only, never in
-    # downloads or presentation mode.
-    owners = {}
-    if os.path.exists(NC_OWNERS):
-        with fiona.open(NC_OWNERS, layer="Point_Non_Compliant") as src:
-            for f in src:
-                owners[str(f["properties"]["CSBID"])] = dict(f["properties"])
-        log(f"non-compliant owners: {sum(1 for o in owners.values() if clean(o.get('Name')))} of {len(owners)}")
-    # Points without an outline carry crop names, not codes.
+    nc_poly_rows, nc_poly_g = read("Non_Compliant_Polygon")
+    poly_by = {(round(r["Longitude"], 6), round(r["Latitude"], 6)): (r, g) for r, g in zip(nc_poly_rows, nc_poly_g)}
     with open(os.path.join(OUT, "soy.json"), encoding="utf-8") as fh:
         code_by_name = {v: int(k) for k, v in json.load(fh)["cdlNames"].items()}
+    code_by_name.update(CDL_EXTRA)
+    unknown_crops = collections.Counter()
+
+    def code(name):
+        n = clean(name)
+        if n is None:
+            return None
+        c = code_by_name.get(n)
+        if c is None:
+            unknown_crops[n] += 1
+        return c
+
+    nc = []
+    nc_geoms = []
+    for r, g in zip(nc_pt_rows, nc_pt_g):
+        hit = poly_by.get((round(r["Longitude"], 6), round(r["Latitude"], 6)))
+        nc.append((str(r["CSBID"]), r, hit is None))
+        nc_geoms.append(hit[1] if hit else g)
+    if unknown_crops:
+        log(f"  crop names without a CDL code: {dict(unknown_crops)}")
+    nc_geoms = np.array(nc_geoms, dtype=object)
+    log(f"  {len(nc)} non-compliant fields, {sum(1 for x in nc if x[2])} without an outline")
+    nc_tree = STRtree(nc_geoms)
+
+    def nc_touching(area):
+        m = np.zeros(len(nc), bool)
+        m[nc_tree.query(area, predicate="intersects")] = True
+        return m
+
+    nc_units = {}
+    nc_q40 = np.zeros(len(nc), bool)
+    nc_q80 = np.zeros(len(nc), bool)
+    nc_plant = {}
+    for pl in plants:
+        k = pl["key"]
+        m40, m80 = nc_touching(pl["_b40"]), nc_touching(pl["_b80"])
+        nc_units[f"{k}40"] = m40
+        nc_units[f"{k}80r"] = m80 & ~m40
+        nc_plant[pl["id"]] = (m40, m80)
+        nc_q40 |= m40
+        nc_q80 |= m80
+    for sid, a in adm_area.items():
+        nc_units[sid] = nc_touching(a)
+    for sid, a in tp_area.items():
+        nc_units[sid] = nc_touching(a)
+    nc_member = [[u for u, m in nc_units.items() if m[k]] for k in range(len(nc))]
+    nc_adm = np.any([nc_units[sid] for sid in adm_area], axis=0)
+    nc_tp = np.any([nc_units[sid] for sid in tp_area], axis=0)
+
     nc_rd, nc_vd = near(shapely.point_on_surface(nc_geoms))
     nc_props = []
     nc_info = []
-    for k, (cid, r, pt, point_only) in enumerate(nc):
-        if r is not None:
-            cdl = [r[f"CDL{y}"] for y in YEARS]
-            acres = float(r["CSBACRES"] or 0)
-            st = FIPS.get(r["STATEFIPS"], r["STATEFIPS"])
-            county = clean(r["CNTY"])
-        else:
-            cdl = [None] * 8
-            acres = float(pt["CSBACRES"] or 0)
-            st = STATE_NAMES.get(clean(pt["State"]) or "", clean(pt["State"]))
-            county = clean(pt["County"])
-        before = None
-        conv = None
-        if r is not None:
-            early = [c for c in cdl[:3] if c is not None]
-            before = "treed" if any(c in TREED for c in early) else ("natural" if any(c in NATURAL for c in early) else "crop")
-            conv = next((y for y, c in zip(YEARS[3:], cdl[3:]) if c is not None and c not in NATURAL and c not in DEVELOPED), None)
-        change = float(pt["Change_Acr"]) if pt and pt.get("Change_Acr") is not None else None
-        soy26 = clean(pt["F2026_Soy"]) if pt else None
-        crop24 = clean(pt["CDL2024"]) if pt else None
-        crop25 = clean(pt["CDL2025"]) if pt else None
-        f = (FLAG_Q40 if nc_q40[k] else 0) | (FLAG_Q80 if nc_q80[k] else 0) | (FLAG_ADM if nc_adm[k] else 0) | \
-            (FLAG_TP if nc_tp[k] else 0) | (FLAG_CORE if nc_core[k] else 0) | (FLAG_DUAL if cid in comp_ids else 0)
+    for k, (cid, pt, point_only) in enumerate(nc):
+        cdl = [code(pt[f"CDL{y}"]) for y in YEARS]
+        acres = float(pt["CSBACRES"] or 0)
+        st = state_abbr(pt["State"])
+        county = clean(pt["County"])
+        early = [c for c in cdl[:3] if c is not None]
+        before = "treed" if any(c in TREED for c in early) else ("natural" if any(c in NATURAL for c in early) else "crop")
+        conv = next((y for y, c in zip(YEARS[3:], cdl[3:]) if c is not None and c not in NATURAL and c not in DEVELOPED), None)
+        change = float(pt["Change_Acr"]) if pt.get("Change_Acr") is not None else None
+        soy26 = clean(pt.get("Soy_2026"))
+        f = (FLAG_Q40 if nc_q40[k] else 0) | (FLAG_Q80 if nc_q80[k] else 0) | (FLAG_ADM if nc_adm[k] else 0) | (FLAG_TP if nc_tp[k] else 0)
         ex = extent_of(change, acres)
-        use = use_of(cdl[7] if cdl[7] is not None else code_by_name.get(crop25 or ""))
+        use = use_of(cdl[7])
         info = {"id": cid, "acres": acres, "change": change, "st": st, "county": county, "before": before,
                 "conv": conv, "soy26": soy26, "flags": f, "pointOnly": point_only, "cdl": cdl, "extent": ex, "use": use}
         nc_info.append(info)
         nc_props.append({
             "id": cid, "a": round(acres, 1), "ch": None if change is None else round(change, 2), "s": st, "n": county,
             "c": ",".join("" if c is None else str(c) for c in cdl), "b": before, "y": conv, "s26": soy26,
-            "c24": crop24, "c25": crop25, "f": f, "po": point_only, "k": "|".join(nc_member[k]),
-            "sy": sum(1 for c in cdl if c in SOY) if r is not None else None,
+            "c24": clean(pt["CDL2024"]), "c25": clean(pt["CDL2025"]), "f": f, "po": point_only, "k": "|".join(nc_member[k]),
+            "sy": sum(1 for c in cdl if c in SOY),
             "ex": ex, "u": use,
-            **owner_props(owners.get(cid)),
-            "r": round(float(nc_rd[k]), 1) if st in COVERAGE and not math.isnan(nc_rd[k]) else None,
-            "v": round(float(nc_vd[k]), 1) if st in COVERAGE and not math.isnan(nc_vd[k]) else None,
+            **owner_props(pt),
+            "r": None if math.isnan(nc_rd[k]) else round(float(nc_rd[k]), 1),
+            "v": None if math.isnan(nc_vd[k]) else round(float(nc_vd[k]), 1),
         })
 
     # ----------------------------------------------------------- statistics
@@ -577,24 +544,25 @@ def main():
             counties[key] += rows_out[k]["acres"]
             cfields[key] += 1
             states[rows_out[k]["st"]] += rows_out[k]["acres"]
-        cov = ix[in_cov[ix]]
-        cov_acres = float(acres_arr[cov].sum())
         corridor = {}
         for band in BANDS_MI:
             corridor[str(band)] = {
-                "rail": round(float(acres_arr[cov][rail_mi[cov] <= band].sum()), 1),
-                "river": round(float(acres_arr[cov][river_mi[cov] <= band].sum()), 1),
-                "either": round(float(acres_arr[cov][min_mi[cov] <= band].sum()), 1),
-                "both": round(float(acres_arr[cov][(rail_mi[cov] <= band) & (river_mi[cov] <= band)].sum()), 1),
+                "rail": round(float(acres[rail_mi[ix] <= band].sum()), 1),
+                "river": round(float(acres[river_mi[ix] <= band].sum()), 1),
+                "either": round(float(acres[min_mi[ix] <= band].sum()), 1),
+                "both": round(float(acres[(rail_mi[ix] <= band) & (river_mi[ix] <= band)].sum()), 1),
             }
+        dc = ix[double[ix]]
         return {
             "fields": int(len(ix)), "acres": round(float(acres.sum()), 1),
+            "doubleCropFields": int(len(dc)), "doubleCropAcres": round(float(acres_arr[dc].sum()), 1),
             "soyYears": [{"years": y, "fields": hist.get(y, 0)} for y in range(1, 9)],
             "cropHistoryHa": crop,
             "topCounties": [{"county": c, "state": s, "fields": cfields[(c, s)], "acres": round(a2, 1)}
                             for (c, s), a2 in counties.most_common(6)],
             "states": [{"state": s, "acres": round(a2, 1)} for s, a2 in states.most_common()],
-            "coverageAcres": round(cov_acres, 1), "coverageFields": int(len(cov)), "corridor": corridor,
+            # Rail and river now cover every field (national rail, the whole main river system).
+            "coverageAcres": round(float(acres.sum()), 1), "coverageFields": int(len(ix)), "corridor": corridor,
         }
 
     def nc_stats(mask):
@@ -607,7 +575,7 @@ def main():
         return {
             "fields": int(len(ix)), "acres": round(sum(nc_info[k]["acres"] for k in ix), 1),
             "changeAcres": round(sum(nc_info[k]["change"] or 0 for k in ix), 1),
-            "alsoCompliant": int(sum(1 for k in ix if nc_info[k]["flags"] & FLAG_DUAL)),
+            "alsoCompliant": 0,
             "pointOnly": int(sum(1 for k in ix if nc_info[k]["pointOnly"])),
             "byYear": [{"year": y, "fields": by_year.get(y, 0)} for y in range(2021, 2026)],
             "unknownYear": int(by_year.get(None, 0)),
@@ -622,57 +590,76 @@ def main():
         catchments.append({"id": cid, "kind": kind, "name": name, **(extra or {}),
                            "compliant": field_stats(ix), "nonCompliant": nc_stats(nc_mask)})
 
-    nc_any = nc_q80 | nc_adm | nc_tp
-
-    # Combinations (Quincy 0–40 / 0–80 mi, any set of ADM elevator sites,
-    # third parties): fields grouped by which catchments they are in, so any
-    # union can be summed in the browser without counting a field twice.
-    sites = [e["id"] for e in adm if e["radiusM"]]
-    combo_bits = {"q40": 0, "q80": 1, **{sid: 2 + i for i, sid in enumerate(sites)}}
-    combo_bits["tp"] = 2 + len(sites)
-    combo_bits["tpcore"] = 3 + len(sites)
-    fmask = (in_q40.astype(np.int64) << combo_bits["q40"]) | (in_q80.astype(np.int64) << combo_bits["q80"]) | \
-        (in_tp.astype(np.int64) << combo_bits["tp"]) | (in_core.astype(np.int64) << combo_bits["tpcore"])
+    # Combinations (any plant ring, any set of ADM elevator sites, third
+    # parties): fields grouped by which catchments they are in, so any union
+    # can be summed in the browser without counting a field twice. More than
+    # 32 bits, so masks are hex strings (BigInt in the browser).
+    sites = list(adm_area)
+    order = [f"{pl['key']}{r}" for pl in plants for r in ("40", "80")] + sites + ["tp"]
+    combo_bits = {cid: i for i, cid in enumerate(order)}
+    fmask = np.zeros(n_all, dtype=object)
+    fmask[:] = 0
+    for pl in plants:
+        ix40, ix80 = plant_members[pl["id"]]
+        for ix, cid in ((ix40, f"{pl['key']}40"), (ix80, f"{pl['key']}80")):
+            for k in ix:
+                fmask[k] |= 1 << combo_bits[cid]
     for sid in sites:
-        m = np.zeros(n_all, np.int64)
-        m[adm_members[sid]] = 1
-        fmask |= m << combo_bits[sid]
+        for k in adm_members[sid]:
+            fmask[k] |= 1 << combo_bits[sid]
+    for k in np.where(in_tp)[0]:
+        fmask[k] |= 1 << combo_bits["tp"]
     soy8 = soy_years == 8
     combo_fields = collections.defaultdict(lambda: [0, 0.0, 0.0, 0])
     for k in keep:
         row = combo_fields[int(fmask[k])]
         row[0] += 1
         row[1] += acres_arr[k]
-        if in_cov[k] and min_mi[k] <= 10:
+        if min_mi[k] <= 10:
             row[2] += acres_arr[k]
         row[3] += int(soy8[k])
-    nmask = (nc_q40.astype(np.int64) << combo_bits["q40"]) | (nc_q80.astype(np.int64) << combo_bits["q80"]) | \
-        (nc_tp.astype(np.int64) << combo_bits["tp"]) | (nc_core.astype(np.int64) << combo_bits["tpcore"])
+    nmask = [0] * len(nc)
+    for pl in plants:
+        m40, m80 = nc_plant[pl["id"]]
+        for m, cid in ((m40, f"{pl['key']}40"), (m80, f"{pl['key']}80")):
+            for k in np.where(m)[0]:
+                nmask[k] |= 1 << combo_bits[cid]
     for sid in sites:
-        nmask |= nc_units[sid].astype(np.int64) << combo_bits[sid]
+        for k in np.where(nc_units[sid])[0]:
+            nmask[k] |= 1 << combo_bits[sid]
+    for k in np.where(nc_tp)[0]:
+        nmask[k] |= 1 << combo_bits["tp"]
     combo_nc = collections.defaultdict(lambda: [0, 0.0, 0.0])
-    for k in np.where(nmask > 0)[0]:
-        row = combo_nc[int(nmask[k])]
+    for k, m in enumerate(nmask):
+        if not m:
+            continue
+        row = combo_nc[m]
         row[0] += 1
         row[1] += nc_info[k]["acres"]
         row[2] += nc_info[k]["change"] or 0
     combos = {
         "bits": combo_bits,
-        # [mask, fields, acres, acres within 10 mi of rail or river, fields with soybeans all 8 seasons]
-        "fields": [[m, v[0], round(v[1], 1), round(v[2], 1), v[3]] for m, v in sorted(combo_fields.items())],
-        # [mask, fields, field acres, changed (deforested) acres]
-        "nc": [[m, v[0], round(v[1], 1), round(v[2], 1)] for m, v in sorted(combo_nc.items())],
+        # [hex mask, fields, acres, acres within 10 mi of rail or river, fields with soybeans all 8 seasons]
+        "fields": [[format(m, "x"), v[0], round(v[1], 1), round(v[2], 1), v[3]] for m, v in sorted(combo_fields.items())],
+        # [hex mask, fields, field acres, changed acres]
+        "nc": [[format(m, "x"), v[0], round(v[1], 1), round(v[2], 1)] for m, v in sorted(combo_nc.items())],
     }
     log(f"combinations: {len(combos['fields'])} field groups, {len(combos['nc'])} non-compliant groups")
-    # Level 1 and 2 (no fields drawn), then every load unit (level 3).
-    add("all", "tier", "Quincy supply chain", keep, nc_any)
-    add("direct", "tier", "Quincy direct catchment (80 NM)", q80_ix, nc_q80)
+
+    nc_any = nc_q80 | nc_adm | nc_tp
+    add("all", "tier", "ADM soybean supply chain", keep, nc_any)
+    add("direct", "tier", "Crushing plants (80 NM)", np.where(in_q80)[0], nc_q80)
     add("adm", "tier", "ADM elevators", np.where(in_adm)[0], nc_adm)
     add("tp", "tier", "Third-party elevators", np.where(in_tp)[0], nc_tp)
-    add("tpcore", "tier", "Third-party elevators (IL, IA, MO, KY, MN, IN)", np.where(in_core)[0], nc_core)
-    add("q40", "plant", "Quincy 0–40 NM", q40_ix, nc_q40, {"radiusM": R40})
-    add("q80r", "plant", "Quincy 40–80 NM", outer_ix, nc_outer, {"radiusM": R80})
-    add("q80", "plant", "Quincy 0–80 NM", q80_ix, nc_q80, {"radiusM": R80})
+    for pl in plants:
+        k = pl["key"]
+        ix40, ix80 = plant_members[pl["id"]]
+        m40, m80 = nc_plant[pl["id"]]
+        r40, r80 = pl["rings"][0]["radiusM"], pl["rings"][1]["radiusM"]
+        extra = {"plant": pl["id"]}
+        add(f"{k}40", "plant", f"{pl['name']} 0–40 NM", ix40, m40, {**extra, "radiusM": r40})
+        add(f"{k}80r", "plant", f"{pl['name']} 40–80 NM", np.setdiff1d(ix80, ix40), m80 & ~m40, {**extra, "radiusM": r80})
+        add(f"{k}80", "plant", f"{pl['name']} 0–80 NM", ix80, m80, {**extra, "radiusM": r80})
     for e in adm:
         if e["radiusM"]:
             add(e["id"], "adm", e["name"], adm_members[e["id"]], nc_units[e["id"]])
@@ -680,19 +667,17 @@ def main():
         add(e["id"], "tp", e["tract"] or e["company"] or e["id"], tp_members[e["id"]], nc_units[e["id"]])
     log(f"{len(catchments)} catchments")
 
-    # Density grids (fields in any catchment): [gx, gy, acres, coverage acres,
-    # within 10 mi of rail / river / either, % of the cell under these fields].
     ll = shapely.get_coordinates(wgs(cent, 4))
     kk = keep
     w = acres_arr[kk]
-    cv = in_cov[kk]
 
     def grid_for(deg):
         gx = np.floor(ll[kk, 0] / deg).astype(np.int64)
         gy = np.floor(ll[kk, 1] / deg).astype(np.int64)
         uniq, inv = np.unique((gx + 100000) * 1000000 + (gy + 100000), return_inverse=True)
+        ones = np.ones(len(kk), bool)
         sums = [np.bincount(inv, weights=w * m, minlength=len(uniq)) for m in (
-            np.ones(len(kk)), cv, cv & (rail_mi[kk] <= 10), cv & (river_mi[kk] <= 10), cv & (min_mi[kk] <= 10))]
+            ones, ones, rail_mi[kk] <= 10, river_mi[kk] <= 10, min_mi[kk] <= 10)]
         ux = uniq // 1000000 - 100000
         uy = uniq % 1000000 - 100000
         cell_km2 = (deg * 111.32) ** 2 * np.cos(np.radians((uy + 0.5) * deg))
@@ -745,23 +730,24 @@ def main():
     log(f"noncomply.geojson {nc_bytes / 1e6:.1f} MB")
 
     # ---------------------------------------------------------------- layers
+    # Rail is national; the map shows the lines within 25 km of a catchment.
     log("rail / river / corridor layers")
-    rail_all = wgs(shapely.simplify(rail_g, 20), 5)
-    rail_props = [{"u": r["railusage"], "n": clean(r["name"]), "d": clean(r["railsubdiv"])} for r in rail_rows]
+    region = shapely.buffer(shapely.union_all(np.concatenate([
+        np.array([pl["_b80"] for pl in plants], dtype=object), np.array(list(adm_area.values()), dtype=object),
+        np.array(list(tp_area.values()), dtype=object)])), 25000)
+    in_region = shapely.intersects(rail_g, region)
+    rail_rows_r = [r for r, m in zip(rail_rows, in_region) if m]
+    rail_all = wgs(shapely.simplify(rail_g[in_region], 60), 4)
+    rail_props = [{"u": r["railusage"], "n": clean(r["name"]), "d": clean(r["railsubdiv"])} for r in rail_rows_r]
     rb = write_fc(os.path.join(OUT, "layers", "rail.geojson"), rail_all, rail_props)
-    # Shown: the main river system in full, plus other river areas of at
-    # least 0.25 km² (the rest are ditches and slivers the map can't show).
-    show = is_main | ((riv_ft == 460) & (areas >= 1e6))
-    riv_simple = shapely.make_valid(shapely.simplify(riv_g[show], 80, preserve_topology=True))
-    riv_ll = wgs(riv_simple, 4)
-    riv_props = [{"m": bool(m), "t": int(t)} for m, t in zip(is_main[show], riv_ft[show])]
-    vb = write_fc(os.path.join(OUT, "layers", "rivers.geojson"), riv_ll, riv_props)
-    log(f"rail.geojson {rb / 1e6:.1f} MB, rivers.geojson {vb / 1e6:.1f} MB")
+    riv_show = shapely.get_parts(shapely.make_valid(shapely.simplify(river, 60, preserve_topology=True)))
+    riv_show = riv_show[shapely.area(riv_show) > 0]
+    vb = write_fc(os.path.join(OUT, "layers", "rivers.geojson"), wgs(riv_show, 4), [{"m": True, "t": 460}] * len(riv_show))
+    log(f"rail.geojson {rb / 1e6:.1f} MB ({len(rail_rows_r):,} lines), rivers.geojson {vb / 1e6:.1f} MB")
 
-    # Bands: buffer each coarsened piece on its own and union the results
-    # (buffering the whole network as one geometry runs out of memory).
-    rail_parts = shapely.get_parts(shapely.line_merge(shapely.union_all(shapely.simplify(rail_active, 1000))))
-    river_parts = shapely.get_parts(shapely.make_valid(shapely.simplify(river_main, 1000, preserve_topology=True)))
+    rail_region = rail_active[shapely.intersects(rail_active, region)]
+    rail_parts = shapely.get_parts(shapely.line_merge(shapely.union_all(shapely.simplify(rail_region, 1000))))
+    river_parts = shapely.get_parts(shapely.make_valid(shapely.simplify(river, 1000, preserve_topology=True)))
     bands, band_props = [], []
     for net, parts in (("rail", rail_parts), ("river", river_parts)):
         for miles in (10, 5):
@@ -773,23 +759,28 @@ def main():
     cb = write_fc(os.path.join(OUT, "layers", "corridors.geojson"), wgs(np.array(bands, dtype=object), 4), band_props)
     with open(os.path.join(OUT, "layers", "grid.json"), "w", encoding="utf-8") as fh:
         json.dump({"levels": grid_levels}, fh, separators=(",", ":"))
-    log(f"grid.json {os.path.getsize(os.path.join(OUT, 'layers', 'grid.json')) / 1e6:.1f} MB")
-    log(f"corridors.geojson {cb / 1e6:.1f} MB")
+    log(f"grid.json {os.path.getsize(os.path.join(OUT, 'layers', 'grid.json')) / 1e6:.1f} MB, corridors.geojson {cb / 1e6:.1f} MB")
 
     # ----------------------------------------------------------- supply.json
-    rail_km = {u: round(float(sum(r["lengthkm"] or 0 for r in rail_rows if r["railusage"] == u))) for u in ("M", "O", "X")}
+    rail_km = {u: round(float(sum(r["lengthkm"] or 0 for r in rail_rows_r if r["railusage"] == u))) for u in ("M", "O", "X")}
+    for pl in plants:
+        for k in [k for k in pl if k.startswith("_")]:
+            del pl[k]
+    states = sorted({r["st"] for r in (rows_out[k] for k in keep) if r["st"]})
     supply = {
-        "source": "ADM_SOY.gdb (client, 30 Sep 2026): USDA NASS Crop Sequence Boundaries 2018–2025, FRA rail lines 07/2025, USGS NHD river areas",
-        "gridDeg": GRID_DEG, "bandsMi": BANDS_MI, "coverageStates": sorted(COVERAGE),
-        "plant": plant, "rings": rings, "admElevators": adm, "thirdParty": tp,
-        "delivered": delivered, "directUnits": ["q40", "q80r", "q80"], "unitSets": {"q80": ["q40", "q80r"]},
+        "version": 2,
+        "source": "ADM_Facilities.gdb (client, 7 Oct 2026): USDA NASS Crop Sequence Boundaries 2018–2025, FRA rail lines, main river system",
+        "gridDeg": GRID_DEG, "bandsMi": BANDS_MI, "coverageStates": states,
+        "plants": plants, "plant": plants[0], "rings": plants[0]["rings"],
+        "admElevators": adm, "thirdParty": tp, "terminals": terminals,
+        "delivered": delivered, "directUnits": direct_units, "unitSets": unit_sets,
         "catchments": catchments,
         "nonCompliantAll": nc_stats(np.ones(len(nc), bool)),
         "units": unit_index,
         "grid": grid_rows,
-        "network": {"railKm": rail_km, "riverSystemKm2": round(major_km2),
-                    "riverSystems": len(major_roots), "riverSystemPolygons": int(is_main.sum())},
+        "network": {"railKm": rail_km, "riverSystemKm2": round(river_km2), "riverSystems": 1, "riverSystemPolygons": len(riv_show)},
         "fieldsTotal": int(len(keep)), "fieldsDelivered": n_all,
+        "doubleCropFields": int(double[keep].sum()),
         "combos": combos,
     }
     sb = write_json(os.path.join(OUT, "supply.json"), supply)

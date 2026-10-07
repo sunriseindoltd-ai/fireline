@@ -1,7 +1,8 @@
 """
 National soybean statistics for SoyTrace from the USDA NASS Crop Sequence
 Boundaries layer the client's team prepared: every field classed as soybeans
-in 2025, 2018–2025 crop history (Soy_National1825.gdb, 2.4 million fields).
+in 2025 (single or double crop), 2018–2025 crop history (Soy_National1825.gdb,
+2.58 million fields).
 
 Output: private-data/tenants/adm-soy/national.json (bundled with the app):
   fields, acres, soybean-season distribution, per state (fields, acres, share,
@@ -18,7 +19,8 @@ import time
 import fiona
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-SRC = r"D:\000 Work\000 Databases\002 Request\999 Request Lainnya\ADM Soybean\Soy_National1825\Soy_National1825.gdb"
+# Delivered 7 Oct 2026 (single and double-crop soybeans; before: soybeans alone, 2.4 million fields).
+SRC = os.path.join(ROOT, "Data Storage", "ADM Soy", "Data Baru", "Soy_National1825.gdb")
 LAYER = "Soy_National1825"
 OUT = os.path.join(ROOT, "private-data", "tenants", "adm-soy", "national.json")
 YEARS = list(range(2018, 2026))
@@ -37,8 +39,10 @@ def main():
     t = time.time()
     fields = 0
     acres = 0.0
+    dc_fields = 0
+    dc_acres = 0.0
     seasons = collections.Counter()
-    st = collections.defaultdict(lambda: {"fields": 0, "acres": 0.0, "all8": 0})
+    st = collections.defaultdict(lambda: {"fields": 0, "acres": 0.0, "all8": 0, "dcAcres": 0.0})
     county = collections.defaultdict(lambda: {"fields": 0, "acres": 0.0})
     with fiona.open(SRC, layer=LAYER, ignore_geometry=True) as src:
         for i, f in enumerate(src, 1):
@@ -53,13 +57,18 @@ def main():
             st[s]["acres"] += a
             if n == 8:
                 st[s]["all8"] += 1
+            # Double crop in 2025 (winter wheat/soybeans etc.), not soybeans alone.
+            if p["CDL2025"] != 5:
+                dc_fields += 1
+                dc_acres += a
+                st[s]["dcAcres"] += a
             k = (s, p["CNTY"] or "—")
             county[k]["fields"] += 1
             county[k]["acres"] += a
             if i % 500000 == 0:
                 print(f"  {i:,} fields …")
     states = sorted(
-        ({"state": s, "fields": v["fields"], "acres": round(v["acres"]), "all8": v["all8"]} for s, v in st.items()),
+        ({"state": s, "fields": v["fields"], "acres": round(v["acres"]), "all8": v["all8"], "dcAcres": round(v["dcAcres"])} for s, v in st.items()),
         key=lambda x: -x["acres"],
     )
     counties = sorted(
@@ -71,9 +80,11 @@ def main():
         if len(per_state[c["state"]]) < 10:
             per_state[c["state"]].append({"county": c["county"], "fields": c["fields"], "acres": c["acres"]})
     out = {
-        "source": "USDA NASS Crop Sequence Boundaries 2018–2025, fields in soybeans in 2025 (Soy_National1825)",
+        "source": "USDA NASS Crop Sequence Boundaries 2018–2025, fields in soybeans in 2025, single or double crop (Soy_National1825, 7 Oct 2026)",
         "fields": fields,
         "acres": round(acres),
+        "doubleCropFields": dc_fields,
+        "doubleCropAcres": round(dc_acres),
         "counties": len(county),
         "soyYears": [{"years": y, "fields": seasons.get(y, 0)} for y in range(0, 9)],
         "states": states,

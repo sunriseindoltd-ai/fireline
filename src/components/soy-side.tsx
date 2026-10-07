@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import type { Lang } from "@/lib/copy";
 import { fill, formatCount } from "@/lib/format";
 import type { SoySupplyCopy } from "@/lib/soy-supply-copy";
-import { admSiteIds, toggleSel, type Catchment, type SupplyData } from "@/lib/soy-supply";
+import { admSiteIds, plantById, toggleSel, unitName, type Catchment, type SupplyData } from "@/lib/soy-supply";
 
-/** A crushing plant in the list: Quincy has its supply chain, the others wait for ADM's data. */
+/** A crushing plant in the list (hasData false = announced, catchments not delivered yet). */
 export type SidePlant = { id: string; name: string; hasData: boolean };
 
 type Props = {
@@ -46,16 +46,20 @@ export function SoyPlants({ c, plants, plantSel, setPlantSel }: Pick<Props, "c" 
 }
 
 /**
- * The elevators and third parties related to the chosen plant (all plants when
- * none is chosen). Nothing ticked = the whole supply chain; ticks combine and
- * each field is counted once. A single third party is viewed on its own.
+ * The catchments of the chosen plant, or — with all plants — every plant's
+ * catchments plus the ADM and third-party elevators (not tied to a plant in
+ * ADM's data, so they only appear here). Nothing ticked = the whole selection;
+ * ticks combine and each field is counted once. A single third party is
+ * viewed on its own.
  */
 export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catchments }: Omit<Props, "setPlantSel">) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const pending = plants.find((p) => p.id === plantSel && !p.hasData);
-  const forPlant = (e: { plants?: string[] }) => !plantSel || (e.plants ?? ["quincy"]).includes(plantSel);
-  const showDirect = !plantSel || plantSel === "quincy";
+  // Elevators only list under a plant once ADM says which plant they deliver to.
+  const forPlant = (e: { plants?: string[] }) => !plantSel || (e.plants ?? []).includes(plantSel);
+  const plant = plantSel ? plantById(data, plantSel) : undefined;
+  const directPlants = plant ? [plant] : data.plants;
   const sites = useMemo(() => data.admElevators.filter((e) => e.radiusM && forPlant(e)), [data, plantSel]); // eslint-disable-line react-hooks/exhaustive-deps
   const tps = useMemo(() => data.thirdParty.filter(forPlant), [data, plantSel]); // eslint-disable-line react-hooks/exhaustive-deps
   const tpMatches = useMemo(() => {
@@ -104,14 +108,14 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
             <>
               <p className="side-note">{c.sideHint}</p>
 
-              {showDirect ? (
-                <fieldset className="side-group">
-                  <legend>{c.sideDirect}</legend>
-                  {row("q40", c.comboQ40)}
-                  {row("q80", c.comboQ80)}
-                  {row("q80r", c.scopeQ80r)}
-                </fieldset>
-              ) : null}
+              <fieldset className="side-group">
+                <legend>{c.sideDirect}</legend>
+                {directPlants.flatMap((p) => [
+                  row(`${p.key}40`, unitName(`${p.key}40`, data, c)!),
+                  row(`${p.key}80`, unitName(`${p.key}80`, data, c)!),
+                  ...(plant ? [row(`${p.key}80r`, unitName(`${p.key}80r`, data, c)!)] : []),
+                ])}
+              </fieldset>
 
               {sites.length ? (
                 <fieldset className="side-group">
@@ -126,7 +130,7 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
                       {c.comboNoSites}
                     </button>
                   </div>
-                  {sites.map((e) => row(e.id, [e.city ?? e.name, e.state].filter(Boolean).join(", ")))}
+                  <div className="side-tp-list">{sites.map((e) => row(e.id, [e.city ?? e.name, e.state].filter(Boolean).join(", ")))}</div>
                 </fieldset>
               ) : null}
 
@@ -136,7 +140,6 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
                     {c.scopeTp} · {tps.length}
                   </legend>
                   {row("tp", c.sideTpAll, formatCount(tps.length, lang))}
-                  {row("tpcore", c.scopeTp56, formatCount(tps.filter((e) => e.core).length, lang))}
                   <details className="side-tp" open={tpOpen}>
                     <summary>{c.sideTpPick}</summary>
                     <input className="side-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={c.sideSearchTp} aria-label={c.sideSearchTp} />

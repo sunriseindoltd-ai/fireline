@@ -18,9 +18,14 @@
  * leftover can be served — unless --keep-stale is given (use it while the
  * production build still reads the old paths, then run again without it).
  *
+ * --v2: only the files rebuilt from ADM's 7 Oct 2026 data (the SOY_V2 set,
+ * as in src/lib/kanopi-data.server.ts), under the v2/ prefix — a production
+ * build on the earlier data keeps reading the unprefixed keys. Stale keys are
+ * only ever looked for under v2/ then.
+ *
  * Requires R2_ADM_SOY_ACCOUNT_ID / _ACCESS_KEY_ID / _SECRET_ACCESS_KEY / _BUCKET.
  *
- * Usage: node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs [--keep-stale]
+ * Usage: node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs [--v2] [--keep-stale]
  */
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
@@ -33,6 +38,9 @@ const TENANT_DIR = path.join(ROOT, "private-data", "tenants", "adm-soy");
 const PREFIXES = ["fields", "layers"];
 const CONCURRENCY = 6;
 const KEEP_STALE = process.argv.includes("--keep-stale");
+const V2 = process.argv.includes("--v2");
+// Mirrors SOY_V2 in src/lib/kanopi-data.server.ts.
+const SOY_V2 = /^(fields\/units\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
 
 const {
   R2_ADM_SOY_ACCOUNT_ID: account,
@@ -83,15 +91,17 @@ let uploaded = 0;
 let skipped = 0;
 let bytes = 0;
 for (const prefix of PREFIXES) {
-  const files = (await walk(path.join(TENANT_DIR, prefix))).sort();
+  let files = (await walk(path.join(TENANT_DIR, prefix))).sort();
   if (files.length === 0) throw new Error(`no files in ${prefix}/ — run the prepare scripts first`);
-  const remote = await listRemote(prefix);
+  if (V2) files = files.filter((f) => SOY_V2.test(`${prefix}/${f}`));
+  const kprefix = V2 ? `v2/${prefix}` : prefix;
+  const remote = await listRemote(kprefix);
   const queue = [...files];
   async function worker() {
     for (;;) {
       const file = queue.shift();
       if (!file) return;
-      const key = `${prefix}/${file}`;
+      const key = `${kprefix}/${file}`;
       const body = await readFile(path.join(TENANT_DIR, prefix, file));
       const md5 = createHash("md5").update(body).digest("hex");
       if (remote.get(key) === md5) {
@@ -111,10 +121,10 @@ for (const prefix of PREFIXES) {
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-  const local = new Set(files.map((f) => `${prefix}/${f}`));
+  const local = new Set(files.map((f) => `${kprefix}/${f}`));
   const stale = [...remote.keys()].filter((k) => !local.has(k));
   if (KEEP_STALE) {
-    if (stale.length) console.log(`[upload-soy-fields] kept ${stale.length} stale keys under ${prefix}/ (--keep-stale)`);
+    if (stale.length) console.log(`[upload-soy-fields] kept ${stale.length} stale keys under ${kprefix}/ (--keep-stale)`);
     continue;
   }
   for (const key of stale) {

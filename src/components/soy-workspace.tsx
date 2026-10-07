@@ -26,7 +26,7 @@ import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/s
 import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
 import { SoyMapView } from "@/components/soy-mapview";
 import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
-import { idsFromScope, scopeForSel, type SupplyData } from "@/lib/soy-supply";
+import { idsFromScope, plantById, scopeForSel, type SupplyData } from "@/lib/soy-supply";
 import { soySupplyCopy } from "@/lib/soy-supply-copy";
 import { usePersistentState } from "@/lib/use-persistent";
 import { TENANTS, type Tenant } from "@/lib/tenants";
@@ -86,7 +86,8 @@ const TABS: SoyTab[] = ["summary", "map", "corridor", "docs", "areas"];
  * from the soy R2 bucket (scripts/prepare-adm-soy-supply.py and
  * prepare-adm-soy.py).
  */
-/** Crushing plants besides Quincy that ADM named for SoyTrace (feedback 6 Oct): Decatur West, Lincoln, Des Moines. */
+/** Crushing plants besides Quincy that ADM named for SoyTrace (feedback 6 Oct): Decatur West, Lincoln, Des Moines.
+ * Shown as plain points only while supply.json has no catchments for them (all four since 7 Oct). */
 const OTHER_PLANTS = ["decatur-west", "lincoln", "des-moines"];
 
 export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant }) {
@@ -95,7 +96,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const ssc = soySupplyCopy[lang];
   const [tabStored, setTab] = usePersistentState<SoyTab>("soytrace.tab", "summary");
   const tab: SoyTab = TABS.includes(tabStored) ? tabStored : "summary";
-  const [scopeStored, setScope] = usePersistentState<string>("soytrace.scope", "all");
+  const [scopeStored, setScope] = usePersistentState<string>("soytrace.scope2", "all");
   const canPresent = role === "admin" || role === "client";
   const [presentStored, setPresent] = usePersistentState("soytrace.present", false);
   const present = canPresent && presentStored;
@@ -107,7 +108,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const scope = !supplyCatchments || supplyCatchments.has(scopeStored) || scopeStored.startsWith("combo:") ? scopeStored : "all";
   // The Summary's sidebar selection (ticked catchment ids, none = the whole chain). The map's scope
   // is derived from it; when the map changes the scope on its own, the ticks follow the scope.
-  const [selStored, setSelStored] = usePersistentState<string[]>("soytrace.sel", []);
+  // "…2": the 7 Oct data renumbered the elevators, so selections stored before it are dropped.
+  const [selStored, setSelStored] = usePersistentState<string[]>("soytrace.sel2", []);
   const [plantSel, setPlantSel] = usePersistentState<string>("soytrace.plant", "");
   const sel = useMemo(() => {
     if (!supply) return [];
@@ -116,6 +118,12 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const setSel = (ids: string[]) => {
     setSelStored(ids);
     if (supply) setScope(scopeForSel(ids, supply));
+  };
+  // Picking a plant ticks its whole catchment (0–80 NM); "all plants" clears the ticks.
+  const choosePlant = (id: string) => {
+    setPlantSel(id);
+    const p = id && supply ? plantById(supply, id) : undefined;
+    setSel(p ? [`${p.key}80`] : []);
   };
   const navigate = useNavigate();
   const [data, setData] = useState<SoyData | null>(null);
@@ -203,9 +211,9 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const otherPlants = useMemo(
     () =>
       (data?.plants ?? [])
-        .filter((p) => OTHER_PLANTS.includes(p.id))
+        .filter((p) => OTHER_PLANTS.includes(p.id) && !supply?.plants?.some((x) => x.id === p.id))
         .map((p) => ({ id: p.id, name: `ADM ${p.name}`, address: p.address ?? null, lat: p.lat, lon: p.lon })),
-    [data],
+    [data, supply],
   );
   // The printable report (soy-report.tsx) for the selected catchment; a portal, so it can live with the header.
   const canReport = role !== "auditor" && !!supply && !present;
@@ -340,7 +348,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   sel={sel}
                   setSel={setSel}
                   plantSel={plantSel}
-                  setPlantSel={setPlantSel}
+                  setPlantSel={choosePlant}
                 />
               ) : (
                 <SoyDocsView data={supply} c={ssc} lang={lang} present={present} />

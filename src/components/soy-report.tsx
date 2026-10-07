@@ -23,8 +23,13 @@ import {
   comboTotals,
   inScope,
   isCombo,
+  isPlantUnit,
   levelOf,
   pct,
+  plantByKey,
+  plantOfScope,
+  plantUnit,
+  ringRadius,
   scopeBounds,
   stateName,
   unitParts,
@@ -64,35 +69,41 @@ function radiusText(x: { m: number; unit: string } | null, lang: Lang) {
   if (!x) return "—";
   const loc = lang === "id" ? "id-ID" : "en-US";
   const v = x.unit === "NM" ? x.m / 1852 : x.m / 1609.344;
-  return `${v.toLocaleString(loc, { maximumFractionDigits: Math.abs(v - Math.round(v)) < 0.05 ? 0 : 1 })} ${x.unit === "NM" ? "NM" : "mi"} · ${Math.round(x.m / 1000).toLocaleString(loc)} km`;
+  return `${v.toLocaleString(loc, { maximumFractionDigits: Math.abs(v - Math.round(v)) < 0.1 ? 0 : 1 })} ${x.unit === "NM" ? "NM" : "mi"} · ${Math.round(x.m / 1000).toLocaleString(loc)} km`;
 }
 
 function scopeRadius(id: string, data: SupplyData): { m: number; unit: string } | null {
   const d = data.delivered;
-  if (id === "q40") return d.q40;
-  if (id === "q80" || id === "direct") return d.q80;
+  const u = plantUnit(id);
+  const p = u ? plantByKey(data, u.key) : undefined;
+  if (p) return { m: ringRadius(p, u!.ring === "40" ? 40 : 80), unit: "NM" };
+  if (id === "direct") return d.plant80 ?? null;
   if (id === "adm" || data.admElevators.some((e) => e.id === id)) return d.adm;
-  if (id === "tp" || id === "tpcore" || data.thirdParty.some((e) => e.id === id)) return d.tp;
+  if (id === "tp" || data.thirdParty.some((e) => e.id === id)) return d.tp;
   return null;
 }
 
 function scopeName(id: string, data: SupplyData, c: SoySupplyCopy): string {
   if (isCombo(id)) return comboMembers(id).map((m): string => scopeName(m, data, c)).join(" + ");
-  if (id === "q40" || id === "q80") return `${data.plant.name} · ${catchmentLabel(id, data, c)}`;
+  const p = plantOfScope(id, data);
+  const ring = plantUnit(id)?.ring;
+  if (p) return `${p.name} · ${ring === "40" ? c.scopeQ40 : ring === "80" ? c.scopeQ80 : c.scopeQ80r}`;
   return catchmentLabel(id, data, c);
 }
 
+const GROUP_IDS = ["all", "direct", "adm", "tp"];
+
 function kindOf(id: string, data: SupplyData, c: SoySupplyCopy) {
-  if (["all", "direct", "adm", "tp", "tpcore"].includes(id)) return c.kindTier;
-  if (id === "q40" || id === "q80") return c.kindPlant;
+  if (GROUP_IDS.includes(id)) return c.kindTier;
+  if (isPlantUnit(id)) return c.kindPlant;
   if (data.admElevators.some((e) => e.id === id)) return c.kindAdm;
   return c.kindTp;
 }
 
 /** One or two words for the facilities table's Type column. */
 function shortKind(id: string, data: SupplyData, r: SoyReportCopy) {
-  if (["all", "direct", "adm", "tp", "tpcore"].includes(id)) return r.kindGroup;
-  if (id === "q40" || id === "q80") return r.kindPlant;
+  if (GROUP_IDS.includes(id)) return r.kindGroup;
+  if (isPlantUnit(id)) return r.kindPlant;
   if (data.admElevators.some((e) => e.id === id)) return r.kindAdm;
   return r.kindTp;
 }
@@ -100,12 +111,14 @@ function shortKind(id: string, data: SupplyData, r: SoyReportCopy) {
 /** The rows of the facilities table for a scope (its own row first). */
 function facilityIds(scope: string, data: SupplyData): string[] {
   const adm = data.admElevators.filter((e) => e.radiusM).map((e) => e.id);
+  const plantRows = (keys: string[]) => keys.flatMap((k) => [`${k}80`, `${k}40`]);
   if (isCombo(scope)) return comboMembers(scope);
-  if (scope === "all") return ["all", "q80", "q40", ...adm, ...data.thirdParty.map((e) => e.id)];
-  if (scope === "direct" || scope === "q80") return ["q80", "q40"];
+  if (scope === "all") return ["all", ...plantRows(data.plants.map((p) => p.key)), ...adm, ...data.thirdParty.map((e) => e.id)];
+  if (scope === "direct") return ["direct", ...plantRows(data.plants.map((p) => p.key))];
+  const u = plantUnit(scope);
+  if (u && u.ring === "80") return plantRows([u.key]);
   if (scope === "adm") return ["adm", ...adm];
   if (scope === "tp") return ["tp", ...data.thirdParty.map((e) => e.id)];
-  if (scope === "tpcore") return ["tpcore", ...data.thirdParty.filter((e) => e.core).map((e) => e.id)];
   return [scope];
 }
 
@@ -175,13 +188,15 @@ function useMapShot(opts: {
         map.on("load", () => {
           if (!map) return;
           const member = (id: string) => (isCombo(scope) ? comboMembers(scope).includes(id) : false);
-          const strong = (id: string, kind: "plant" | "adm" | "tp", core = false) =>
+          // A plant's rings are strong when that plant (or every plant) is in scope.
+          const plantKeys = new Set((isCombo(scope) ? comboMembers(scope) : [scope]).map((m) => plantUnit(m)?.key).filter(Boolean));
+          const strong = (id: string, kind: "plant" | "adm" | "tp", plantKey = "") =>
             scope === "all" ||
             scope === id ||
             member(id) ||
-            (kind === "plant" && (scope === "direct" || scope === "q80" || scope === "q40" || member("q80") || member("q40"))) ||
+            (kind === "plant" && (scope === "direct" || plantKeys.has(plantKey))) ||
             (kind === "adm" && scope === "adm") ||
-            (kind === "tp" && (scope === "tp" || (scope === "tpcore" && core)));
+            (kind === "tp" && scope === "tp");
           const ring = (lon: number, lat: number, r: number, props: object) => ({
             type: "Feature" as const,
             properties: props,
@@ -189,9 +204,9 @@ function useMapShot(opts: {
           });
           const point = (lon: number, lat: number, props: object) => ({ type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: [lon, lat] } });
           const rings = [
-            ...data.rings.map((r) => ring(data.plant.lon, data.plant.lat, r.radiusM, { kind: "plant", on: strong(r.id, "plant") })),
+            ...data.plants.flatMap((p) => p.rings.map((r) => ring(p.lon, p.lat, r.radiusM, { kind: "plant", on: strong(r.id, "plant", p.key) }))),
             ...data.admElevators.filter((e) => e.radiusM).map((e) => ring(e.lon, e.lat, e.radiusM!, { kind: "adm", on: strong(e.id, "adm") })),
-            ...data.thirdParty.map((e) => ring(e.lon, e.lat, e.radiusM, { kind: "tp", on: strong(e.id, "tp", e.core) })),
+            ...data.thirdParty.map((e) => ring(e.lon, e.lat, e.radiusM, { kind: "tp", on: strong(e.id, "tp") })),
           ];
           const ncIn = (f: SoyFeature) => inScope(scope, { flags: Number(f.properties.f ?? 0), k: String(f.properties.k ?? "") });
           const ncFeatures = (nc ?? []).map((f) => ({ ...f, properties: { ...f.properties, in: ncIn(f) } as Record<string, unknown> }));
@@ -208,9 +223,9 @@ function useMapShot(opts: {
             data: {
               type: "FeatureCollection",
               features: [
-                point(data.plant.lon, data.plant.lat, { kind: "plant", name: data.plant.name, label: true }),
+                ...data.plants.map((p) => point(p.lon, p.lat, { kind: "plant", name: p.name, label: true })),
                 ...data.admElevators.map((e) => point(e.lon, e.lat, { kind: "adm", name: e.city ?? e.name, label: label && strong(e.id, "adm") })),
-                ...data.thirdParty.map((e) => point(e.lon, e.lat, { kind: "tp", name: e.company ?? "", label: levelOf(scope) === 3 && strong(e.id, "tp", e.core) })),
+                ...data.thirdParty.map((e) => point(e.lon, e.lat, { kind: "tp", name: e.company ?? "", label: levelOf(scope) === 3 && strong(e.id, "tp") })),
               ],
             } as never,
           });
@@ -454,7 +469,7 @@ export function SoyReport({
   if (combo && tot) facRows.push({ id: "total", name: r.facTotal, kind: "", radius: "", cf: tot.fields, nf: tot.ncFields, ca: tot.acres, na: tot.ncAcres, total: true });
 
   const facNcRows = facRows
-    .filter((x) => !x.total && !["all", "adm", "tp", "tpcore"].includes(x.id) && x.nf > 0)
+    .filter((x) => !x.total && !["all", "direct", "adm", "tp"].includes(x.id) && x.nf > 0)
     .sort((a, b) => b.na - a.na)
     .slice(0, FAC_CHART_MAX)
     .map((x) => ({
@@ -486,8 +501,9 @@ export function SoyReport({
   const all8 = k?.compliant.soyYears.find((y) => y.years === 8)?.fields ?? 0;
   const near5 = k && k.compliant.coverageAcres > 0 ? pct(k.compliant.corridor["5"]?.either ?? 0, k.compliant.coverageAcres) : null;
   const facility = data.admElevators.find((e) => e.id === scope) ?? data.thirdParty.find((e) => e.id === scope) ?? null;
-  const facilityName = facility ? scopeName(scope, data, c) : scope === "q40" || scope === "q80" || scope === "direct" ? data.plant.name : null;
-  const facilityDist = facility ?? (facilityName ? data.plant : null);
+  const scopePlant = plantOfScope(scope, data);
+  const facilityName = facility ? scopeName(scope, data, c) : (scopePlant?.name ?? null);
+  const facilityDist = facility ?? scopePlant ?? null;
   const miF = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 })} mi`);
   const useLabel = (u: unknown) => (u === "crop" ? fill(c.useCrop, { crop: "" }) : u === "pasture" ? fill(c.usePasture, { crop: "" }) : u === "nonag" ? fill(c.useNonAg, { crop: "" }) : "—");
   const ncList = [...ncIn].sort((a, b) => Number(b.a ?? 0) - Number(a.a ?? 0));
@@ -564,7 +580,7 @@ export function SoyReport({
           <h1>{name}</h1>
           <dl className="rpt-meta">
             <dt>{r.metaPlant}</dt>
-            <dd>{[data.plant.name, [data.plant.city, data.plant.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}</dd>
+            <dd>{scopePlant ? [scopePlant.name, [scopePlant.city, scopePlant.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ") : data.plants.map((p) => p.name).join(", ")}</dd>
             <dt>{r.metaScope}</dt>
             <dd>
               {name} <small>({combo ? r.kindCombo : kindOf(scope, data, c)})</small>
@@ -581,7 +597,7 @@ export function SoyReport({
                 : radiusText(scopeRadius(scope, data), lang)}
             </dd>
             <dt>{r.metaFacilities}</dt>
-            <dd>{countF(facRows.filter((x) => !x.total && !["all", "adm", "tp", "tpcore"].includes(x.id)).length)}</dd>
+            <dd>{countF(facRows.filter((x) => !x.total && !["all", "direct", "adm", "tp"].includes(x.id)).length)}</dd>
             <dt>{r.metaDate}</dt>
             <dd>{date}</dd>
             <dt>{r.metaData}</dt>
@@ -911,7 +927,7 @@ export function SoyReport({
               </thead>
               <tbody>
                 {facRows.map((x) => (
-                  <tr key={x.id} className={x.total || ["all", "adm", "tp", "tpcore"].includes(x.id) ? "rpt-row-total" : ""}>
+                  <tr key={x.id} className={x.total || ["all", "direct", "adm", "tp"].includes(x.id) ? "rpt-row-total" : ""}>
                     <td>{x.name}</td>
                     <td className="nowrap">{x.kind}</td>
                     <td className="nowrap">{x.radius}</td>

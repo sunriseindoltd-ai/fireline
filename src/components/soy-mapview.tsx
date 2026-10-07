@@ -21,7 +21,10 @@ import {
   isCombo,
   levelOf,
   pct,
+  plantOfScope,
+  plantUnit,
   radiusLabel,
+  unitName,
   type Band,
   type Basis,
   type Catchment,
@@ -63,22 +66,21 @@ export type CatchmentInfo = {
   k: Catchment | undefined;
 };
 
-/** The supply chain as a tree — Quincy, three supplier types, their catchments. */
+/** The supply chain as a tree — the whole chain, three supplier types, their catchments. */
 export function catchmentInfos(data: SupplyData, catchments: Map<string, Catchment>, c: SoySupplyCopy): CatchmentInfo[] {
   const sites = data.admElevators.filter((x) => x.radiusM);
-  const plantPlace = [data.plant.city, data.plant.state].filter(Boolean).join(", ");
   const out: CatchmentInfo[] = [
-    { id: "all", level: 1, parent: null, kind: "plant", name: data.plant.name, sub: `${c.levelPlant} · ${plantPlace}`, k: catchments.get("all") },
-    { id: "direct", level: 2, parent: "all", kind: "group", name: c.scopeDirect, sub: c.groupDirectSub, k: catchments.get("direct") },
+    { id: "all", level: 1, parent: null, kind: "plant", name: c.scopeAll, sub: fill(c.chainSub, { p: data.plants.length, a: sites.length, t: data.thirdParty.length }), k: catchments.get("all") },
+    { id: "direct", level: 2, parent: "all", kind: "group", name: c.scopeDirect, sub: fill(c.groupDirectSub, { n: data.plants.length }), k: catchments.get("direct") },
     { id: "adm", level: 2, parent: "all", kind: "group", name: c.scopeAdm, sub: fill(c.groupAdmSub, { n: sites.length }), k: catchments.get("adm") },
     { id: "tp", level: 2, parent: "all", kind: "group", name: c.scopeTp, sub: fill(c.groupTpSub, { n: data.thirdParty.length }), k: catchments.get("tp") },
   ];
-  const directName: Record<string, string> = { q40: c.scopeQ40, q80r: c.scopeQ80r, q80: c.scopeQ80 };
-  // The 40–80 NM ring is only a building block of 0–80 NM; not offered on its own.
-  for (const id of data.directUnits.filter((x) => x !== "q80r"))
-    out.push({ id, level: 3, parent: "direct", kind: "direct", name: directName[id] ?? id, sub: plantPlace, k: catchments.get(id) });
+  // The 40–80 NM rings are only building blocks of 0–80 NM; not offered on their own.
+  for (const p of data.plants)
+    for (const id of [`${p.key}80`, `${p.key}40`])
+      out.push({ id, level: 3, parent: "direct", kind: "direct", name: unitName(id, data, c) ?? id, sub: [p.name, p.state].filter(Boolean).join(" · "), k: catchments.get(id) });
   for (const e of sites)
-    out.push({ id: e.id, level: 3, parent: "adm", kind: "adm", name: e.name, sub: [e.city, e.state, e.river].filter(Boolean).join(" · "), k: catchments.get(e.id) });
+    out.push({ id: e.id, level: 3, parent: "adm", kind: "adm", name: e.name, sub: [e.city, e.state].filter(Boolean).join(", "), k: catchments.get(e.id) });
   for (const e of data.thirdParty)
     out.push({ id: e.id, level: 3, parent: "tp", kind: "tp", name: e.company ?? e.id, sub: [e.county, e.state].filter(Boolean).join(", "), k: catchments.get(e.id) });
   return out;
@@ -90,8 +92,10 @@ function comboInfo(scope: string, data: SupplyData, c: SoySupplyCopy): Catchment
   const sites = data.admElevators.filter((e) => e.radiusM);
   const picked = sites.filter((e) => mem.includes(e.id));
   const parts: string[] = [];
-  if (mem.includes("q80")) parts.push(c.scopeQ80);
-  else if (mem.includes("q40")) parts.push(c.scopeQ40);
+  for (const id of mem) {
+    const n = unitName(id, data, c);
+    if (n) parts.push(n);
+  }
   if (picked.length === sites.length) parts.push(fill(c.comboAdm, { n: sites.length }));
   else if (picked.length > 3) parts.push(fill(c.comboAdmN, { n: picked.length }));
   else parts.push(...picked.map((e) => e.name));
@@ -150,7 +154,6 @@ export function SoyMapView({
   const [picked, setPicked] = useState<SoyFeature | null>(null);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [mapOnly, setMapOnly] = useState(false);
-  const [coreOnly, setCoreOnly] = useState(false);
   const [listQuery, setListQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [tableQuery, setTableQuery] = useState("");
@@ -293,53 +296,32 @@ export function SoyMapView({
   // The levels above this one, top first (supply chain › supplier type › …).
   const trail: CatchmentInfo[] = [];
   for (let up = parent; up; up = up.parent ? infos.find((x) => x.id === up!.parent) : undefined) trail.unshift(up);
-  // The search box and 6-state filter belong to the third-party list only.
-  const q = node.id === "tp" ? listQuery.trim().toLowerCase() : "";
-  const coreIds = new Set(data.thirdParty.filter((e) => e.core).map((e) => e.id));
-  const children =
-    level === 3
-      ? []
-      : infos.filter(
-          (x) =>
-            x.parent === node.id &&
-            (!coreOnly || x.kind !== "tp" || coreIds.has(x.id)) &&
-            (!q || `${x.name} ${x.sub}`.toLowerCase().includes(q)),
-        );
+  // The search box belongs to the long lists (elevators, third parties).
+  const q = node.id === "tp" || node.id === "adm" ? listQuery.trim().toLowerCase() : "";
+  const children = level === 3 ? [] : infos.filter((x) => x.parent === node.id && (!q || `${x.name} ${x.sub}`.toLowerCase().includes(q)));
   const k = node.k;
   const facts: [string, string][] = [];
   {
     const adm = data.admElevators.find((e) => e.id === node.id);
     const tp = data.thirdParty.find((e) => e.id === node.id);
-    const atPlant = node.id === "all" || node.kind === "direct";
-    const at = atPlant ? data.plant : (adm ?? tp);
+    const plant = node.kind === "direct" ? plantOfScope(node.id, data) : undefined;
+    const at = plant ?? adm ?? tp;
     if (at) {
-      facts.push([c.location, atPlant ? [data.plant.city, data.plant.state].filter(Boolean).join(", ") : node.sub]);
+      facts.push([c.location, plant ? [plant.city, plant.state].filter(Boolean).join(", ") : node.sub]);
       facts.push([c.coordinates, `${at.lat.toFixed(5)}, ${at.lon.toFixed(5)}`]);
     }
-    if (node.kind === "direct") {
-      const r40 = data.rings.find((r) => r.id === "q40")!;
-      const r80 = data.rings.find((r) => r.id === "q80")!;
-      const nm = (r: typeof r40) => `${r.nm} NM · ${Math.round(r.deliveredM / 1000)} km`;
-      if (node.id === "q80r") {
-        facts.push([c.radius, `${radiusLabel(r40.radiusM, lang)} – ${radiusLabel(r80.radiusM, lang)}`]);
-        facts.push([c.deliveredLabel, `${nm(r40)} – ${nm(r80)}`]);
-      } else {
-        const r = node.id === "q40" ? r40 : r80;
-        facts.push([c.radius, radiusLabel(r.radiusM, lang)]);
-        facts.push([c.deliveredLabel, nm(r)]);
-      }
+    if (plant) {
+      const ring = plantUnit(node.id)!.ring;
+      const r = ring === "40" ? plant.rings[0]! : plant.rings[1]!;
+      facts.push([c.radius, ring === "80r" ? `${radiusLabel(plant.rings[0]!.radiusM, lang)} – ${radiusLabel(r.radiusM, lang)}` : radiusLabel(r.radiusM, lang)]);
+      if (plant.address) facts.push([c.address, plant.address]);
     }
-    if (adm?.radiusM) {
-      facts.push([c.radius, radiusLabel(adm.radiusM, lang)]);
-      facts.push([c.deliveredLabel, `20 NM · ${Math.round(data.delivered.adm.m / 1000)} km`]);
-    }
-    if (tp) {
-      facts.push([c.radius, radiusLabel(tp.radiusM, lang)]);
-      facts.push([c.deliveredLabel, `20 mi · ${Math.round(data.delivered.tp.m / 1000)} km`]);
-    }
+    if (adm?.radiusM) facts.push([c.radius, radiusLabel(adm.radiusM, lang)]);
+    if (tp) facts.push([c.radius, radiusLabel(tp.radiusM, lang)]);
     if (at) facts.push([c.toRail, miF(at.railMi)], [c.toRiver, miF(at.riverMi)]);
     if (adm?.river) facts.push([c.river, adm.river]);
     if (adm?.type) facts.push([c.facilityType, adm.type]);
+    if (adm?.address) facts.push([c.address, adm.address]);
     if (tp?.company) facts.push([c.company, tp.company]);
     if (tp?.tract) facts.push(["ID", tp.tract]);
   }
@@ -352,9 +334,14 @@ export function SoyMapView({
   const p = picked?.properties;
   const isNc = !!p && ("ch" in p || "po" in p);
   const tiers = (kk: unknown) => {
-    // Fields in the 40–80 NM ring read as "Quincy 0–80 NM"; 0–40 NM fields are in both.
-    const ids = String(kk ?? "").split("|").filter(Boolean).map((x) => (x === "q80r" ? "q80" : x));
-    if (ids.includes("q40") && !ids.includes("q80")) ids.splice(ids.indexOf("q40") + 1, 0, "q80");
+    // Fields in a plant's 40–80 NM ring read as "<plant> 0–80 NM"; 0–40 NM fields are in both.
+    const ids: string[] = [];
+    for (const x of String(kk ?? "").split("|").filter(Boolean)) {
+      const u = plantUnit(x);
+      if (u?.ring === "80r") ids.push(`${u.key}80`);
+      else if (u?.ring === "40") ids.push(x, `${u.key}80`);
+      else ids.push(x);
+    }
     return [...new Set(ids)].map(nameOf).join(" · ") || "—";
   };
   const acresHa = (a: unknown) =>
@@ -726,13 +713,10 @@ export function SoyMapView({
             </>
           ) : (
             <>
-              {node.id === "tp" ? (
+              {node.id === "tp" || node.id === "adm" ? (
                 <div className="soy-panel-tools">
                   <label className="search-field">
                     <input type="search" value={listQuery} onChange={(e) => setListQuery(e.target.value)} placeholder={c.listSearch} aria-label={c.listSearch} />
-                  </label>
-                  <label className="check-inline">
-                    <input type="checkbox" checked={coreOnly} onChange={(e) => setCoreOnly(e.target.checked)} /> {c.tpCoreOnly}
                   </label>
                 </div>
               ) : null}
