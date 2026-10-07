@@ -10,27 +10,30 @@ export type TourStep = {
   body: string;
 };
 
-const TOUR_KEY = "soytrace.tourDone";
+/** Per product, so finishing one product's tour doesn't skip the other's. */
+export const SOY_TOUR_KEY = "soytrace.tourDone";
+export const PALM_TOUR_KEY = "palmtrace.tourDone";
 
 /** Whether the tour should open: once per login (the login page clears the flag). */
-export function tourPending(): boolean {
+export function tourPending(key: string = SOY_TOUR_KEY): boolean {
   try {
-    return localStorage.getItem(TOUR_KEY) !== "1";
+    return localStorage.getItem(key) !== "1";
   } catch {
     return false;
   }
 }
-export function markTourDone() {
+export function markTourDone(key: string = SOY_TOUR_KEY) {
   try {
-    localStorage.setItem(TOUR_KEY, "1");
+    localStorage.setItem(key, "1");
   } catch {
     // Storage blocked: the tour just shows again next time.
   }
 }
-/** Called after a successful login so the next workspace visit shows the tour once. */
+/** Called after a successful login so the next workspace visit shows each tour once. */
 export function resetTour() {
   try {
-    localStorage.removeItem(TOUR_KEY);
+    localStorage.removeItem(SOY_TOUR_KEY);
+    localStorage.removeItem(PALM_TOUR_KEY);
   } catch {
     // ignore
   }
@@ -49,12 +52,15 @@ export function SoyTour({
   labels,
   onClose,
   onStep,
+  product = "soy",
 }: {
   steps: TourStep[];
   labels: { next: string; back: string; skip: string; done: string; stepOf: string };
   onClose: () => void;
   /** Called on every step (the workspace opens the step's tab). */
   onStep?: (step: TourStep) => void;
+  /** Accent colours of the card's buttons. */
+  product?: "soy" | "palm";
 }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -124,7 +130,7 @@ export function SoyTour({
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="tour-layer" data-product="soy">
+    <div className="tour-layer" data-product={product}>
       <div className="tour-block" aria-hidden="true" />
       {rect ? (
         <div

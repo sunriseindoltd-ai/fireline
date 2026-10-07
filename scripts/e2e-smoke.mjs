@@ -125,6 +125,22 @@ async function loginAs(page, { user, pass }) {
       (document.querySelector(".login-err")?.textContent ?? "").trim().length > 0,
     { timeout: 15000 },
   );
+  // Login clears the reading-guide flags; mark both guides seen so the tour
+  // overlay doesn't sit on top of the clicks below.
+  if (new URL(page.url()).pathname.startsWith("/app")) {
+    await page.evaluate(() => {
+      localStorage.setItem("palmtrace.tourDone", "1");
+      localStorage.setItem("soytrace.tourDone", "1");
+    });
+    await page.reload({ waitUntil: "networkidle" });
+  }
+}
+
+/** Admin client switch, in the header's account menu (a full page reload). */
+async function switchClient(page, label) {
+  await page.click(".acct-btn");
+  const item = page.getByRole("menuitemradio", { name: label, exact: true });
+  await Promise.all([page.waitForEvent("load"), item.click()]);
 }
 
 async function fetchPlot(page, id) {
@@ -294,7 +310,8 @@ async function main() {
     brcCoverage.status === 200 && brcCoverage.body.millIds.length > 0 && brcCoverage.body.millIds.every((id) => id.includes("__BRC__")),
     `n=${brcCoverage.body?.millIds?.length}`,
   );
-  check("BRC client sees no client switcher", (await brcPage.locator(".tenant-switch").count()) === 0);
+  await brcPage.click(".acct-btn");
+  check("BRC client sees no client switcher", (await brcPage.locator('.acct-menu [role="menuitemradio"]').count()) === 0);
   // Feedback 3: village flows follow the tenant; the access-request inbox is admin-only.
   const brcAdmFlows = await getJson(brcPage, "/village-flows", {
     method: "POST",
@@ -322,11 +339,11 @@ async function main() {
   check("Contact form rejects an invalid email (400)", badRequest.status === 400, `status=${badRequest.status}`);
 
   await page.goto(`${BASE}/app/portfolio`, { waitUntil: "networkidle" });
-  await Promise.all([page.waitForEvent("load"), page.selectOption(".tenant-switch select", "brc")]);
+  await switchClient(page, "Bakrie Renewable Chemicals");
   await page.waitForLoadState("networkidle");
   const switched = await getJson(page, "/data/mills.json");
   check("Admin can switch to BRC", switched.body?.length === 44 && switched.body.every((m) => m.id.includes("__BRC__")), `n=${switched.body?.length}`);
-  await Promise.all([page.waitForEvent("load"), page.selectOption(".tenant-switch select", "adm")]);
+  await switchClient(page, "ADM");
   await page.waitForLoadState("networkidle");
   const back = await getJson(page, "/data/mills.json");
   check("Admin can switch back to ADM", back.body?.length === admMills.body.length, `n=${back.body?.length}`);

@@ -150,6 +150,10 @@ for (const lang of ["en", "id"]) {
   await page.fill('input[name="password"]', PASS);
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/app\/portfolio/);
+  // Login clears the reading-guide flag; mark it seen so the tour overlay
+  // doesn't cover the screens.
+  await page.evaluate(() => localStorage.setItem("palmtrace.tourDone", "1"));
+  await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".sankey-card svg rect", { timeout: 30000 });
   await page.waitForTimeout(1500);
   await sanitize(page, lang);

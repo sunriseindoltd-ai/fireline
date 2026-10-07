@@ -1061,17 +1061,9 @@ export function ChainMap({
   visibleRef.current = visible;
   const forestOnRef = useRef(forestOn);
   forestOnRef.current = forestOn;
-  const [panelOpen, setPanelOpen] = usePersistentState("palmtrace.panel.layers", true);
-  // On a phone the open Layers card covers most of the map — start it
-  // closed there unless the viewer has already chosen.
-  useEffect(() => {
-    try {
-      if (window.innerWidth < 860 && localStorage.getItem("palmtrace.panel.layers") == null) setPanelOpen(false);
-    } catch {
-      /* storage blocked — keep the default */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- first render only.
-  }, []);
+  // Closed by default: the map is the point, and the mini key below stands
+  // in for the full card until someone opens it.
+  const [panelOpen, setPanelOpen] = usePersistentState("palmtrace.panel.layers", false);
   const [findOpen, setFindOpen] = usePersistentState("palmtrace.panel.find", false);
   const [plotQuery, setPlotQuery] = useState("");
   const [coordInput, setCoordInput] = useState("");

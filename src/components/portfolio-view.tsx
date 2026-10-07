@@ -1,88 +1,111 @@
 import { useMemo, useState } from "react";
 import { groupLabel, type Chain } from "@/lib/ledger";
 import { useI18n } from "@/lib/i18n";
-import { formatCount, formatPct } from "@/lib/format";
+import { fill, formatCount, formatHa, formatPct } from "@/lib/format";
 import { KpiTile } from "@/components/kpi-tile";
 import { PortfolioSankey } from "@/components/portfolio-sankey";
 
 /** How many of a group's mills have plot-level analysis. */
 export type ChainCoverage = { covered: number; total: number };
 
+/** One mill's plot figures, from /eudr-summary (eudr-stats.json). */
+export type MillStat = { totalPlots: number; comply: number; nonComply: number; areaHa: number };
+
 type Props = {
   chains: Chain[];
-  /** Empty until /coverage answers — the status column just stays blank. */
+  /** Empty until /coverage answers — the coverage figures just stay blank. */
   coverage: Map<string, ChainCoverage>;
   coveredIds: Set<string> | null;
+  /** Null until /eudr-summary answers. */
+  millStats: Map<string, MillStat> | null;
   onSelectChain: (chainId: string) => void;
   onSelectRefinery: (chainId: string, refinery: string) => void;
 };
 
-type SortKey = "name" | "status" | "mills" | "refineries" | "village" | "buffer";
-
-function coverageStatus(c: ChainCoverage | undefined): "ready" | "partial" | "master" | null {
-  if (!c) return null;
-  if (c.covered === 0) return "master";
-  return c.covered >= c.total ? "ready" : "partial";
-}
+type SortKey = "name" | "mills" | "plots" | "area" | "comply";
+type GroupRow = { chain: Chain; cov: ChainCoverage | undefined; plots: number; comply: number; areaHa: number };
 
 /**
- * The portfolio as a list you can scan and sort — every group on one line
- * with its coverage — rather than a wall of identical cards (feedback 2,
- * U-06 / "UX workspace").
+ * The portfolio: the groups first, as one sortable list with their plot
+ * figures (feedback 2, U-06 — a list, not a wall of cards), then the flow
+ * chart for those who want the structure. Groups without any plot data sit
+ * apart on one line so they don't read as empty rows.
  */
-export function PortfolioView({ chains, coverage, coveredIds, onSelectChain, onSelectRefinery }: Props) {
+export function PortfolioView({ chains, coverage, coveredIds, millStats, onSelectChain, onSelectRefinery }: Props) {
   const { t, lang } = useI18n();
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "status", dir: 1 });
-  const totals = useMemo(() => {
-    const mills = chains.reduce((n, c) => n + c.mills.length, 0);
-    const village = chains.reduce((n, c) => n + c.village, 0);
-    const buffer = chains.reduce((n, c) => n + c.buffer, 0);
-    const refineries = new Set(chains.flatMap((c) => c.refineries)).size;
-    const covered = chains.reduce((n, c) => n + (coverage.get(c.id)?.covered ?? 0), 0);
-    return { groups: chains.length, refineries, mills, village, buffer, covered };
-  }, [chains, coverage]);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "plots", dir: -1 });
 
-  const statusRank = { ready: 0, partial: 1, master: 2 } as const;
+  const groups = useMemo<GroupRow[]>(
+    () =>
+      chains.map((chain) => {
+        let plots = 0;
+        let comply = 0;
+        let areaHa = 0;
+        for (const m of chain.mills) {
+          const s = millStats?.get(m.id);
+          if (!s) continue;
+          plots += s.totalPlots;
+          comply += s.comply;
+          areaHa += s.areaHa;
+        }
+        return { chain, cov: coverage.get(chain.id), plots, comply, areaHa };
+      }),
+    [chains, coverage, millStats],
+  );
+
+  const totals = useMemo(() => {
+    const sum = (f: (g: GroupRow) => number) => groups.reduce((n, g) => n + f(g), 0);
+    return {
+      groups: groups.length,
+      mills: sum((g) => g.chain.mills.length),
+      covered: sum((g) => g.cov?.covered ?? 0),
+      plots: sum((g) => g.plots),
+      comply: sum((g) => g.comply),
+      areaHa: sum((g) => g.areaHa),
+    };
+  }, [groups]);
+
+  // Until the figures arrive every group counts as "with data", so the
+  // table doesn't flash everything into the no-data line and back.
+  const hasData = (g: GroupRow) => !millStats || g.plots > 0 || (g.cov?.covered ?? 0) > 0;
   const rows = useMemo(() => {
-    const val = (c: Chain): string | number => {
+    const val = (g: GroupRow): string | number => {
       switch (sort.key) {
         case "name":
-          return c.name.toLowerCase();
-        case "status": {
-          const cov = coverage.get(c.id);
-          const s = coverageStatus(cov);
-          // Ready first, then partial by share covered, then master-only.
-          return s ? statusRank[s] * 10 - (cov ? cov.covered / cov.total : 0) : 99;
-        }
+          return g.chain.name.toLowerCase();
         case "mills":
-          return c.mills.length;
-        case "refineries":
-          return c.refineries.length;
-        case "village":
-          return c.village;
+          return g.chain.mills.length;
+        case "plots":
+          return g.plots;
+        case "area":
+          return g.areaHa;
         default:
-          return c.buffer;
+          return g.plots ? g.comply / g.plots : -1;
       }
     };
-    return [...chains].sort((a, b) => {
-      const va = val(a);
-      const vb = val(b);
-      return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- statusRank is a constant literal.
-  }, [chains, coverage, sort]);
+    return groups
+      .filter(hasData)
+      .sort((a, b) => {
+        const va = val(a);
+        const vb = val(b);
+        return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir || a.chain.name.localeCompare(b.chain.name);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hasData reads millStats, already a dependency via groups.
+  }, [groups, sort, millStats]);
+  const noData = groups.filter((g) => !hasData(g));
 
-  const statusText = { ready: t.statusReady, partial: t.statusPartial, master: t.statusMaster };
+  const loading = millStats == null;
+  const num = (v: number, f: (n: number) => string) => (loading ? "…" : v ? f(v) : "—");
 
-  function Th({ k, label, num }: { k: SortKey; label: string; num?: boolean }) {
+  function Th({ k, label, numeric }: { k: SortKey; label: string; numeric?: boolean }) {
     const active = sort.key === k;
     return (
-      <th className={num ? "num" : ""} aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+      <th className={numeric ? "num" : ""} aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
         <button
           type="button"
           className={`th-sort ${active ? "on" : ""}`}
           aria-label={t.sortBy.replace("{col}", label)}
-          onClick={() => setSort(active ? { key: k, dir: sort.dir === 1 ? -1 : 1 } : { key: k, dir: num ? -1 : 1 })}
+          onClick={() => setSort(active ? { key: k, dir: sort.dir === 1 ? -1 : 1 } : { key: k, dir: numeric ? -1 : 1 })}
         >
           {label}
           <span aria-hidden="true">{active ? (sort.dir === 1 ? "↑" : "↓") : ""}</span>
@@ -100,77 +123,102 @@ export function PortfolioView({ chains, coverage, coveredIds, onSelectChain, onS
       </header>
       <div className="kpi-row">
         <KpiTile value={formatCount(totals.groups, lang)} label={t.groupsKpi} />
-        <KpiTile value={formatCount(totals.refineries, lang)} label={t.refineriesKpi} />
-        <KpiTile value={formatCount(totals.mills, lang)} label={t.millsKpi} />
         <KpiTile
-          value={coverage.size ? formatPct(totals.covered, totals.mills, lang) : "—"}
-          label={t.coverageKpi}
+          value={formatCount(totals.mills, lang)}
+          label={t.millsKpi}
           hint={t.coverageKpiHint}
-          sub={coverage.size ? `${formatCount(totals.covered, lang)} ${t.mills}` : undefined}
+          sub={coverage.size ? fill(t.pfMillsSub, { n: formatCount(totals.covered, lang) }) : undefined}
+        />
+        <KpiTile
+          value={loading ? "—" : formatCount(totals.plots, lang)}
+          label={t.totalPlotKpi}
+          sub={loading ? undefined : fill(t.pfAnalysedSub, { ha: formatHa(totals.areaHa, lang) })}
+        />
+        <KpiTile
+          tone="comply"
+          value={loading ? "—" : formatPct(totals.comply, totals.plots, lang)}
+          label={t.eudrComplyKpi}
+          sub={loading ? undefined : `${formatCount(totals.comply, lang)} ${t.plotsLabel}`}
         />
       </div>
-      <PortfolioSankey
-        chains={chains}
-        coveredIds={coveredIds}
-        onSelectChain={onSelectChain}
-        onSelectRefinery={onSelectRefinery}
-      />
-      <div className="table-card">
-        <table className="data-table group-table">
-          <thead>
-            <tr>
-              <Th k="name" label={t.colGroup} />
-              <Th k="status" label={t.colCoverage} />
-              <Th k="mills" label={t.millsKpi} num />
-              <Th k="refineries" label={t.refineriesKpi} num />
-              <Th k="village" label={t.village} num />
-              <Th k="buffer" label={t.buffer} num />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((c) => {
-              const cov = coverage.get(c.id);
-              const status = coverageStatus(cov);
-              return (
-                <tr
-                  key={c.id}
-                  tabIndex={0}
-                  onClick={() => onSelectChain(c.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelectChain(c.id);
-                    }
-                  }}
-                >
-                  <td>
-                    <b className="group-name">{groupLabel(c.name)}</b>
-                  </td>
-                  <td>
-                    {status && cov ? (
-                      <span className="coverage-cell">
-                        <span className={`status-pill ${status}`}>{statusText[status]}</span>
-                        <span className="coverage-bar" aria-hidden="true">
-                          <i style={{ width: `${(cov.covered / cov.total) * 100}%` }} />
+
+      <section className="pf-groups">
+        <div className="pf-groups-head">
+          <h2>{t.pfGroupsTitle}</h2>
+          <p>{t.pfGroupsIntro}</p>
+        </div>
+        <div className="table-card">
+          <table className="data-table pf-table">
+            <thead>
+              <tr>
+                <Th k="name" label={t.colGroup} />
+                <Th k="mills" label={t.millsKpi} numeric />
+                <Th k="plots" label={t.colPlots} numeric />
+                <Th k="area" label={t.colArea} numeric />
+                <Th k="comply" label={t.colComply} />
+                <th aria-hidden="true" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((g) => {
+                const { chain: c, cov } = g;
+                const partial = cov && cov.covered > 0 && cov.covered < cov.total;
+                return (
+                  <tr
+                    key={c.id}
+                    tabIndex={0}
+                    onClick={() => onSelectChain(c.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectChain(c.id);
+                      }
+                    }}
+                  >
+                    <td>
+                      <b className="group-name">{groupLabel(c.name)}</b>
+                    </td>
+                    <td className="num tabular-nums">
+                      {formatCount(c.mills.length, lang)}
+                      {partial ? <small className="pf-sub">{fill(t.pfMillsSub, { n: formatCount(cov.covered, lang) })}</small> : null}
+                    </td>
+                    <td className="num tabular-nums">{num(g.plots, (v) => formatCount(v, lang))}</td>
+                    <td className="num tabular-nums">{num(g.areaHa, (v) => formatHa(v, lang))}</td>
+                    <td>
+                      {g.plots ? (
+                        <span className="pf-comply">
+                          <span className="pf-bar" aria-hidden="true">
+                            <i style={{ width: `${(g.comply / g.plots) * 100}%` }} />
+                          </span>
+                          <span className="tabular-nums">{formatPct(g.comply, g.plots, lang)}</span>
                         </span>
-                        <span className="coverage-num tabular-nums">
-                          {formatCount(cov.covered, lang)}/{formatCount(cov.total, lang)}
-                        </span>
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="num tabular-nums">{formatCount(c.mills.length, lang)}</td>
-                  <td className="num tabular-nums">{formatCount(c.refineries.length, lang)}</td>
-                  <td className="num tabular-nums">{formatCount(c.village, lang)}</td>
-                  <td className="num tabular-nums">{formatCount(c.buffer, lang)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                      ) : (
+                        <span className="pf-muted">{loading ? "…" : "—"}</span>
+                      )}
+                    </td>
+                    <td className="pf-go" aria-hidden="true">
+                      ›
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {noData.length ? (
+          <p className="pf-nodata">
+            <span>{t.pfNoPlotGroups}:</span>
+            {noData.map((g) => (
+              <button key={g.chain.id} type="button" className="linkish" onClick={() => onSelectChain(g.chain.id)}>
+                {groupLabel(g.chain.name)}
+                <small> · {formatCount(g.chain.mills.length, lang)} {t.mills}</small>
+              </button>
+            ))}
+          </p>
+        ) : null}
+      </section>
+
+      <PortfolioSankey chains={chains} coveredIds={coveredIds} onSelectChain={onSelectChain} onSelectRefinery={onSelectRefinery} />
     </div>
   );
 }

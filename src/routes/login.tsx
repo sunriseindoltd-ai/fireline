@@ -78,7 +78,7 @@ function LoginPage() {
       setFailed(true);
       return;
     }
-    // A new sign-in: SoyTrace's guide shows once more (not on every refresh).
+    // A new sign-in: each product's guide shows once more (not on every refresh).
     resetTour();
     await navigate({ href: safeNext(next) });
   }

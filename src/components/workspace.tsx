@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { GroupSearch, PlotComplyFilter } from "@/lib/app-search";
 import { fetchWithRetry } from "@/lib/fetch-retry";
-import { fill, formatCount, formatHa } from "@/lib/format";
+import { fill, formatCount, formatHa, formatPct } from "@/lib/format";
 import { gateLogout, gateSwitchTenant } from "@/lib/gate-actions";
 import { TENANTS, type Tenant } from "@/lib/tenants";
 import type { GateRole } from "@/lib/gate";
@@ -42,8 +42,10 @@ import { DataAssistant } from "@/components/data-assistant";
 import { usePersistentState } from "@/lib/use-persistent";
 import { ChainMap } from "@/components/chain-map";
 import { ColumnFilterMenu } from "@/components/column-filter";
-import { LangToggle } from "@/components/lang-toggle";
-import { PortfolioView, type ChainCoverage } from "@/components/portfolio-view";
+import { AccountMenu } from "@/components/account-menu";
+import { PortfolioView, type ChainCoverage, type MillStat } from "@/components/portfolio-view";
+import { PALM_TOUR_KEY, SoyTour as GuideTour, markTourDone, tourPending } from "@/components/soy-tour";
+import { palmTourCopy, type PalmTourTab } from "@/lib/palm-tour-copy";
 import { ScopeSwitcher } from "@/components/scope-switcher";
 import { EudrSummaryView } from "@/components/eudr-summary";
 import { DocumentsView, MonitoringView, PriceView } from "@/components/chain-extras";
@@ -76,19 +78,21 @@ const DEFAULT_PLOT_COL_WIDTHS: Record<PlotColKey, number> = {
   // Wide enough for a full minted ID (e.g. IDN111407-PO1000000706-2608-09985)
   // in the mono face; anything longer still ellipsizes rather than spilling
   // into the Company column.
-  plotId: 260,
-  company: 200,
-  location: 200,
-  hectare: 90,
-  comply: 120,
-  risk: 120,
-  mitigation: 90,
-  type: 170,
+  plotId: 240,
+  company: 170,
+  location: 170,
+  hectare: 80,
+  comply: 96,
+  risk: 116,
+  mitigation: 76,
+  type: 130,
 };
 const MIN_COL_WIDTH = 50;
-// Bumped to -v2 when plotId's default widened: the widths are written back on
-// every mount, so every returning browser already had the old 190px stored.
-const PLOT_COL_WIDTHS_KEY = "kanopi-plot-col-widths-v2";
+// Bumped whenever the defaults change: the widths are written back on every
+// mount, so every returning browser already has the old ones stored. v3: all
+// eight columns fit beside the mill panel at 1440px (Mitigation and Type were
+// cut off).
+const PLOT_COL_WIDTHS_KEY = "kanopi-plot-col-widths-v3";
 const DRAWER_HEIGHT_KEY = "palmtrace-plot-drawer-height";
 
 function loadStoredWidths(): Record<PlotColKey, number> {
@@ -362,6 +366,29 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
     };
   }, []);
 
+  // Each mill's plot figures (plots, compliant, area) in one request — the
+  // portfolio's group rows and the map's mill list both read from it.
+  const [millStats, setMillStats] = useState<Map<string, MillStat> | null>(null);
+  useEffect(() => {
+    if (!store.ready || store.mills.length === 0) return;
+    let cancelled = false;
+    void fetchWithRetry("/eudr-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ millIds: store.mills.map((m) => m.id) }),
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<{ mills: ({ id: string } & MillStat)[] }>) : null))
+      .then((body) => {
+        if (!cancelled && body) setMillStats(new Map(body.mills.map(({ id, ...st }) => [id, st])));
+      })
+      .catch(() => {
+        /* the figures just stay as "…" */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [store.ready, store.mills]);
+
   const allChains = useMemo(() => groupChains(store.mills), [store.mills]);
   const coverage = useMemo(() => {
     const map = new Map<string, ChainCoverage>();
@@ -595,6 +622,41 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
     );
   }, [chain, selectedRefinery]);
 
+  // The reading guide: once per sign-in (login clears the flag), never while
+  // presenting. Its group pages are shown on the group with the most plots,
+  // unless the viewer already has a group with plot data open.
+  const [tourOpen, setTourOpen] = useState(false);
+  const tourChecked = useRef(false);
+  useEffect(() => {
+    if (tourChecked.current || !store.ready || store.mills.length === 0) return;
+    tourChecked.current = true;
+    if (!present && tourPending(PALM_TOUR_KEY)) setTourOpen(true);
+  }, [store.ready, store.mills.length, present]);
+  const tourChain = useMemo(() => {
+    const plotsOf = (c: Chain) => c.mills.reduce((n, m) => n + (millStats?.get(m.id)?.totalPlots ?? 0), 0);
+    let best: Chain | null = null;
+    let bestPlots = 0;
+    for (const c of chains) {
+      const p = plotsOf(c) || (coverage.get(c.id)?.covered ?? 0);
+      if (p > bestPlots) {
+        best = c;
+        bestPlots = p;
+      }
+    }
+    return best;
+  }, [chains, millStats, coverage]);
+  function tourGo(tab: PalmTourTab | undefined) {
+    if (!tab) return;
+    if (tab === "portfolio") {
+      if (view.groupSlug) go({ groupSlug: null, refinery: null, mill: null, tab: "summary" }, { replace: true });
+      return;
+    }
+    const target = chain && (coverage.get(chain.id)?.covered ?? 0) > 0 ? chain : tourChain;
+    if (!target) return;
+    const slug = groupSlug(target.name);
+    if (view.groupSlug !== slug || viewTab !== tab || view.mill) go({ groupSlug: slug, tab, refinery: null, mill: null }, { replace: true });
+  }
+
   if (!store.ready) {
     return (
       <div className="boot">
@@ -660,39 +722,28 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
           </nav>
         ) : null}
         <div className="app-actions">
-          {role === "admin" && !present ? (
-            <Link to="/app/requests" className="btn-text">
-              {t.requestsNav}
-            </Link>
-          ) : null}
-          {(role === "admin" || role === "viewer") && !present ? (
-            <label className="tenant-switch">
-              <span>{t.clientLabel}</span>
-              <select value={tenant} onChange={(e) => void switchTenant(e.target.value as Tenant)}>
-                {TENANTS.filter((tn) => role === "admin" || tn.commodity === "palm").map((tn) => (
-                  <option key={tn.id} value={tn.id}>
-                    {tn.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {canPresent ? (
-            <button
-              type="button"
-              className={`present-btn ${present ? "on" : ""}`}
-              aria-pressed={present}
-              title={t.presentHint}
-              onClick={() => setPresent(!presentStored)}
-            >
+          {present ? (
+            <button type="button" className="present-btn on" onClick={() => setPresent(false)} title={t.presentExit}>
               <span className="dot" aria-hidden="true" />
-              {present ? t.presentOn : t.present}
+              {t.presentOn}
             </button>
-          ) : null}
-          {present ? null : <LangToggle />}
-          <button type="button" className="btn-text" onClick={() => void logout()}>
-            {t.signOut}
-          </button>
+          ) : (
+            <button type="button" className="tour-help" aria-label={t.tourReplay} title={t.tourReplay} onClick={() => setTourOpen(true)}>
+              ?
+            </button>
+          )}
+          {present ? null : (
+            <AccountMenu
+              tenant={tenant}
+              tenants={role === "admin" ? TENANTS : role === "viewer" ? TENANTS.filter((tn) => tn.commodity === "palm") : []}
+              onSwitchTenant={(next) => void switchTenant(next)}
+              showRequests={role === "admin"}
+              canPresent={canPresent}
+              present={present}
+              onPresent={setPresent}
+              onSignOut={() => void logout()}
+            />
+          )}
         </div>
       </header>
 
@@ -709,6 +760,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
             chains={chains}
             coverage={coverage}
             coveredIds={coveredIds}
+            millStats={millStats}
             onSelectChain={(id) => selectScope(id)}
             onSelectRefinery={(id, refinery) => {
               const target = allChains.find((c) => c.id === id);
@@ -731,12 +783,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
                   {refineryInScope ? <span className="summary-sub"> · {refineryInScope}</span> : null}
                 </h1>
               </div>
-              <div className="summary-tools">
-                {refinerySelect}
-                <button type="button" className="btn-secondary" onClick={() => go({ tab: "data" })}>
-                  {t.eudrGoToMap}
-                </button>
-              </div>
+              {refinerySelect ? <div className="summary-tools">{refinerySelect}</div> : null}
             </header>
             <EudrSummaryView
               millIds={summaryMills.filter((m) => m.umlId).map((m) => m.id)}
@@ -870,6 +917,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
                   mills={listMills}
                   scopeCount={scopeMills.length}
                   coveredIds={coveredIds}
+                  millStats={millStats}
                   refinerySelect={refinerySelect}
                   query={query}
                   setQuery={setQuery}
@@ -884,6 +932,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
       </main>
       {present ? null : (
         <DataAssistant
+          compact={tab === "data" && !!chain}
           lang={lang}
           group={chain?.name ?? null}
           millId={selectedMillId}
@@ -893,6 +942,18 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
           }}
         />
       )}
+      {tourOpen ? (
+        <GuideTour
+          product="palm"
+          steps={palmTourCopy[lang].steps}
+          labels={palmTourCopy[lang]}
+          onStep={(st) => tourGo(st.tab as PalmTourTab | undefined)}
+          onClose={() => {
+            markTourDone(PALM_TOUR_KEY);
+            setTourOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -906,6 +967,7 @@ function MillList({
   mills,
   scopeCount,
   coveredIds,
+  millStats,
   refinerySelect,
   query,
   setQuery,
@@ -919,6 +981,7 @@ function MillList({
   mills: MillRecord[];
   scopeCount: number;
   coveredIds: Set<string> | null;
+  millStats: Map<string, MillStat> | null;
   refinerySelect: ReactNode;
   query: string;
   setQuery: (q: string) => void;
@@ -952,6 +1015,8 @@ function MillList({
         {query.trim() && mills.length === 1 ? (
           <p className="search-hint">{t.searchEnterHint.replace("{mill}", mills[0]!.millName)}</p>
         ) : null}
+        {/* Only a choice when the group has both kinds of mill. */}
+        {(chain.village > 0 && chain.buffer > 0) || traceFilter !== "all" ? (
         <div className="seg" role="group" aria-label={t.viewMode}>
           {(["all", "village", "buffer"] as const).map((k) => (
             <button
@@ -965,18 +1030,6 @@ function MillList({
             </button>
           ))}
         </div>
-        {/* What the dot on each row means (feedback 3, M-3). */}
-        {coveredIds ? (
-          <p className="mill-list-key">
-            <span>
-              <span className="dot-status on" aria-hidden="true" />
-              {t.statusReady}
-            </span>
-            <span>
-              <span className="dot-status" aria-hidden="true" />
-              {t.statusMaster}
-            </span>
-          </p>
         ) : null}
       </div>
       <div className="panel-body">
@@ -997,27 +1050,52 @@ function MillList({
             ) : null}
           </div>
         ) : (
+          <>
+          {millStats ? (
+            <p className="mill-list-cols" aria-hidden="true">
+              <span>{t.millsKpi}</span>
+              <span>{t.eudrComplyKpi}</span>
+            </p>
+          ) : null}
           <ul className="mill-list">
             {mills.map((m) => {
               const trace = traceLabel(m, t);
-              const hasPlots = coveredIds?.has(m.id) ?? false;
+              const st = millStats?.get(m.id);
+              const hasPlots = (st?.totalPlots ?? 0) > 0 || (coveredIds?.has(m.id) ?? false);
+              // Short facts first, so a long refinery name is what gets cut;
+              // the refinery only tells mills apart when the group has more than one.
+              const sub = [
+                st?.totalPlots ? fill(t.millRowPlots, { n: formatCount(st.totalPlots, lang) }) : coveredIds || millStats ? t.statusMaster : "",
+                trace,
+                chain.refineries.length > 1 ? m.refinery : "",
+              ];
               return (
                 <li key={m.id}>
                   <button type="button" className="mill-row" onClick={() => onSelect(m.id)} aria-label={t.locateMill.replace("{mill}", m.millName)}>
                     <span className="mill-row-main">
                       <b>{m.millName}</b>
-                      <span>{[m.refinery, trace].filter(Boolean).join(" · ")}</span>
+                      <span>{sub.filter(Boolean).join(" · ")}</span>
                     </span>
-                    {coveredIds ? (
-                      <span className={`dot-status ${hasPlots ? "on" : ""}`} title={hasPlots ? t.statusReady : t.statusMaster}>
-                        <span className="sr-only">{hasPlots ? t.statusReady : t.statusMaster}</span>
+                    {st?.totalPlots ? (
+                      <span className="mill-row-pct tabular-nums" title={`${t.eudrComplyKpi}: ${formatCount(st.comply, lang)} / ${formatCount(st.totalPlots, lang)}`}>
+                        {formatPct(st.comply, st.totalPlots, lang)}
                       </span>
-                    ) : null}
+                    ) : hasPlots ? null : (
+                      <span className="dot-status" aria-hidden="true" />
+                    )}
                   </button>
                 </li>
               );
             })}
           </ul>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Right-hand detail          </ul>
         )}
       </div>
     </>
@@ -1052,6 +1130,8 @@ function MillDetail({
   onBack: () => void;
 }) {
   const trace = traceLabel(mill, t);
+  // "UNKNOWN" is the master list's way of leaving a cell empty.
+  const shown = (v: string) => (/^unknown$/i.test(v.trim()) ? "" : v);
   const facts: [string, string][] = [
     [t.coordinates, hasCoords(mill) ? `${mill.lat!.toFixed(5)}, ${mill.lon!.toFixed(5)}` : ""],
     [t.refinery, mill.refinery],
@@ -1071,7 +1151,7 @@ function MillDetail({
         </button>
         <div className="panel-title">
           <h2>{mill.millName}</h2>
-          {covered ? <span className="status-pill ready">{t.statusReady}</span> : <span className="status-pill master">{t.statusMaster}</span>}
+          {covered ? null : <span className="status-pill master">{t.statusMaster}</span>}
         </div>
       </div>
       <div className="panel-body">
@@ -1088,8 +1168,8 @@ function MillDetail({
           {facts.map(([label, value]) => (
             <div key={label}>
               <dt>{label}</dt>
-              <dd className={label === t.uml || label === t.node ? "mono" : ""} title={value ? undefined : t.notInSource}>
-                {value || "—"}
+              <dd className={label === t.uml || label === t.node ? "mono" : ""} title={shown(value) ? undefined : t.notInSource}>
+                {shown(value) || "—"}
               </dd>
             </div>
           ))}
@@ -1097,20 +1177,21 @@ function MillDetail({
         {canDownload ? (
           <div className="downloads">
             <p className="eyebrow">{t.download}</p>
-            <button type="button" className="download-row" onClick={() => downloadMillsCsv(`palmtrace-${mill.id}-mill.csv`, [mill])}>
-              <DownloadIcon />
-              <span>
-                <b>CSV</b>
-                {t.downloadCsvHint}
-              </span>
-            </button>
-            <button type="button" className="download-row" onClick={() => void downloadMillGeojson(mill)}>
-              <DownloadIcon />
-              <span>
-                <b>GeoJSON</b>
-                {t.downloadGeoHint}
-              </span>
-            </button>
+            <div className="download-pair">
+              <button
+                type="button"
+                className="download-chip"
+                title={t.downloadCsvHint}
+                onClick={() => downloadMillsCsv(`palmtrace-${mill.id}-mill.csv`, [mill])}
+              >
+                <DownloadIcon />
+                CSV
+              </button>
+              <button type="button" className="download-chip" title={t.downloadGeoHint} onClick={() => void downloadMillGeojson(mill)}>
+                <DownloadIcon />
+                GeoJSON
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

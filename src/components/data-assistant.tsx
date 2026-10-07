@@ -146,6 +146,7 @@ export function DataAssistant({
   group = null,
   millId = null,
   scope = null,
+  compact = false,
   onOpenRow,
 }: {
   lang: Lang;
@@ -154,6 +155,8 @@ export function DataAssistant({
   millId?: string | null;
   /** SoyTrace: the selected catchment (or combo). */
   scope?: string | null;
+  /** Icon-only launcher, where the label would cover the map's side panel. */
+  compact?: boolean;
   /** A table row's mill (PalmTrace) or catchment (SoyTrace) id. */
   onOpenRow: (id: string) => void;
 }) {
@@ -218,12 +221,18 @@ export function DataAssistant({
 
   if (!open)
     return (
-      <button type="button" className="assistant-launch" onClick={() => setOpen(true)} aria-label={c.open}>
+      <button
+        type="button"
+        className={`assistant-launch ${compact ? "compact" : ""}`}
+        onClick={() => setOpen(true)}
+        aria-label={c.open}
+        title={compact ? c.open : undefined}
+      >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
           <path d="M4 5h16v11H9l-5 4V5z" strokeLinejoin="round" />
           <path d="M8 10h8M8 13h5" strokeLinecap="round" />
         </svg>
-        {c.open}
+        {compact ? null : c.open}
       </button>
     );
 
