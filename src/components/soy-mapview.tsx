@@ -172,9 +172,15 @@ export function SoyMapView({
   const [colorBy, setColorBy] = useState<SupplyColorBy>("status");
   const [scopeFieldsRaw, setScopeFields] = useState<ScopeFields>({ fields: [], nc: [], complete: false, loading: false, scope: null });
   // Until the map reports on the newly chosen scope, show it as loading rather than the previous scope's fields.
+  // A county of the whole chain is asked for: its fields are on their way (not "0 fields").
+  const countyWanted =
+    levelOf(scope) === 1 && !!areaProp?.s && !!areaProp?.n && !!(areaStats(areas, areaProp.s, areaProp.n) as { file?: string | null } | null)?.file;
   const scopeFields = useMemo<ScopeFields>(
-    () => (scopeFieldsRaw.scope === scope ? scopeFieldsRaw : { fields: [], nc: [], complete: false, loading: levelOf(scope) === 3, scope }),
-    [scopeFieldsRaw, scope],
+    () =>
+      scopeFieldsRaw.scope === scope && !(countyWanted && !scopeFieldsRaw.complete && !scopeFieldsRaw.failed && scopeFieldsRaw.fields.length === 0)
+        ? scopeFieldsRaw
+        : { fields: [], nc: [], complete: false, loading: levelOf(scope) === 3 || countyWanted, scope },
+    [scopeFieldsRaw, scope, countyWanted],
   );
   const [drawer, setDrawer] = useState(false);
   const [picked, setPicked] = useState<SoyFeature | null>(null);
@@ -894,7 +900,9 @@ export function SoyMapView({
               </button>
               <p className="panel-note soy-load-note">
                 {scopeFields.loading
-                  ? c.loadingScope
+                  ? countyFile
+                    ? c.loadingCounty
+                    : c.loadingScope
                   : scopeFields.failed
                     ? c.fieldsError
                     : fill(countyFile ? c.loadedCounty : c.loadedAll, { n: countF(scopeFields.fields.length + scopeFields.nc.length) })}
