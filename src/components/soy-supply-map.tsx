@@ -11,6 +11,7 @@ import {
   NC_COLOR,
   NC_INK,
   NC_MARK,
+  NC_REVIEW,
   PLANT_COLOR,
   RAIL_COLOR,
   RIVER_COLOR,
@@ -191,6 +192,12 @@ function bandColorExpr(basis: Basis) {
  * miles. "corridor" mode adds rail, rivers and 5/10-mile bands and shades the
  * fields by distance.
  */
+/** Fit padding: the Layers card covers the map's left edge on a wide screen (Feedback 5, P1-7). */
+function fitPadding() {
+  const wide = typeof window !== "undefined" && window.innerWidth > 900;
+  return wide ? { top: 40, bottom: 40, right: 40, left: 300 } : 30;
+}
+
 export function SoySupplyMap({
   data,
   mode,
@@ -210,6 +217,8 @@ export function SoySupplyMap({
   toolsSlot,
   backSlot,
   otherPlants = [],
+  ncReview = false,
+  setNcReview = () => {},
 }: {
   data: SupplyData;
   mode: SupplyMapMode;
@@ -231,8 +240,14 @@ export function SoySupplyMap({
   backSlot?: ReactNode;
   /** The client's other crushing plants (points only, their catchments still to come). */
   otherPlants?: OtherPlant[];
+  /** Feedback 5 (P0-2): show only ADM-listed fields that were already cropland in 2018–2020. */
+  ncReview?: boolean;
+  setNcReview?: (on: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Feedback 5 (P0-3): ADM-listed fields outside every catchment are hidden unless asked for.
+  const [ncOutside, setNcOutside] = usePersistentState("soytrace.ncOutside", false);
+  const [ncCounts, setNcCounts] = useState<{ all: number; outside: number; review: number } | null>(null);
   const otherRef = useRef(otherPlants);
   otherRef.current = otherPlants;
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
@@ -282,7 +297,7 @@ export function SoySupplyMap({
         container: containerRef.current,
         style: basemapStyle(basemap) as never,
         bounds: scopeBounds("direct", data) ?? circleBounds(data.plant.lon, data.plant.lat, 300000),
-        fitBoundsOptions: { padding: 30 },
+        fitBoundsOptions: { padding: fitPadding() },
         attributionControl: { compact: true },
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -352,7 +367,7 @@ export function SoySupplyMap({
         });
         map.addSource("plant", {
           type: "geojson",
-          data: { type: "FeatureCollection", features: data.plants.map((p) => pt(p.lon, p.lat, { id: p.id, name: p.name })) } as never,
+          data: { type: "FeatureCollection", features: data.plants.map((p) => pt(p.lon, p.lat, { id: p.id, name: p.name, short: p.city ?? p.name })) } as never,
         });
         map.addSource("terminal", {
           type: "geojson",
@@ -441,7 +456,7 @@ export function SoySupplyMap({
           source: "rivers",
           minzoom: 7,
           layout: { visibility: "none" },
-          paint: { "line-color": RIVER_COLOR, "line-width": ["case", ["get", "m"], 1.2, 0.6] as never },
+          paint: { "line-color": RIVER_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.6, 8, 1.8, 12, 1.4] as never },
         });
         // All US soybean fields, under the catchment's own fields: a density grid zoomed out, the fields from zoom 10.
         map.addSource("us-soy", { type: "vector", url: `pmtiles://${window.location.origin}/data/layers/national/soy.pmtiles` });
@@ -532,7 +547,7 @@ export function SoySupplyMap({
           layout: { visibility: "none" },
           paint: {
             "line-color": RAIL_COLOR,
-            "line-width": ["interpolate", ["linear"], ["zoom"], 5, ["match", ["get", "u"], "M", 0.9, 0.5], 12, ["match", ["get", "u"], "M", 2, 1.2]] as never, // prettier-ignore
+            "line-width": ["interpolate", ["linear"], ["zoom"], 4, ["match", ["get", "u"], "M", 1.6, 1], 8, ["match", ["get", "u"], "M", 2, 1.3], 12, ["match", ["get", "u"], "M", 2.6, 1.6]] as never, // prettier-ignore
             "line-opacity": ["match", ["get", "u"], "X", 0.4, 1] as never,
             "line-dasharray": [3, 2],
           },
@@ -556,7 +571,10 @@ export function SoySupplyMap({
           source: "nc",
           minzoom: 9,
           filter: ["!=", ["geometry-type"], "Point"],
-          paint: { "fill-color": NC_COLOR, "fill-opacity": 0.9 },
+          paint: {
+            "fill-color": ["case", ["==", ["get", "rf"], "cropped_pre_2021"], NC_REVIEW, NC_COLOR] as never,
+            "fill-opacity": ["case", ["==", ["get", "k"], ""], 0.45, 0.9] as never,
+          },
         });
         map.addLayer({
           id: "nc-line",
@@ -588,7 +606,7 @@ export function SoySupplyMap({
           source: "nc-pts",
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 1.6, 8, 2.3, 11, 3] as never,
-            "circle-color": "#ff5442",
+            "circle-color": ["case", ["==", ["get", "rf"], "cropped_pre_2021"], NC_REVIEW, "#ff5442"] as never,
             "circle-stroke-color": "#ffe9e4",
             "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0.4, 9, 0.8] as never,
             "circle-opacity": fade(1) as never,
@@ -716,6 +734,8 @@ export function SoySupplyMap({
         map.setLayoutProperty("ring-label", "visibility", "none");
         label("adm-label", "adm", 5.5, 12);
         label("plant-label", "plant", 0, 13.5);
+        // Zoomed out the full names collide (Decatur West / Quincy): the city alone until zoom 7.
+        map.setLayoutProperty("plant-label", "text-field", ["step", ["zoom"], ["get", "short"], 7, ["get", "name"]]);
         label("terminal-label", "terminal", 0, 12.5);
         label("plants-other-label", "plants-other", 0, 13);
 
@@ -888,6 +908,11 @@ export function SoySupplyMap({
           const all = ncFc?.features ?? [];
           const nc = all.filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
           (map.getSource("nc") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: all } as never);
+          setNcCounts({
+            all: all.length,
+            outside: all.filter((f) => !String(f.properties.k ?? "")).length,
+            review: all.filter((f) => f.properties.rf === "cropped_pre_2021").length,
+          });
           (map.getSource("nc-pts") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({
             type: "FeatureCollection",
             features: all.map((f) => ({ type: "Feature", properties: f.properties, geometry: { type: "Point", coordinates: [...center(f)] } })),
@@ -1023,6 +1048,12 @@ export function SoySupplyMap({
     const group = groupOf(selected);
     set(["fields", "fields-line", "sel-line"], on.fields);
     set(["nc-fill", "nc-line", "nc-halo", "nc-dot", "sel-nc-line"], on.nc);
+    // Which ADM-listed fields show: inside a catchment unless "outside" is on; "to review" only when asked.
+    const keep: unknown[] = ["all"];
+    if (!ncOutside) keep.push(["!=", ["get", "k"], ""]);
+    if (ncReview) keep.push(["==", ["get", "rf"], "cropped_pre_2021"]);
+    for (const id of ["nc-fill", "nc-line"]) if (map.getLayer(id)) map.setFilter(id, ["all", ["!=", ["geometry-type"], "Point"], keep] as never);
+    for (const id of ["nc-halo", "nc-dot"]) if (map.getLayer(id)) map.setFilter(id, keep as never);
     set(["rings", "plant", "plant-label", "terminal", "terminal-label"], on.rings);
     set(["plants-other", "plants-other-label"], on.plants);
     const combo = isCombo(selected) ? comboMembers(selected!) : null;
@@ -1062,7 +1093,7 @@ export function SoySupplyMap({
         })
         .catch(() => setRemote((s) => ({ ...s, [r]: "error" })));
     }
-  }, [on, ready, remote, selected]);
+  }, [on, ready, remote, selected, ncOutside, ncReview]);
 
   // The NLCD year: swap the tile URL in place.
   useEffect(() => {
@@ -1133,7 +1164,7 @@ export function SoySupplyMap({
     );
     popupRef.current?.remove();
     const b = scopeBounds(id, data);
-    if (b) map.fitBounds(b, { padding: 30, duration: 700 });
+    if (b) map.fitBounds(b, { padding: fitPadding(), duration: 700 });
   }, [selected, ready, data]);
 
   // Selected field highlight.
@@ -1225,7 +1256,21 @@ export function SoySupplyMap({
     nc: {
       label: c.legendNc,
       symbol: <i className="nc-ring" />,
-      detail: <p className="soy-key-note">{c.legendNcDot}</p>,
+      detail: (
+        <div className="soy-nc-filters">
+          <label className="soy-nc-filter">
+            <input type="checkbox" checked={ncReview} onChange={(e) => setNcReview(e.target.checked)} />
+            <i className="sq" style={{ background: NC_REVIEW }} />
+            <span>{fill(c.ncReviewOnly, { n: formatCount(ncCounts?.review ?? 0, lang) })}</span>
+          </label>
+          <label className="soy-nc-filter">
+            <input type="checkbox" checked={ncOutside} onChange={(e) => setNcOutside(e.target.checked)} />
+            <i className="sq faded" style={{ background: NC_COLOR }} />
+            <span>{fill(c.ncShowOutside, { n: formatCount(ncCounts?.outside ?? 0, lang) })}</span>
+          </label>
+          <p className="soy-key-note">{c.legendNcDot}</p>
+        </div>
+      ),
     },
     rings: { label: c.keyRings, symbol: <><i className="dot" style={{ background: PLANT_COLOR }} /><i className="ln" /></> },
     adm: { label: c.keyAdm, symbol: <><i className="dot adm" /><i className="ln dash" /></> },
@@ -1360,7 +1405,9 @@ export function SoySupplyMap({
         </button>
       </div>
 
-      {mode === "supply" && inView ? (
+      {/* Feedback 5 (P1-1): only exact figures here (fields loaded); the grid estimate would sit next to
+          the right panel's exact totals with a slightly different number. */}
+      {mode === "supply" && inView && !inView.approx ? (
         <div className="soy-inview map-card" aria-live="polite">
           <p className="soy-inview-title">
             {c.inViewTitle} · {inView.one ? c.inViewCatchment : c.inViewChain}

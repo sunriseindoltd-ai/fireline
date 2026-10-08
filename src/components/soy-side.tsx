@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import type { Lang } from "@/lib/copy";
-import { formatCount } from "@/lib/format";
+import { fill, formatCount } from "@/lib/format";
 import type { SoySupplyCopy } from "@/lib/soy-supply-copy";
-import { admSiteIds, plantById, toggleSel, type Catchment, type Plant, type PlantBuffer, type SupplyData } from "@/lib/soy-supply";
+import { admSiteIds, placeOf, plantById, toggleSel, tpName as tpLabel, type Catchment, type Plant, type PlantBuffer, type SupplyData } from "@/lib/soy-supply";
 
 /** A crushing plant in the list (hasData false = announced, catchments not delivered yet). */
 export type SidePlant = { id: string; name: string; hasData: boolean };
@@ -61,6 +61,25 @@ export function SoyPlants({ c, plants, plantSel, setPlantSel }: Pick<Props, "c" 
   );
 }
 
+/** The selection in one line (Feedback 5, P2-2): "Whole supply chain" or "Quincy 0–80 NM + 3 ADM elevators". */
+export function scopeSummary(sel: string[], data: SupplyData, c: SoySupplyCopy, lang: Lang): string {
+  if (!sel.length) return c.sumAll;
+  const parts: string[] = [];
+  for (const p of data.plants) {
+    const b = sel.includes(`${p.key}80`) ? c.scopeQ80 : sel.includes(`${p.key}40`) ? c.scopeQ40 : sel.includes(`${p.key}80r`) ? c.scopeQ80r : null;
+    if (b) parts.push(`${p.city ?? p.name} ${b}`);
+  }
+  const adm = sel.filter((id) => /^adm\d+$/.test(id)).length;
+  if (adm) parts.push(adm === 1 ? (data.admElevators.find((e) => e.id === sel.find((x) => /^adm\d+$/.test(x)))?.name ?? "") : fill(c.sumAdm, { n: formatCount(adm, lang) }));
+  if (sel.includes("tp")) parts.push(c.sumTpAll);
+  const tp = sel.filter((id) => /^tp\d+$/.test(id));
+  if (tp.length === 1) {
+    const t = data.thirdParty.find((e) => e.id === tp[0]);
+    if (t) parts.push(tpLabel(t, data));
+  } else if (tp.length) parts.push(fill(c.sumTp, { n: formatCount(tp.length, lang) }));
+  return parts.filter(Boolean).join(" + ");
+}
+
 /**
  * The chosen plant's catchments (every plant's with "All plants"), then the ADM
  * and third-party elevators. Which plant an elevator delivers to isn't in the
@@ -96,6 +115,7 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
   const siteIds = admSiteIds(data).filter((id) => sites.some((e) => e.id === id));
   const tpOpen = sel.some((id) => /^tp\d+$/.test(id));
   const nc = (id: string) => catchments.get(id)?.nonCompliant.fields ?? 0;
+  const summary = scopeSummary(sel, data, c, lang);
 
   const row = (id: string, label: string, sub?: string) => (
     <label key={id} className={`side-row ${sel.includes(id) ? "on" : ""}`}>
@@ -153,8 +173,11 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
   return (
     <aside className="soy-related" aria-label={c.sideRelated}>
       <button type="button" className="soy-side-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {c.sideToggle}
-        {sel.length ? <i>{sel.length}</i> : null}
+        <span>
+          <small>{c.sideToggle}</small>
+          {summary}
+        </span>
+        <i aria-hidden="true">{open ? "−" : "+"}</i>
       </button>
       <div className={`soy-side-body ${open ? "open" : ""}`}>
         <section>
@@ -166,6 +189,9 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
               </button>
             ) : null}
           </div>
+          <p className="side-summary" aria-live="polite">
+            {summary}
+          </p>
           {pending ? (
             <p className="side-note">{c.sidePending}</p>
           ) : (
@@ -215,7 +241,7 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
                     <div className="side-tp-list">
                       {tpMatches.length ? (
                         tpMatches.map((e) =>
-                          row(e.id, e.company ?? e.id, [e.county, e.state].filter(Boolean).join(", ")),
+                          row(e.id, tpLabel(e, data), placeOf(e)),
                         )
                       ) : (
                         <p className="side-note">{c.sideNoTp}</p>

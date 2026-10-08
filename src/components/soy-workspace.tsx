@@ -24,6 +24,7 @@ import { gateLogout, gateSwitchTenant } from "@/lib/gate-actions";
 import { useI18n } from "@/lib/i18n";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/soy-copy";
 import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
+import { scopeSummary } from "@/components/soy-side";
 import { SoyMapView } from "@/components/soy-mapview";
 import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
 import { idsFromScope, plantById, scopeForSel, type PlantBuffer, type SupplyData } from "@/lib/soy-supply";
@@ -69,6 +70,8 @@ type FieldsState = {
 
 type SoyTab = "summary" | "map" | "corridor" | "docs" | "areas";
 const TABS: SoyTab[] = ["summary", "map", "corridor", "docs", "areas"];
+// Feedback 5 (P2-3): the earlier delivery (40-mile areas) is no tab of its own — it opens from Data & method.
+const NAV_TABS: SoyTab[] = ["summary", "map", "corridor", "docs"];
 
 /**
  * The ADM Soy workspace (tenant `adm-soy`), built like PalmTrace's: a header
@@ -114,6 +117,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   // One buffer for the crushing plants, 0–40 or 0–80 NM (one row per plant everywhere, not one per ring).
   const [bufferStored, setBuffer] = usePersistentState<PlantBuffer>("soytrace.buffer", "80");
   const buffer: PlantBuffer = bufferStored === "40" ? "40" : "80";
+  // Feedback 5 (P0-2): the map shows only "to review" fields when the Summary card asks for it.
+  const [ncReview, setNcReview] = useState(false);
   const sel = useMemo(() => {
     if (!supply) return [];
     return scopeForSel(selStored, supply) === scope ? selStored : idsFromScope(scope, supply);
@@ -237,8 +242,14 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       </span>
       <span className="soy-scope">{ssc.scopeHeader}</span>
       <nav className="app-tabs" aria-label={ssc.scopeHeader}>
-        {TABS.map((k) => (
-          <button key={k} type="button" className={tab === k ? "on" : ""} aria-current={tab === k ? "page" : undefined} onClick={() => setTab(k)}>
+        {NAV_TABS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={tab === k || (k === "docs" && tab === "areas") ? "on" : ""}
+            aria-current={tab === k ? "page" : undefined}
+            onClick={() => setTab(k)}
+          >
             {tabLabel[k]}
           </button>
         ))}
@@ -334,6 +345,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               otherPlants={otherPlants}
               buffer={buffer}
               setBuffer={setBuffer}
+              ncReview={ncReview}
+              setNcReview={setNcReview}
             />
           ) : (
             <div className={`page soy-page ${tab === "summary" ? "soy-page-wide" : ""}`}>
@@ -357,9 +370,13 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   buffer={buffer}
                   setBuffer={setBuffer}
                   canDownload={role !== "auditor" && role !== "viewer"}
+                  onOpenReview={() => {
+                    setNcReview(true);
+                    setTab("map");
+                  }}
                 />
               ) : (
-                <SoyDocsView data={supply} c={ssc} lang={lang} present={present} />
+                <SoyDocsView data={supply} c={ssc} lang={lang} present={present} onOpenArchive={() => setTab("areas")} />
               )}
             </div>
           )}
@@ -369,6 +386,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             lang={lang}
             product="soy"
             scope={scope}
+            scopeLabel={scopeSummary(sel, supply, ssc, lang)}
             onOpenRow={(id) => {
               setScope(id);
               setTab("map");
@@ -438,7 +456,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             <p>
               <b>{sc.oldBannerTitle}</b> {sc.oldBannerBody}
             </p>
-            <button type="button" className="btn-secondary" onClick={() => setTab("summary")}>
+            <button type="button" className="btn-secondary" onClick={() => setTab("docs")}>
               {sc.oldBannerCta}
             </button>
           </div>

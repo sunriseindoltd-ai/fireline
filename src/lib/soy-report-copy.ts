@@ -109,7 +109,7 @@ const en = {
   chTransportNote: "Share of the soybean area with network data, by straight-line distance.",
   kindPlant: "Plant",
   kindAdm: "ADM elevator",
-  kindTp: "Third party",
+  kindTp: "Third-party facility",
   statesTitle: "States",
   colShareArea: "Share of area",
 
@@ -234,7 +234,7 @@ const id: SoyReportCopy = {
   chTransportNote: "Porsi luas kedelai yang punya data jaringan, menurut jarak garis lurus.",
   kindPlant: "Pabrik",
   kindAdm: "Elevator ADM",
-  kindTp: "Pihak ketiga",
+  kindTp: "Fasilitas pihak ketiga",
   statesTitle: "Negara bagian",
   colShareArea: "Porsi luas",
 

@@ -97,6 +97,12 @@ export type ThirdParty = {
   core: boolean;
   /** Other third parties delivered at exactly the same point (same catchment, same figures). */
   sameAs?: string[];
+  /** Facility number (TP-01 …), to tell apart two with the same name and town. */
+  ref?: string;
+  /** Town, from the facility code. */
+  city?: string | null;
+  /** The state as delivered, when the coordinates put the point in another one. */
+  stateAsDelivered?: string;
   /** Crushing plants this elevator delivers to; absent = not known (shown under all plants only). */
   plants?: string[];
   railMi: number;
@@ -112,6 +118,8 @@ export type Plant = {
   name: string;
   company: string | null;
   city: string | null;
+  /** From the Census county layer (the delivered plants carry none). */
+  county?: string | null;
   state: string | null;
   address?: string | null;
   lat: number;
@@ -156,8 +164,11 @@ export type SupplyData = {
   doubleCropFields?: number;
   /** TRACT-ready GeoJSON per facility (fields/tract/<id>.part<n>.geojson, served by /soy-tract). */
   tract?: {
-    /** Fields left out because TRACT rejects their outline (invalid at 6 decimals, holes, touching parts). */
+    /** Fields left out: an outline still invalid after repair (TRACT would reject it). */
     leftOut: Record<string, number>;
+    /** Outlines repaired so TRACT accepts them (user, 8 Oct 2026: repair, don't drop):
+     * filled_holes, repaired_invalid, merged_parts, repaired_after_rounding. */
+    repaired?: Record<string, number>;
     /** facility id → label, kind, radius, field count, [part, features, bytes][] */
     files: Record<string, { label: string; kind: string; radiusNm: number; fields: number; parts: [number, number, number][] }>;
   };
@@ -411,6 +422,24 @@ export function statsKey(sel: string[], data: SupplyData): string | null {
   return null;
 }
 
+/** A county as read in SoyTrace: "Henderson County", "Madison Parish" (the delivered lists mix both). */
+export function countyOf(county?: string | null, state?: string | null): string | null {
+  if (!county) return null;
+  if (/\b(County|Parish|Borough|City)$/.test(county)) return county;
+  return `${county} ${state === "LA" ? "Parish" : "County"}`;
+}
+
+/** A third party's name, with its facility number when another one shares name and town (Feedback 5, P1-2). */
+export function tpName(t: ThirdParty, data: SupplyData) {
+  const twins = data.thirdParty.filter((o) => o.company === t.company && o.city === t.city && o.state === t.state);
+  return twins.length > 1 && t.ref ? `${t.company ?? t.id} · ${t.ref}` : (t.company ?? t.id);
+}
+
+/** "City, County, State" for any facility (Feedback 5, P1-3). */
+export function placeOf(e: { city?: string | null; county?: string | null; state?: string | null }) {
+  return [e.city, countyOf(e.county, e.state), e.state].filter(Boolean).join(", ");
+}
+
 /** The map-safe scope for a selection (all third parties together are too many fields to draw). */
 export function scopeForSel(sel: string[], data: SupplyData): string {
   const key = statsKey(sel, data);
@@ -528,10 +557,11 @@ export function radiusLabel(m: number, lang: "en" | "id") {
 }
 
 /** Distance-band colours, near → far (rail & river view). */
+/** Distance bands (Rail & river): a blue sequence, apart from the density greens (Feedback 5, P1-7). */
 export const BAND_COLORS = {
-  b5: "#155433",
-  b10: "#3b8757",
-  b20: "#8cc29a",
+  b5: "#0b3d91",
+  b10: "#2f6fd6",
+  b20: "#8fb8f0",
   far: "#d8d3c4",
   none: "#b9b9bd",
 };
@@ -539,6 +569,8 @@ export const NC_COLOR = "#c9695e";
 export const NC_INK = "#8f3a31";
 /** The zoomed-out marker ring: stronger than the fill so a few fields stand out among many. */
 export const NC_MARK = "#c8372b";
+/** ADM-listed fields already cropland in 2018–2020 ("to review", Feedback 5 P0-2). */
+export const NC_REVIEW = "#e0a128";
 export const FIELD_COLOR = "#3b8757";
 export const TP_COLOR = "#d2a95b";
 export const ADM_COLOR = "#ffffff";

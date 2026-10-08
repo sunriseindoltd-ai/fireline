@@ -5494,6 +5494,16 @@ html.soy-report-open body {
     color: var(--color-fg);
     cursor: pointer;
   }
+  .soy-side-toggle > span {
+    display: grid;
+    gap: 1px;
+    text-align: left;
+    min-width: 0;
+  }
+  .soy-side-toggle small {
+    font: 500 12px var(--font-sans);
+    color: var(--color-muted);
+  }
   .soy-side-toggle i {
     padding: 1px 8px;
     border-radius: 999px;
@@ -5893,4 +5903,87 @@ html.soy-report-open body {
 .tract-empty {
   margin: 8px 0;
   color: var(--color-muted);
+}
+
+/* SoyTrace Summary KPIs (Feedback 5, P1-8): five in a row on a wide screen, 3 + 2 below that
+   (never a lone tile on its own row), two per row on a phone with the last one full width. */
+.kpi-row.soy-supply-kpis {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+@media (max-width: 1279px) {
+  .kpi-row.soy-supply-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .kpi-row.soy-supply-kpis > * {
+    grid-column: span 2;
+  }
+  .kpi-row.soy-supply-kpis > :nth-child(n + 4) {
+    grid-column: span 3;
+  }
+}
+@media (max-width: 700px) {
+  .kpi-row.soy-supply-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpi-row.soy-supply-kpis > *,
+  .kpi-row.soy-supply-kpis > :nth-child(n + 4) {
+    grid-column: auto;
+  }
+  .kpi-row.soy-supply-kpis > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The selection in one line above the ticks (Feedback 5, P2-2). */
+.side-summary {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--color-bg-2);
+  font: 600 13px var(--font-sans);
+  color: var(--color-fg);
+}
+
+/* Data & method: change log (Feedback 5). */
+.soy-changes li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+.soy-changes li b {
+  display: block;
+  font: 600 12px var(--font-sans);
+  color: var(--color-muted);
+}
+
+/* Statistics by scope: the scope name stays in view while the figures scroll (Feedback 5, P2-4). */
+.soy-combo-table th:first-child,
+.soy-combo-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-surface, #fff);
+}
+.soy-combo-table th:first-child {
+  z-index: 2;
+}
+.soy-combo .soy-combo-table tr.custom td:first-child {
+  background: #fbf5ea;
+}
+@media (max-width: 700px) {
+  .soy-fac-head {
+    flex-wrap: wrap;
+  }
+  .soy-fac-head > div:first-child {
+    flex: 1 1 100%;
+  }
+}
+/* Ask the data (SoyTrace): the scope the answers are about (Feedback 5). */
+.assistant-head p.assistant-scope {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.assistant-scope b {
+  color: var(--color-fg);
+  font-weight: 600;
 }

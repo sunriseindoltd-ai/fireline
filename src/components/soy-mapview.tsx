@@ -133,6 +133,8 @@ export function SoyMapView({
   otherPlants = [],
   buffer = "80",
   setBuffer = () => {},
+  ncReview = false,
+  setNcReview = () => {},
 }: {
   data: SupplyData;
   cdlNames: Record<string, string>;
@@ -151,6 +153,9 @@ export function SoyMapView({
   /** Crushing plants are listed once each, at this buffer (0–40 / 0–80 NM). */
   buffer?: PlantBuffer;
   setBuffer?: (b: PlantBuffer) => void;
+  /** Only ADM-listed fields already cropland in 2018–2020 ("to review"). */
+  ncReview?: boolean;
+  setNcReview?: (on: boolean) => void;
 }) {
   const corridor = mode === "corridor";
   const [band, setBand] = useState<Band>(10);
@@ -235,10 +240,11 @@ export function SoyMapView({
   // ------------------------------------------------------------ downloads
   const scopeName = infos.find((x) => x.id === scope)?.name ?? c.scopeAll;
   const slug = (scope || "all").replace(/[^\w-]+/g, "-");
-  const ncHeader = ["field_id", "state", "county", "field_acres", "cover_2018_2020", "first_cropped", "crop_2024", "crop_2025", "F2026_Soy", "also_compliant", "point_only", "lon", "lat"]; // prettier-ignore
+  // review_flag: already cropland in 2018–2020 (a note, ADM's status unchanged); in_any_catchment: counted in the figures.
+  const ncHeader = ["field_id", "state", "county", "field_acres", "cover_2018_2020", "first_cropped", "crop_2024", "crop_2025", "F2026_Soy", "review_flag", "in_any_catchment", "point_only", "lon", "lat"]; // prettier-ignore
   const ncRow = (f: SoyFeature) => {
     const p = f.properties;
-    return [p.id, p.s, p.n, p.a, p.b, p.y, p.c24, p.c25, p.s26, Number(p.f) & FLAG.dual ? "yes" : "no", p.po ? "yes" : "no", Number(p._x).toFixed(5), Number(p._y).toFixed(5)] as (string | number | null)[]; // prettier-ignore
+    return [p.id, p.s, p.n, p.a, p.b, p.y, p.c24, p.c25, p.s26, p.rf ?? "", String(p.k ?? "") ? "true" : "false", p.po ? "yes" : "no", Number(p._x).toFixed(5), Number(p._y).toFixed(5)] as (string | number | null)[]; // prettier-ignore
   };
   const downloads = [
     {
@@ -293,7 +299,7 @@ export function SoyMapView({
               x.k?.compliant.acres,
               x.k?.nonCompliant.fields,
               x.k?.nonCompliant.acres,
-              x.k ? pct(x.k.nonCompliant.acres, x.k.compliant.acres + x.k.nonCompliant.acres).toFixed(4) : null,
+              x.k ? pct(x.k.nonCompliant.acres, x.k.compliant.acres + x.k.nonCompliant.acres).toFixed(2) : null,
             ]),
           ]),
           "text/csv",
@@ -389,6 +395,8 @@ export function SoyMapView({
           onSelectField={(f) => pick(f)}
           focus={focus}
           otherPlants={otherPlants}
+          ncReview={ncReview}
+          setNcReview={setNcReview}
           toolsSlot={
             <form className="map-card soy-find" onSubmit={find}>
               <label className="sr-only" htmlFor="soy-find">
@@ -645,6 +653,7 @@ export function SoyMapView({
           {level < 3 ? <p className="soy-panel-sub">{node.sub}</p> : null}
         </div>
         <div className="panel-body">
+          {corridor ? <p className="panel-note soy-corr-purpose">{c.corrPurpose}</p> : null}
           {corridor ? (
             <div className="soy-corr-controls">
               <div className="seg" role="group" aria-label={c.bandLabel}>
@@ -799,7 +808,8 @@ export function SoyMapView({
               ))}
             </dl>
           ) : null}
-          {canDownload ? (
+          {/* Rail & river had the same Download as Map & data (Feedback 5): shown on Map & data only. */}
+          {canDownload && !corridor ? (
             <div className="downloads">
               <p className="eyebrow">{c.download}</p>
               {downloads

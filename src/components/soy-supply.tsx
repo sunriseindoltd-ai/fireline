@@ -26,6 +26,8 @@ import {
   type Plant,
   type PlantBuffer,
   type SupplyData,
+  placeOf,
+  tpName,
   type SupplyNcStats,
 } from "@/lib/soy-supply";
 
@@ -54,6 +56,8 @@ type Common = {
   setBuffer: (b: PlantBuffer) => void;
   /** May take files away (not auditors / viewers): the TRACT download. */
   canDownload?: boolean;
+  /** Opens the map on the "to review" fields only. */
+  onOpenReview?: () => void;
 };
 
 /** Rows of the true-scale table. */
@@ -78,6 +82,9 @@ export function catchmentLabel(id: string, data: SupplyData, c: SoySupplyCopy) {
   if (tp) return [tp.company, [tp.county, tp.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
   return id;
 }
+
+export { placeOf };
+export const tpLabel = tpName;
 
 /** The largest states, the rest folded into one "other states" row. */
 function topStates(rows: { state: string; fields: number }[], n: number) {
@@ -210,7 +217,7 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
 }
 
 /** Summary: the supply chain of the chosen plant(s), narrowed by the sidebar's ticks. */
-export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel, buffer, setBuffer, canDownload = false }: Common) {
+export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel, buffer, setBuffer, canDownload = false, onOpenReview }: Common) {
   const [tractOpen, setTractOpen] = useState(false);
   const catchments = useCatchments(data);
   const plants = useMemo<SidePlant[]>(
@@ -242,6 +249,8 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
   const ncCombo = !k && ncFeatures ? ncForSelection(ncFeatures, effSel, ncAll) : null;
   const ncForCard = k ? (key === "all" ? ncAll : k.nonCompliant) : ncCombo;
   const outside = ncAll.fields - (catchments.get("all")?.nonCompliant.fields ?? 0);
+  // Fields on ADM's list in this selection that were already cropland in 2018–2020 (Feedback 5, P0-2).
+  const reviewN = (key === "all" ? catchments.get("all")?.nonCompliant : k ? k.nonCompliant : ncCombo)?.byBefore.crop ?? 0;
   // A statistics row opens the map on that scope (the whole chain for an empty list).
   const openIds = (ids: string[]) => {
     setSel(ids);
@@ -304,7 +313,30 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
           </section>
         ) : (
           <>
+            {/* Feedback 5 (P0-1): the non-compliant figures lead; the compliant share is secondary text. */}
             <div className="kpi-row soy-supply-kpis">
+              <KpiTile
+                tone="danger"
+                value={haF(tot.ncAcres)}
+                label={c.kpiNcArea}
+                hint={c.kpiNcAreaHint}
+                sub={fill(c.kpiNcAreaSub, { n: countF(tot.ncFields), total: countF(ncAll.fields) })}
+              />
+              <KpiTile
+                tone="danger"
+                value={formatSharePct(share, lang)}
+                label={c.kpiNcShare}
+                hint={c.kpiNcShareHint}
+                sub={fill(c.kpiCompliantSub, { p: formatSharePct(pct(tot.acres, tot.acres + tot.ncAcres), lang) })}
+              />
+              <KpiTile
+                value={countF(reviewN)}
+                label={c.kpiReview}
+                hint={c.kpiReviewHint}
+                sub={c.kpiReviewSub}
+                onClick={onOpenReview}
+                action={onOpenReview ? c.kpiReviewAction : undefined}
+              />
               <KpiTile
                 value={countF(tot.fields)}
                 label={c.kpiFields}
@@ -312,21 +344,10 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
                 sub={k?.compliant.doubleCropFields ? fill(c.kpiDoubleCrop, { n: countF(k.compliant.doubleCropFields), area: haF(k.compliant.doubleCropAcres ?? 0) }) : undefined}
               />
               <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />
-              <KpiTile
-                tone="danger"
-                value={countF(tot.ncFields)}
-                label={c.kpiNcFields}
-                hint={c.kpiNcFieldsHint}
-                sub={fill(c.kpiNcOfList, { n: countF(tot.ncFields), total: countF(ncAll.fields), out: countF(Math.max(0, ncAll.fields - tot.ncFields)) })}
-              />
-              <KpiTile tone="danger" value={haF(tot.ncAcres)} label={c.kpiNcArea} hint={c.kpiNcAreaHint} />
-              <KpiTile
-                tone="comply"
-                value={formatSharePct(pct(tot.acres, tot.acres + tot.ncAcres), lang)}
-                label={c.kpiCompliantShare}
-                hint={c.kpiNcShareHint}
-                sub={fill(c.ncShareSub, { p: formatSharePct(share, lang) })}
-              />
+            </div>
+            {/* Feedback 5 (P0-3): how much of ADM's list the figures cover. */}
+            <div className="eudr-notice info soy-nc-scope" role="note">
+              <p>{fill(c.ncScopeBox, { total: countF(ncAll.fields), inside: countF(tot.ncFields), outside: countF(Math.max(0, ncAll.fields - tot.ncFields)) })}</p>
             </div>
 
             <ComboTable data={data} c={c} lang={lang} open={openIds} plant={plant} buffer={buffer} setBuffer={setBuffer} />
@@ -471,7 +492,7 @@ function FacilityTable({
   const [query, setQuery] = useState("");
   const countF = (n: number) => formatCount(n, lang);
   const acF = (n: number) => formatAcres(n, lang);
-  const place = (p: Plant) => [p.city, p.state].filter(Boolean).join(", ");
+  const place = (p: Plant) => placeOf(p);
   // One row per plant, at the buffer picked above the table.
   const plantRows = (plant ? [plant] : data.plants).map((p) => ({
     id: `${p.key}${buffer}`,
@@ -485,8 +506,8 @@ function FacilityTable({
     ...plantRows,
     ...data.admElevators
       .filter((e) => e.radiusM)
-      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
-    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
+      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: placeOf(e) })),
+    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: tpLabel(t, data), place: placeOf(t) })),
   ];
   const q = query.trim().toLowerCase();
   const shown = rows.filter((r) => (kind === "all" || r.kind === kind || r.kind === "chain") && (!q || r.kind === "chain" || `${r.name} ${r.place}`.toLowerCase().includes(q)));
@@ -504,7 +525,7 @@ function FacilityTable({
     const head = ["facility_id", "type", "name", "place", "compliant_polygons", "noncompliant_polygons", "compliant_pct_of_polygons", "noncompliant_pct_of_polygons", "compliant_acres", "noncompliant_acres", "compliant_pct_of_acres", "noncompliant_pct_of_acres"]; // prettier-ignore
     const body = rows.map((r) => {
       const v = line(r.id);
-      return [r.id, r.kind, r.name, r.place, v?.cf, v?.nf, v ? (100 - v.pf).toFixed(4) : null, v?.pf.toFixed(4), v?.ca.toFixed(1), v?.na.toFixed(1), v ? (100 - v.pa).toFixed(4) : null, v?.pa.toFixed(4)]; // prettier-ignore
+      return [r.id, kindLabel[r.kind], r.name, r.place, v?.cf, v?.nf, v ? (100 - v.pf).toFixed(2) : null, v?.pf.toFixed(2), v?.ca.toFixed(1), v?.na.toFixed(1), v ? (100 - v.pa).toFixed(2) : null, v?.pa.toFixed(2)]; // prettier-ignore
     });
     const text = [head, ...body].map((r) => r.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
@@ -545,7 +566,6 @@ function FacilityTable({
               <th>{c.facCol}</th>
               <th className="num">{c.facCompliantN}</th>
               <th className="num">{c.facNcN}</th>
-              <th className="num">{c.facPctN}</th>
               <th className="num">{c.facCompliantA}</th>
               <th className="num">{c.facNcA}</th>
               <th className="num">{c.facPctA}</th>
@@ -571,13 +591,13 @@ function FacilityTable({
                   </td>
                   <td className="num tabular-nums">{countF(v.cf)}</td>
                   <td className="num tabular-nums">{countF(v.nf)}</td>
-                  <td className="num tabular-nums">
-                    <span className="comply">{formatSharePct(pct(v.cf, v.cf + v.nf), lang)}</span> / {formatSharePct(v.pf, lang)}
-                  </td>
                   <td className="num tabular-nums">{acF(v.ca)}</td>
                   <td className="num tabular-nums">{acF(v.na)}</td>
-                  <td className="num tabular-nums">
-                    <span className="comply">{formatSharePct(pct(v.ca, v.ca + v.na), lang)}</span> / {formatSharePct(v.pa, lang)}
+                  <td
+                    className="num tabular-nums"
+                    title={fill(c.facShareTip, { ca: formatSharePct(pct(v.ca, v.ca + v.na), lang), pf: formatSharePct(v.pf, lang), cf: formatSharePct(pct(v.cf, v.cf + v.nf), lang) })}
+                  >
+                    {formatSharePct(v.pa, lang)}
                   </td>
                 </tr>
               );
@@ -612,8 +632,9 @@ function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps)
       <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
       <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
       <td className="num tabular-nums">{formatAcres(t.ncAcres, lang)}</td>
-      <td className="num tabular-nums comply">{formatSharePct(pct(t.acres, t.acres + t.ncAcres), lang)}</td>
-      <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
+      <td className="num tabular-nums" title={`${formatSharePct(100 - p, lang)} ✓`}>
+        {formatSharePct(p, lang)}
+      </td>
     </tr>
   );
 }
@@ -627,7 +648,6 @@ function ComboHead({ c }: { c: SoySupplyCopy }) {
         <th className="num">{c.colCompliantA}</th>
         <th className="num">{c.colNcN}</th>
         <th className="num">{c.colNcA}</th>
-        <th className="num">{c.colCompliantShareA}</th>
         <th className="num">{c.colNcShareA}</th>
       </tr>
     </thead>
@@ -646,7 +666,7 @@ function ComboParts({ data, c, lang, parts }: { data: SupplyData; c: SoySupplyCo
   return (
     <>
       <tr className="soy-combo-part-head">
-        <td colSpan={7}>{c.comboParts}</td>
+        <td colSpan={6}>{c.comboParts}</td>
       </tr>
       {shown.map(([label, pids]) => {
         const t = comboTotals(data, pids);
@@ -659,14 +679,15 @@ function ComboParts({ data, c, lang, parts }: { data: SupplyData; c: SoySupplyCo
             <td className="num tabular-nums">{formatAcres(t.acres, lang)}</td>
             <td className="num tabular-nums">{formatCount(t.ncFields, lang)}</td>
             <td className="num tabular-nums">{formatAcres(t.ncAcres, lang)}</td>
-            <td className="num tabular-nums comply">{formatSharePct(100 - p, lang)}</td>
-            <td className="num tabular-nums">{formatSharePct(p, lang)}</td>
+            <td className="num tabular-nums" title={`${formatSharePct(100 - p, lang)} ✓`}>
+              {formatSharePct(p, lang)}
+            </td>
           </tr>
         );
       })}
       {parts.length > LIMIT ? (
         <tr className="soy-combo-part soy-combo-more">
-          <td colSpan={7}>
+          <td colSpan={6}>
             <button type="button" className="btn-text" onClick={() => setAll((v) => !v)}>
               {all ? c.showFewer : fill(c.showAllN, { n: formatCount(parts.length, lang) })}
             </button>
@@ -778,9 +799,9 @@ function ComboTable({
   const siteIds = sites.map((e) => e.id);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const siteParts = sites.map((e) => [e.name, [e.id]] as [string, string[]]);
-  const tpParts = data.thirdParty.map((e) => [[e.company, [e.county, e.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "), [e.id]] as [string, string[]]);
+  const tpParts = data.thirdParty.map((e) => [[tpLabel(e, data), placeOf(e)].filter(Boolean).join(" · "), [e.id]] as [string, string[]]);
   const admLabel = fill(c.comboAdm, { n: sites.length });
-  const tpLabel = fill(c.comboTp, { n: data.thirdParty.length });
+  const tpAllLabel = fill(c.comboTp, { n: data.thirdParty.length });
   // The plants at the buffer picked above the table (0–40 or 0–80 NM).
   const pIds = data.plants.map((p) => `${p.key}${buffer}`);
   const pParts = data.plants.map((p) => [unitName(`${p.key}${buffer}`, data, c)!, [`${p.key}${buffer}`]] as [string, string[]]);
@@ -791,15 +812,15 @@ function ComboTable({
     ? [
         ["p", oneLabel, [one], []],
         ["padm", fill(c.comboPlusAdm, { a: oneLabel }), [one, ...siteIds], [[oneLabel, [one]], [admLabel, siteIds]]],
-        ["ptp", fill(c.comboPlusTp, { a: oneLabel }), [one, "tp"], [[oneLabel, [one]], [tpLabel, ["tp"]]]],
-        ["pall", fill(c.comboPlusAll, { a: oneLabel }), [one, ...siteIds, "tp"], [[oneLabel, [one]], [admLabel, siteIds], [tpLabel, ["tp"]]]],
+        ["ptp", fill(c.comboPlusTp, { a: oneLabel }), [one, "tp"], [[oneLabel, [one]], [tpAllLabel, ["tp"]]]],
+        ["pall", fill(c.comboPlusAll, { a: oneLabel }), [one, ...siteIds, "tp"], [[oneLabel, [one]], [admLabel, siteIds], [tpAllLabel, ["tp"]]]],
       ]
     : [
         ["p", plantsLabel, pIds, pParts],
         ["adm", admLabel, siteIds, siteParts],
         ["padm", fill(c.comboPlusAdm, { a: plantsLabel }), [...pIds, ...siteIds], [[plantsLabel, pIds], [admLabel, siteIds]]],
-        ["tp", tpLabel, ["tp"], tpParts],
-        ["all", c.comboAll, [...pIds, ...siteIds, "tp"], [[plantsLabel, pIds], [admLabel, siteIds], [tpLabel, ["tp"]]]],
+        ["tp", tpAllLabel, ["tp"], tpParts],
+        ["all", c.comboAll, [...pIds, ...siteIds, "tp"], [[plantsLabel, pIds], [admLabel, siteIds], [tpAllLabel, ["tp"]]]],
       ];
   return (
     <section className="chart-card supply-wide soy-combo">
@@ -830,7 +851,7 @@ function ComboTable({
                   <>
                     <ComboParts data={data} c={c} lang={lang} parts={parts} />
                     <tr className="soy-combo-detail-row">
-                      <td colSpan={7}>
+                      <td colSpan={6}>
                         <ComboDetail c={c} lang={lang} ids={ids} onMap={() => open(key === "all" ? [] : ids)} />
                       </td>
                     </tr>
@@ -847,7 +868,9 @@ function ComboTable({
 
 /** Rail & river potential: compliant soybean area within reach of rail and the main river system. */
 /** Data & method: where the figures come from and how they are built. */
-export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; present: boolean }) {
+const CHANGES = ["P0-2", "P0-3", "P0-4", "P1-1", "P1-2", "P1-3", "P1-4", "P1-5", "P1-6", "P1-7", "P1-8", "P2-2", "P2-3", "P2-4", "TRACT"] as const;
+
+export function SoyDocsView({ data, c, lang, present, onOpenArchive }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; present: boolean; onOpenArchive?: () => void }) {
   return (
     <>
       <div className="summary-head">
@@ -877,6 +900,26 @@ export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: S
           <li>{fill(c.method2, { km2: formatCount(data.network.riverSystemKm2, lang), n: data.network.riverSystems ?? 1 })}</li>
         </ul>
       </section>
+      {/* Feedback 5: a short log of what changed, by item. */}
+      <section className="chart-card supply-notes supply-wide">
+        <h3>{c.changesTitle}</h3>
+        <ul className="soy-changes">
+          {CHANGES.map((id) => (
+            <li key={id}>
+              <b>{id}</b> {c[`chg_${id.replace("-", "_")}` as keyof SoySupplyCopy] as string}
+            </li>
+          ))}
+        </ul>
+      </section>
+      {onOpenArchive && !present ? (
+        <section className="chart-card supply-notes supply-wide">
+          <h3>{c.archiveTitle}</h3>
+          <p className="chart-note">{c.archiveBody}</p>
+          <button type="button" className="btn-secondary" onClick={onOpenArchive}>
+            {c.archiveCta}
+          </button>
+        </section>
+      ) : null}
     </>
   );
 }
@@ -901,6 +944,8 @@ function TractDialog({ data, c, lang, sel, onClose }: { data: SupplyData; c: Soy
   const all = ids.flatMap((id) => files[id]!.parts.map(([p]) => [id, p] as const));
   const totalBytes = ids.reduce((a, id) => a + files[id]!.parts.reduce((b, pp) => b + pp[2], 0), 0);
   const leftOut = Object.values(data.tract!.leftOut).reduce((a, b) => a + b, 0);
+  const rep = data.tract!.repaired ?? {};
+  const fixedInvalid = (rep.repaired_invalid ?? 0) + (rep.repaired_after_rounding ?? 0) + (rep.merged_parts ?? 0);
   const href = (id: string, p: number) => `/soy-tract?f=${encodeURIComponent(id)}&p=${p}`;
   const mb = (b: number) => `${(b / 1e6).toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 })} MB`;
   const [busy, setBusy] = useState(false);
@@ -974,7 +1019,10 @@ function TractDialog({ data, c, lang, sel, onClose }: { data: SupplyData; c: Soy
               </table>
             </div>
             <div className="tract-actions">
-              <p className="chart-note">{fill(c.tractLeftOut, { n: formatCount(leftOut, lang) })}</p>
+              <p className="chart-note">
+                {fill(c.tractRepaired, { holes: formatCount(rep.filled_holes ?? 0, lang), invalid: formatCount(fixedInvalid, lang) })}
+                {leftOut > 0 ? ` ${fill(c.tractLeftOut, { n: formatCount(leftOut, lang) })}` : ""}
+              </p>
               <button type="button" className="btn-primary" disabled={busy} onClick={() => void downloadAll()}>
                 {busy ? c.tractBusy : fill(c.tractAll, { n: formatCount(all.length, lang), size: mb(totalBytes) })}
               </button>
