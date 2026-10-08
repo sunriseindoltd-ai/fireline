@@ -21,6 +21,7 @@ const COPY = {
     open: "Ask the data",
     title: "Ask the data",
     sub: "Answers from this dashboard's figures only.",
+    scopeNow: "Scope",
     place: "Ask about groups, mills, compliance, A–F…",
     send: "Ask",
     close: "Close",
@@ -57,6 +58,7 @@ const COPY = {
     open: "Tanya data",
     title: "Tanya data",
     sub: "Jawaban hanya dari angka di dashboard ini.",
+    scopeNow: "Cakupan",
     place: "Tanya soal grup, PKS, kepatuhan, kelas A–F…",
     send: "Tanya",
     close: "Tutup",
@@ -146,6 +148,7 @@ export function DataAssistant({
   group = null,
   millId = null,
   scope = null,
+  scopeLabel = null,
   compact = false,
   onOpenRow,
 }: {
@@ -155,6 +158,8 @@ export function DataAssistant({
   millId?: string | null;
   /** SoyTrace: the selected catchment (or combo). */
   scope?: string | null;
+  /** SoyTrace: the selection in words, shown above the answers (Feedback 5). */
+  scopeLabel?: string | null;
   /** Icon-only launcher, where the label would cover the map's side panel. */
   compact?: boolean;
   /** A table row's mill (PalmTrace) or catchment (SoyTrace) id. */
@@ -242,6 +247,11 @@ export function DataAssistant({
         <div>
           <h2>{c.title}</h2>
           <p>{c.sub}</p>
+          {scopeLabel ? (
+            <p className="assistant-scope">
+              {c.scopeNow}: <b>{scopeLabel}</b>
+            </p>
+          ) : null}
         </div>
         <div className="assistant-head-actions">
           {msgs.length ? (

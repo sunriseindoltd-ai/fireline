@@ -1,6 +1,7 @@
 import { MAX_ROWS, norm, pct, r1, type AssistantContext, type Kit, type Lang, type ToolOut } from "@/lib/assistant.server";
-import { soySupplyCopy, type SoySupplyCopy } from "@/lib/soy-supply-copy";
-import { AC_TO_HA, comboTotals, plantOfScope, plantUnit, plantByKey, ringRadius, stateName, unitName, type Catchment, type SupplyData } from "@/lib/soy-supply";
+import { formatSharePct, soySupplyCopy, type SoySupplyCopy } from "@/lib/soy-supply-copy";
+import { rankByShare, sharePct } from "@/lib/soy-share";
+import { AC_TO_HA, comboTotals, placeOf, plantOfScope, plantUnit, plantByKey, ringRadius, stateName, tpName, unitName, type Catchment, type SupplyData } from "@/lib/soy-supply";
 import type { Tenant } from "@/lib/tenants";
 
 /**
@@ -46,7 +47,7 @@ function facilitiesOf(data: SupplyData, c: SoySupplyCopy): Facility[] {
     { id: "all", kind: "chain", name: c.scopeAll, place: "" },
     { id: "direct", kind: "chain", name: c.scopeDirect, place: data.plants.map((p) => p.city).join(", ") },
     ...data.plants.flatMap((p) => {
-      const place = [p.city, p.state].filter(Boolean).join(", ");
+      const place = placeOf(p);
       return [
         { id: `${p.key}80`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ80}`, place },
         { id: `${p.key}40`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ40}`, place },
@@ -56,8 +57,8 @@ function facilitiesOf(data: SupplyData, c: SoySupplyCopy): Facility[] {
     { id: "tp", kind: "chain", name: c.scopeTp, place: "" },
     ...data.admElevators
       .filter((e) => e.radiusM)
-      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
-    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
+      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: placeOf(e) })),
+    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: tpName(t, data), place: placeOf(t) })),
   ];
   return out.filter((f) => k.has(f.id)).map((f) => ({ ...f, k: k.get(f.id)! }));
 }
@@ -87,23 +88,17 @@ function findFacilities(s: Soy, q: string): Facility[] {
 }
 
 const acres = (n: number) => Math.round(n);
-// Non-compliant shares are tiny (0.007% around the plant): keep two significant
-// digits below 1%, so a share never reads as 0% (or compliant as 100%).
-const share = (part: number, whole: number) => {
-  const p = pct(part, whole);
-  return p > 0 && p < 1 ? Number(p.toPrecision(2)) : r1(p);
-};
-// Shares go to the model as text in the user's locale ("0,0074%"): models copy
-// a string as is, but rounded the bare number 0.0074 to "0 %" in testing.
-const pctText = (s: Soy, n: number) => `${n.toLocaleString(s.lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 4 })}%`;
-const compliantShare = (nc: number) => (nc > 0 && nc < 1 ? Number((100 - nc).toFixed(3)) : r1(100 - nc));
+// Shares stay raw for ranking (Feedback 5, P0-4: rounding first dropped AGP
+// Buchanan from the top 10) and go out as the app's own text ("0.25%"), so the
+// model copies exactly what the Summary shows.
+const ncShareOf = (k: Catchment) => sharePct(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres);
+const pctText = (s: Soy, n: number) => formatSharePct(n, s.lang);
 const line = (s: Soy, f: Facility) => {
   const k = f.k;
   return [
     f.name, kindLabel(s, f), f.place || "—",
     k.compliant.fields, k.nonCompliant.fields, acres(k.compliant.acres), acres(k.nonCompliant.acres),
-    // As text: the table formats bare numbers as counts, which turned 0.015% into "0".
-    pctText(s, compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres))), pctText(s, share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)),
+    pctText(s, 100 - ncShareOf(k)), pctText(s, ncShareOf(k)),
   ];
 };
 const lineCols = (t: (typeof T)[Lang]) => [t.scope, t.kind, t.place, t.cf, t.nf, t.ca, t.na, t.cs, t.ns];
@@ -113,13 +108,13 @@ const brief = (s: Soy, f: Facility) => {
     id: f.id, catchment: f.name, type: kindLabel(s, f), place: f.place,
     compliantFields: k.compliant.fields, nonCompliantFields: k.nonCompliant.fields,
     compliantAcres: acres(k.compliant.acres), nonCompliantAcres: acres(k.nonCompliant.acres),
-    compliantShareByArea: pctText(s, compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres))),
-    nonCompliantShareByArea: pctText(s, share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)),
+    compliantShareByArea: pctText(s, 100 - ncShareOf(k)),
+    nonCompliantShareByArea: pctText(s, ncShareOf(k)),
   };
 };
 
 const METRICS = {
-  noncomply_share: (k: Catchment) => share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres),
+  noncomply_share: (k: Catchment) => ncShareOf(k),
   noncomply_fields: (k: Catchment) => k.nonCompliant.fields,
   noncomply_acres: (k: Catchment) => acres(k.nonCompliant.acres),
   compliant_fields: (k: Catchment) => k.compliant.fields,
@@ -187,9 +182,9 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
         [L ? "Luas comply (ha)" : "Compliant hectares", acres(k.compliant.acres * AC_TO_HA)],
         [t.nf, k.nonCompliant.fields],
         [t.na, acres(k.nonCompliant.acres)],
-        [t.cs, pctText(s, compliantShare(share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres)))],
-        [t.ns, pctText(s, share(k.nonCompliant.acres, k.compliant.acres + k.nonCompliant.acres))],
-        [t.nsf, pctText(s, share(k.nonCompliant.fields, k.compliant.fields + k.nonCompliant.fields))],
+        [t.cs, pctText(s, 100 - ncShareOf(k))],
+        [t.ns, pctText(s, ncShareOf(k))],
+        [t.nsf, pctText(s, sharePct(k.nonCompliant.fields, k.compliant.fields + k.nonCompliant.fields))],
         [t.soy8, all8],
         [t.states, k.compliant.states.slice(0, 4).map((x) => `${stateName(x.state)} ${acres(x.acres).toLocaleString(L ? "id-ID" : "en-US")}`).join(" · ") || "—"],
         [t.counties, k.compliant.topCounties.slice(0, 3).map((x) => `${x.county}, ${x.state} ${acres(x.acres).toLocaleString(L ? "id-ID" : "en-US")}`).join(" · ") || "—"],
@@ -199,7 +194,7 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
       return {
         result: {
           ...brief(s, f), radius: radiusText(s, f), compliantHectares: acres(k.compliant.acres * AC_TO_HA),
-          nonCompliantShareByFields: pctText(s, share(k.nonCompliant.fields, k.compliant.fields + k.nonCompliant.fields)),
+          nonCompliantShareByFields: pctText(s, sharePct(k.nonCompliant.fields, k.compliant.fields + k.nonCompliant.fields)),
           fieldsSoybeansAll8Seasons: all8, states: k.compliant.states.slice(0, 6), topCounties: k.compliant.topCounties.slice(0, 5),
           nonCompliantByState: k.nonCompliant.byState.slice(0, 8), facilityToRailMi: dist?.railMi ?? null, facilityToRiverMi: dist?.riverMi ?? null,
           source: s.data.source,
@@ -216,7 +211,7 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
         type: "object",
         properties: {
           metric: { type: "string", enum: Object.keys(METRICS), description: "noncomply_share = non-compliant share of soybean area" },
-          kind: { type: "string", enum: ["all", "adm", "tp"], description: "adm = ADM's own elevators, tp = third-party elevators (default all)" },
+          kind: { type: "string", enum: ["all", "adm", "tp"], description: "adm = ADM's own elevators, tp = third-party facilities (default all)" },
           order: { type: "string", enum: ["desc", "asc"], description: "desc = highest first (default)" },
           limit: { type: "integer", description: "How many (default 10, max 40)" },
         },
@@ -229,14 +224,13 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
       const kind = a.kind === "adm" || a.kind === "tp" ? a.kind : "all";
       const asc = a.order === "asc";
       const limit = Math.min(Math.max(Number(a.limit) || 10, 1), MAX_ROWS);
-      const list = s.facilities
+      const pool = s.facilities
         .filter((f) => (kind === "all" ? f.kind === "adm" || f.kind === "tp" : f.kind === kind) && f.k.compliant.fields + f.k.nonCompliant.fields > 0)
-        .map((f) => ({ f, v: METRICS[metric](f.k) }))
-        .sort((p, q) => (asc ? p.v - q.v : q.v - p.v))
-        .slice(0, limit);
+        .map((f) => ({ f, v: METRICS[metric](f.k) }));
+      const list = rankByShare(pool, (x) => x.v, (x) => x.f.name, asc).slice(0, limit);
       const label = METRIC_LABEL[s.lang][metric];
       return {
-        result: { metric: label, kind, order: asc ? "asc" : "desc", facilities: list.map((x) => ({ ...brief(s, x.f), value: x.v })) },
+        result: { metric: label, kind, order: asc ? "asc" : "desc", facilities: list.map((x) => ({ ...brief(s, x.f), value: metric === "noncomply_share" ? pctText(s, x.v) : x.v })) },
         table: { title: `${t.top} ${label}`, columns: lineCols(t), rows: list.map((x) => line(s, x.f)), millIds: list.map((x) => x.f.id) },
       };
     },
@@ -267,15 +261,15 @@ const TOOLS: Record<string, { decl: object; run: (s: Soy, a: Record<string, unkn
       const tot = comboTotals(s.data, known);
       if (!tot || !known.length) return { result: { error: "no matching catchments", allowed: Object.keys(bits) } };
       const names = known.map((id) => s.byId.get(id)?.name ?? unitName(id, s.data, s.c) ?? id);
-      const nc = share(tot.ncAcres, tot.acres + tot.ncAcres);
+      const nc = sharePct(tot.ncAcres, tot.acres + tot.ncAcres);
       return {
-        result: { catchments: names, compliantFields: tot.fields, nonCompliantFields: tot.ncFields, compliantAcres: acres(tot.acres), nonCompliantAcres: acres(tot.ncAcres), compliantShareByArea: pctText(s, compliantShare(nc)), nonCompliantShareByArea: pctText(s, nc) },
+        result: { catchments: names, compliantFields: tot.fields, nonCompliantFields: tot.ncFields, compliantAcres: acres(tot.acres), nonCompliantAcres: acres(tot.ncAcres), compliantShareByArea: pctText(s, 100 - nc), nonCompliantShareByArea: pctText(s, nc) },
         table: {
           title: t.combined,
           columns: [t.item, t.value],
           rows: [
             [t.scope, names.length > 6 ? `${names.slice(0, 6).join(", ")} … (+${names.length - 6})` : names.join(", ")],
-            [t.cf, tot.fields], [t.ca, acres(tot.acres)], [t.nf, tot.ncFields], [t.na, acres(tot.ncAcres)], [t.cs, pctText(s, compliantShare(nc))], [t.ns, pctText(s, nc)],
+            [t.cf, tot.fields], [t.ca, acres(tot.acres)], [t.nf, tot.ncFields], [t.na, acres(tot.ncAcres)], [t.cs, pctText(s, 100 - nc)], [t.ns, pctText(s, nc)],
           ],
         },
       };
@@ -333,14 +327,14 @@ function systemPrompt(s: Soy, ctx: AssistantContext) {
   const elevators = s.facilities.filter((f) => f.kind === "adm").length;
   const tps = s.facilities.filter((f) => f.kind === "tp").length;
   return [
-    `You are the data assistant inside SoyTrace, a dashboard of ADM's soybean supply chain: ${d.plants.length} crushing plants (${d.plants.map((p) => `${p.name}, ${p.state}`).join("; ")}) each with its own catchments (0–40 and 0–80 nautical miles), ${elevators} ADM elevator catchments and ${tps} third-party elevator catchments (20 NM each), with the 2025 soybean fields inside them (USDA Crop Sequence Boundaries, single and double crop). The elevators are one network beside the plants; which plant each delivers to is not in the data, so never link an elevator to a plant. Each field is compliant or non-compliant according to the client's own classification; SoyTrace shows it and does not re-assess it.`,
+    `You are the data assistant inside SoyTrace, a dashboard of ADM's soybean supply chain: ${d.plants.length} crushing plants (${d.plants.map((p) => `${p.name}, ${p.state}`).join("; ")}) each with its own catchments (0–40 and 0–80 nautical miles), ${elevators} ADM elevator catchments and ${tps} third-party facility catchments (20 NM each), with the 2025 soybean fields inside them (USDA Crop Sequence Boundaries, single and double crop). The elevators are one network beside the plants; which plant each delivers to is not in the data, so never link an elevator to a plant. Each field is compliant or non-compliant according to the client's own classification; SoyTrace shows it and does not re-assess it.`,
     `Reply in ${s.lang === "id" ? "Indonesian (Bahasa Indonesia, plain and friendly)" : "English"}.`,
     "Answer ONLY from tool results. Never invent or estimate a number; if a tool does not have it, say the dashboard does not show it.",
     "The tool's table is shown to the user below your text, so do not repeat the table. Write 1–3 short sentences in plain text (no markdown, no bullet lists): the direct answer and the one or two numbers that matter.",
     "Answer only the user's latest message.",
     "Areas are in acres (hectares only if asked). Shares are by area unless the user asks about field counts. A field can sit in several catchments, so never add catchments up yourself: use combined_catchments.",
     "Use the dashboard's own words: in Indonesian \"ladang\", \"comply\" / \"non-comply\", \"catchment\", \"elevator\", \"pihak ketiga\", \"acre\"; in English \"field\", \"compliant\" / \"non-compliant\", \"catchment\", \"elevator\", \"third party\", \"acres\".",
-    "Non-compliant shares are often tiny (e.g. 0.0074%): quote them exactly as the tool gives them, never as 0% or 100%.",
+    "Non-compliant shares are often tiny (e.g. 0.02% or < 0.01%): quote them exactly as the tool gives them, never as 0% or 100%.",
     "Deforestation figures and field owners are not shown in this dashboard: if asked, say exactly that (it is not off-topic), and offer the non-compliant figures instead.",
     "Questions unrelated to this dashboard's data: say briefly that you can only answer about the soybean supply-chain data shown here.",
     `Data: ${d.source}. ${here}`,
