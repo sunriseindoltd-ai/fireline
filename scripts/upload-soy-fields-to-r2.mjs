@@ -40,7 +40,7 @@ const CONCURRENCY = 6;
 const KEEP_STALE = process.argv.includes("--keep-stale");
 const V2 = process.argv.includes("--v2");
 // Mirrors SOY_V2 in src/lib/kanopi-data.server.ts.
-const SOY_V2 = /^(fields\/units\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
+const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
 
 const {
   R2_ADM_SOY_ACCOUNT_ID: account,

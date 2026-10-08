@@ -307,8 +307,31 @@ const NATIONAL_PMTILES = "layers/national/soy.pmtiles";
 // elevators, double crops) live under v2/ in the soy bucket, so a deployment
 // still on the earlier data keeps reading its own. Mirrored in
 // scripts/upload-soy-fields-to-r2.mjs (--v2).
-const SOY_V2 = /^(fields\/units\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
+const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
 const soyKey = (rel: string) => (SOY_V2.test(rel) ? `v2/${rel}` : rel);
+
+/**
+ * A TRACT-ready field file of the soy tenant (fields/tract/…, up to ~40 MB) as
+ * a download: a short-lived presigned URL on the soy bucket in production (too
+ * big to proxy through a function), the file off disk in local dev.
+ */
+export async function soyDownload(rel: string, filename: string): Promise<Response> {
+  const disposition = `attachment; filename="${filename.replace(/["\\]/g, "")}"`;
+  if (r2Soy) {
+    const key = soyKey(rel).split("/").map(encodeURIComponent).join("/");
+    const url = new URL(`${r2Soy.endpoint}/${r2Soy.bucket}/${key}`);
+    url.searchParams.set("X-Amz-Expires", "600");
+    url.searchParams.set("response-content-type", "application/geo+json");
+    url.searchParams.set("response-content-disposition", disposition);
+    const signed = await r2Soy.client.sign(url.toString(), { method: "GET", aws: { signQuery: true } });
+    return new Response(null, { status: 302, headers: { location: signed.url, "cache-control": "private, no-store" } });
+  }
+  const body = await readPrivateFile(`${tenantPrefix("adm-soy")}${rel}`);
+  if (!body) return new Response("Not found", { status: 404 });
+  return new Response(new Uint8Array(body), {
+    headers: { "content-type": "application/geo+json", "content-disposition": disposition, "cache-control": "private, no-store" },
+  });
+}
 const RANGE = /^bytes=(\d+)-(\d+)?$/;
 // Anything bigger than one tile or directory read is refused (Vercel caps a response at 4.5 MB).
 const MAX_RANGE = 2 * 1048576;

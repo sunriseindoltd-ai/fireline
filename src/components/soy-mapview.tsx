@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { KpiTile } from "@/components/kpi-tile";
+import { BufferSeg } from "@/components/soy-side";
 import {
   SoySupplyMap,
   bboxOf,
@@ -28,6 +29,7 @@ import {
   type Band,
   type Basis,
   type Catchment,
+  type PlantBuffer,
   type SupplyData,
 } from "@/lib/soy-supply";
 
@@ -129,6 +131,8 @@ export function SoyMapView({
   showOwners = true,
   mode = "supply",
   otherPlants = [],
+  buffer = "80",
+  setBuffer = () => {},
 }: {
   data: SupplyData;
   cdlNames: Record<string, string>;
@@ -144,6 +148,9 @@ export function SoyMapView({
   mode?: "supply" | "corridor";
   /** The client's other crushing plants, shown as points until their catchments arrive. */
   otherPlants?: OtherPlant[];
+  /** Crushing plants are listed once each, at this buffer (0–40 / 0–80 NM). */
+  buffer?: PlantBuffer;
+  setBuffer?: (b: PlantBuffer) => void;
 }) {
   const corridor = mode === "corridor";
   const [band, setBand] = useState<Band>(10);
@@ -303,7 +310,17 @@ export function SoyMapView({
   for (let up = parent; up; up = up.parent ? infos.find((x) => x.id === up!.parent) : undefined) trail.unshift(up);
   // The search box belongs to the long lists (elevators, third parties).
   const q = node.id === "tp" || node.id === "adm" ? listQuery.trim().toLowerCase() : "";
-  const children = level === 3 ? [] : infos.filter((x) => x.parent === node.id && (!q || `${x.name} ${x.sub}`.toLowerCase().includes(q)));
+  const children =
+    level === 3
+      ? []
+      : infos.filter(
+          (x) =>
+            x.parent === node.id &&
+            // One row per crushing plant, at the chosen buffer.
+            (x.kind !== "direct" || plantUnit(x.id)?.ring === buffer) &&
+            (!q || `${x.name} ${x.sub}`.toLowerCase().includes(q)),
+        );
+  const nodePlant = node.kind === "direct" ? plantOfScope(node.id, data) : undefined;
   const k = node.k;
   const facts: [string, string][] = [];
   {
@@ -693,6 +710,17 @@ export function SoyMapView({
 
           {level === 3 ? (
             <>
+              {nodePlant ? (
+                <BufferSeg
+                  value={plantUnit(node.id)?.ring === "40" ? "40" : "80"}
+                  onChange={(b) => {
+                    setBuffer(b);
+                    choose(`${nodePlant.key}${b}`);
+                  }}
+                  c={c}
+                  label={c.bufferLabel}
+                />
+              ) : null}
               {corridor ? null : (
               <div className="soy-colorby">
                 <span>{c.colorBy}</span>
@@ -725,6 +753,7 @@ export function SoyMapView({
                   </label>
                 </div>
               ) : null}
+              {node.id === "direct" ? <BufferSeg value={buffer} onChange={setBuffer} c={c} label={c.bufferLabel} /> : null}
               <p className="eyebrow soy-list-head">{level === 1 ? c.levelGroup : c.levelCatchment}</p>
               {children.length === 0 ? (
                 <p className="panel-empty">{c.noMatches}</p>

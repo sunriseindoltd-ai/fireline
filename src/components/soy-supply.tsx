@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiTile } from "@/components/kpi-tile";
-import { SoyPlants, SoyRelated, type SidePlant } from "@/components/soy-side";
+import { BufferSeg, SoyPlants, SoyRelated, type SidePlant } from "@/components/soy-side";
 import { SoyNationalView, type SoyNational } from "@/components/soy-national";
 import { loadNonCompliant, type SoyFeature } from "@/components/soy-supply-map";
 import type { OtherPlant } from "@/components/soy-supply-map";
@@ -24,6 +24,7 @@ import {
   type Catchment,
   type ComboTotals,
   type Plant,
+  type PlantBuffer,
   type SupplyData,
   type SupplyNcStats,
 } from "@/lib/soy-supply";
@@ -48,6 +49,11 @@ type Common = {
   setSel: (ids: string[]) => void;
   plantSel: string;
   setPlantSel: (id: string) => void;
+  /** One buffer for the crushing plants (0–40 / 0–80 NM), shared by the sidebar, the tables and the map. */
+  buffer: PlantBuffer;
+  setBuffer: (b: PlantBuffer) => void;
+  /** May take files away (not auditors / viewers): the TRACT download. */
+  canDownload?: boolean;
 };
 
 /** Rows of the true-scale table. */
@@ -204,7 +210,8 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
 }
 
 /** Summary: the supply chain of the chosen plant(s), narrowed by the sidebar's ticks. */
-export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel }: Common) {
+export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel, buffer, setBuffer, canDownload = false }: Common) {
+  const [tractOpen, setTractOpen] = useState(false);
   const catchments = useCatchments(data);
   const plants = useMemo<SidePlant[]>(
     () => [
@@ -216,7 +223,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
   const pending = plants.find((p) => p.id === plantSel && !p.hasData);
   const plant = plantSel ? plantById(data, plantSel) : undefined;
   // Nothing ticked: the chosen plant's whole catchment, or the whole chain.
-  const effSel = sel.length ? sel : plant ? [`${plant.key}80`] : [];
+  const effSel = sel.length ? sel : plant ? [`${plant.key}${buffer}`] : [];
   // One catchment's own statistics, or null for a combination of several.
   const rawKey = statsKey(effSel, data);
   const key = rawKey && !catchments.has(rawKey) ? "all" : rawKey;
@@ -265,6 +272,11 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
             <button type="button" className="btn-secondary" onClick={onOpenMap}>
               {c.openMap}
             </button>
+            {canDownload && data.tract ? (
+              <button type="button" className="btn-primary" onClick={() => setTractOpen(true)}>
+                {c.tractBtn}
+              </button>
+            ) : null}
           </div>
         </div>
         {pending ? null : (
@@ -279,7 +291,8 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
           </p>
         )}
       </div>
-      <SoyRelated data={data} c={c} lang={lang} plants={plants} plantSel={plantSel} sel={sel} setSel={setSel} catchments={catchments} />
+      {tractOpen ? <TractDialog data={data} c={c} lang={lang} sel={effSel} onClose={() => setTractOpen(false)} /> : null}
+      <SoyRelated data={data} c={c} lang={lang} plants={plants} plantSel={plantSel} sel={sel} setSel={setSel} catchments={catchments} buffer={buffer} setBuffer={setBuffer} />
       <div className="soy-body">
         {pending ? (
           <section className="chart-card supply-pending">
@@ -316,7 +329,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
               />
             </div>
 
-            <ComboTable data={data} c={c} lang={lang} open={openIds} plant={plant} />
+            <ComboTable data={data} c={c} lang={lang} open={openIds} plant={plant} buffer={buffer} setBuffer={setBuffer} />
 
             <div className="chart-grid soy-charts">
               {ncForCard ? (
@@ -405,7 +418,7 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
               )}
             </div>
 
-            <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={key ?? "all"} setScope={(id) => setSel(idsFromScope(id, data))} plant={plant} />
+            <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={key ?? "all"} setScope={(id) => setSel(idsFromScope(id, data))} plant={plant} buffer={buffer} setBuffer={setBuffer} />
 
             {national && key === "all" ? <SoyNationalView nat={national} data={data} c={c} lang={lang} /> : null}
 
@@ -416,7 +429,6 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
                 <p className="chart-note">{c.noChartsCombo}</p>
               </section>
             )}
-            {present ? null : <DataNotes c={c} />}
           </>
         )}
       </div>
@@ -441,6 +453,8 @@ function FacilityTable({
   scope,
   setScope,
   plant,
+  buffer,
+  setBuffer,
 }: {
   data: SupplyData;
   catchments: Map<string, Catchment>;
@@ -448,18 +462,23 @@ function FacilityTable({
   lang: Lang;
   scope: string;
   setScope: (id: string) => void;
-  /** One plant chosen: its rows only (elevators aren't tied to a plant). */
+  /** One plant chosen: only its row among the plants (elevators aren't tied to a plant). */
   plant?: Plant;
+  buffer: PlantBuffer;
+  setBuffer: (b: PlantBuffer) => void;
 }) {
   const [kind, setKind] = useState<"all" | FacilityKind>("all");
   const [query, setQuery] = useState("");
   const countF = (n: number) => formatCount(n, lang);
   const acF = (n: number) => formatAcres(n, lang);
   const place = (p: Plant) => [p.city, p.state].filter(Boolean).join(", ");
-  const plantRows = (plant ? [plant] : data.plants).flatMap((p) => [
-    { id: `${p.key}80`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ80}`, place: place(p) },
-    { id: `${p.key}40`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ40}`, place: place(p), sub: true },
-  ]);
+  // One row per plant, at the buffer picked above the table.
+  const plantRows = (plant ? [plant] : data.plants).map((p) => ({
+    id: `${p.key}${buffer}`,
+    kind: "plant" as const,
+    name: `${p.name} · ${buffer === "40" ? c.scopeQ40 : c.scopeQ80}`,
+    place: place(p),
+  }));
   // Elevators and third parties are listed with any plant: which plant they deliver to isn't known.
   const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = [
     ...(plant ? [] : [{ id: "all", kind: "chain" as const, name: c.scopeAll, place: fill(c.chainSub, { p: data.plants.length, a: data.admElevators.filter((e) => e.radiusM).length, t: data.thirdParty.length }) }]),
@@ -467,12 +486,7 @@ function FacilityTable({
     ...data.admElevators
       .filter((e) => e.radiusM)
       .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
-    ...data.thirdParty.map((t) => ({
-      id: t.id,
-      kind: "tp" as const,
-      name: t.company ?? t.id,
-      place: [[t.county, t.state].filter(Boolean).join(", "), t.sameAs?.length ? fill(c.sameLocation, { names: t.sameAs.map((x) => data.thirdParty.find((o) => o.id === x)?.company ?? x).join(", ") }) : ""].filter(Boolean).join(" · "),
-    })),
+    ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
   ];
   const q = query.trim().toLowerCase();
   const shown = rows.filter((r) => (kind === "all" || r.kind === kind || r.kind === "chain") && (!q || r.kind === "chain" || `${r.name} ${r.place}`.toLowerCase().includes(q)));
@@ -522,6 +536,7 @@ function FacilityTable({
         <label className="search-field">
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={c.tpSearch} aria-label={c.tpSearch} />
         </label>
+        <BufferSeg value={buffer} onChange={setBuffer} c={c} label={c.bufferLabel} />
       </div>
       <div className="soy-table-wrap tall">
         <table className="data-table soy-table soy-fac-table">
@@ -742,7 +757,23 @@ function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; id
 /** The user's ask: statistics for the plants' 0–40 / 0–80 NM catchments, all
  * ADM elevators, their combinations and third parties; a row opens it on the
  * map. With one plant chosen: that plant's rings only. */
-function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; open: (ids: string[]) => void; plant?: Plant }) {
+function ComboTable({
+  data,
+  c,
+  lang,
+  open,
+  plant,
+  buffer,
+  setBuffer,
+}: {
+  data: SupplyData;
+  c: SoySupplyCopy;
+  lang: Lang;
+  open: (ids: string[]) => void;
+  plant?: Plant;
+  buffer: PlantBuffer;
+  setBuffer: (b: PlantBuffer) => void;
+}) {
   const sites = data.admElevators.filter((e) => e.radiusM);
   const siteIds = sites.map((e) => e.id);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -750,37 +781,37 @@ function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySu
   const tpParts = data.thirdParty.map((e) => [[e.company, [e.county, e.state].filter(Boolean).join(", ")].filter(Boolean).join(" · "), [e.id]] as [string, string[]]);
   const admLabel = fill(c.comboAdm, { n: sites.length });
   const tpLabel = fill(c.comboTp, { n: data.thirdParty.length });
-  const p40 = data.plants.map((p) => `${p.key}40`);
-  const p80 = data.plants.map((p) => `${p.key}80`);
-  const parts40 = data.plants.map((p) => [unitName(`${p.key}40`, data, c)!, [`${p.key}40`]] as [string, string[]]);
-  const parts80 = data.plants.map((p) => [unitName(`${p.key}80`, data, c)!, [`${p.key}80`]] as [string, string[]]);
-  const plants40 = fill(c.comboPlants40, { n: data.plants.length });
-  const plants80 = fill(c.comboPlants80, { n: data.plants.length });
-  const pl80 = plant ? unitName(`${plant.key}80`, data, c)! : "";
+  // The plants at the buffer picked above the table (0–40 or 0–80 NM).
+  const pIds = data.plants.map((p) => `${p.key}${buffer}`);
+  const pParts = data.plants.map((p) => [unitName(`${p.key}${buffer}`, data, c)!, [`${p.key}${buffer}`]] as [string, string[]]);
+  const plantsLabel = fill(buffer === "40" ? c.comboPlants40 : c.comboPlants80, { n: data.plants.length });
+  const one = plant ? `${plant.key}${buffer}` : "";
+  const oneLabel = plant ? unitName(one, data, c)! : "";
   const presets: [string, string, string[], [string, string[]][]][] = plant
     ? [
-        ["p40", unitName(`${plant.key}40`, data, c)!, [`${plant.key}40`], []],
-        ["p80r", unitName(`${plant.key}80r`, data, c)!, [`${plant.key}80r`], []],
-        ["p80", pl80, [`${plant.key}80`], []],
-        ["p80adm", fill(c.comboPlusAdm, { a: pl80 }), [`${plant.key}80`, ...siteIds], [[pl80, [`${plant.key}80`]], [admLabel, siteIds]]],
-        ["p80tp", fill(c.comboPlusTp, { a: pl80 }), [`${plant.key}80`, "tp"], [[pl80, [`${plant.key}80`]], [tpLabel, ["tp"]]]],
-        ["p80all", fill(c.comboPlusAll, { a: pl80 }), [`${plant.key}80`, ...siteIds, "tp"], [[pl80, [`${plant.key}80`]], [admLabel, siteIds], [tpLabel, ["tp"]]]],
+        ["p", oneLabel, [one], []],
+        ["padm", fill(c.comboPlusAdm, { a: oneLabel }), [one, ...siteIds], [[oneLabel, [one]], [admLabel, siteIds]]],
+        ["ptp", fill(c.comboPlusTp, { a: oneLabel }), [one, "tp"], [[oneLabel, [one]], [tpLabel, ["tp"]]]],
+        ["pall", fill(c.comboPlusAll, { a: oneLabel }), [one, ...siteIds, "tp"], [[oneLabel, [one]], [admLabel, siteIds], [tpLabel, ["tp"]]]],
       ]
     : [
-        ["p40", plants40, p40, parts40],
-        ["p80", plants80, p80, parts80],
+        ["p", plantsLabel, pIds, pParts],
         ["adm", admLabel, siteIds, siteParts],
-        ["p40adm", fill(c.comboPlusAdm, { a: plants40 }), [...p40, ...siteIds], [[plants40, p40], [admLabel, siteIds]]],
-        ["p80adm", fill(c.comboPlusAdm, { a: plants80 }), [...p80, ...siteIds], [[plants80, p80], [admLabel, siteIds]]],
+        ["padm", fill(c.comboPlusAdm, { a: plantsLabel }), [...pIds, ...siteIds], [[plantsLabel, pIds], [admLabel, siteIds]]],
         ["tp", tpLabel, ["tp"], tpParts],
-        ["all", c.comboAll, [...p80, ...siteIds, "tp"], [[plants80, p80], [admLabel, siteIds], [tpLabel, ["tp"]]]],
+        ["all", c.comboAll, [...pIds, ...siteIds, "tp"], [[plantsLabel, pIds], [admLabel, siteIds], [tpLabel, ["tp"]]]],
       ];
   return (
     <section className="chart-card supply-wide soy-combo">
-      <h3>{c.comboTitle}</h3>
-      <p className="chart-note">
-        {c.comboIntro} {c.comboOpen}
-      </p>
+      <div className="soy-fac-head">
+        <div>
+          <h3>{c.comboTitle}</h3>
+          <p className="chart-note">
+            {c.comboIntro} {c.comboOpen}
+          </p>
+        </div>
+        <BufferSeg value={buffer} onChange={setBuffer} c={c} label={c.bufferLabel} />
+      </div>
       <div className="soy-table-wrap">
         <table className="data-table soy-table soy-combo-table">
           <ComboHead c={c} />
@@ -790,7 +821,7 @@ function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySu
                 <ComboRow
                   label={label}
                   t={comboTotals(data, ids)}
-                  cls={key === "all" || key === "p80all" ? "total" : ""}
+                  cls={key === "all" || key === "pall" ? "total" : ""}
                   lang={lang}
                   expanded={openKey === key}
                   onOpen={() => setOpenKey(openKey === key ? null : key)}
@@ -810,23 +841,6 @@ function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySu
           </tbody>
         </table>
       </div>
-    </section>
-  );
-}
-
-function DataNotes({ c }: { c: SoySupplyCopy }) {
-  return (
-    <section className="chart-card supply-notes">
-      <h3>{c.notesTitle}</h3>
-      <ul>
-        <li>{c.note1}</li>
-        <li>{c.note2}</li>
-        <li>{c.note3}</li>
-        <li>{c.note4}</li>
-        <li>{c.note5}</li>
-        <li>{c.note6}</li>
-        <li>{c.note7}</li>
-      </ul>
     </section>
   );
 }
@@ -863,7 +877,111 @@ export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: S
           <li>{fill(c.method2, { km2: formatCount(data.network.riverSystemKm2, lang), n: data.network.riverSystems ?? 1 })}</li>
         </ul>
       </section>
-      {present ? null : <DataNotes c={c} />}
     </>
+  );
+}
+
+/** The facilities a selection stands for, one TRACT file set each ("tp" = every third party). */
+function tractIds(sel: string[], data: SupplyData): string[] {
+  const out: string[] = [];
+  for (const id of sel) {
+    if (id === "tp") out.push(...data.thirdParty.map((e) => e.id));
+    else out.push(id);
+  }
+  return [...new Set(out)].filter((id) => data.tract?.files[id]);
+}
+
+/**
+ * GeoJSON for TRACT / TRACES: one file (or a few parts) per ticked facility
+ * with its EUDR-compliant soybean fields, downloaded straight from storage.
+ */
+function TractDialog({ data, c, lang, sel, onClose }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; sel: string[]; onClose: () => void }) {
+  const ids = tractIds(sel, data);
+  const files = data.tract!.files;
+  const all = ids.flatMap((id) => files[id]!.parts.map(([p]) => [id, p] as const));
+  const totalBytes = ids.reduce((a, id) => a + files[id]!.parts.reduce((b, pp) => b + pp[2], 0), 0);
+  const leftOut = Object.values(data.tract!.leftOut).reduce((a, b) => a + b, 0);
+  const href = (id: string, p: number) => `/soy-tract?f=${encodeURIComponent(id)}&p=${p}`;
+  const mb = (b: number) => `${(b / 1e6).toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 })} MB`;
+  const [busy, setBusy] = useState(false);
+  async function downloadAll() {
+    setBusy(true);
+    for (const [id, p] of all) {
+      const a = document.createElement("a");
+      a.href = href(id, p);
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Browsers drop clicks that come too fast; one file a second is safe.
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setBusy(false);
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="tract-layer" role="dialog" aria-modal="true" aria-label={c.tractTitle} onClick={onClose}>
+      <div className="tract-card" onClick={(e) => e.stopPropagation()}>
+        <div className="tract-head">
+          <h2>{c.tractTitle}</h2>
+          <button type="button" className="btn-text" onClick={onClose}>
+            {c.close}
+          </button>
+        </div>
+        <p className="chart-note">{c.tractIntro}</p>
+        {ids.length === 0 ? (
+          <p className="tract-empty">{c.tractNone}</p>
+        ) : (
+          <>
+            <div className="soy-table-wrap tract-table">
+              <table className="data-table soy-table">
+                <thead>
+                  <tr>
+                    <th>{c.facCol}</th>
+                    <th className="num">{c.colFields}</th>
+                    <th>{c.tractFiles}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ids.map((id) => {
+                    const f = files[id]!;
+                    return (
+                      <tr key={id}>
+                        <td>
+                          {f.label}
+                          <span className="soy-cell-sub">
+                            {f.kind} · {f.radiusNm} NM
+                          </span>
+                        </td>
+                        <td className="num tabular-nums">{formatCount(f.fields, lang)}</td>
+                        <td>
+                          <span className="tract-parts">
+                            {f.parts.map(([p, , bytes]) => (
+                              <a key={p} href={href(id, p)} download>
+                                {f.parts.length > 1 ? fill(c.tractPart, { n: p }) : "GeoJSON"} · {mb(bytes)}
+                              </a>
+                            ))}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="tract-actions">
+              <p className="chart-note">{fill(c.tractLeftOut, { n: formatCount(leftOut, lang) })}</p>
+              <button type="button" className="btn-primary" disabled={busy} onClick={() => void downloadAll()}>
+                {busy ? c.tractBusy : fill(c.tractAll, { n: formatCount(all.length, lang), size: mb(totalBytes) })}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import type { Lang } from "@/lib/copy";
-import { fill, formatCount } from "@/lib/format";
+import { formatCount } from "@/lib/format";
 import type { SoySupplyCopy } from "@/lib/soy-supply-copy";
-import { admSiteIds, plantById, toggleSel, unitName, type Catchment, type SupplyData } from "@/lib/soy-supply";
+import { admSiteIds, plantById, toggleSel, type Catchment, type Plant, type PlantBuffer, type SupplyData } from "@/lib/soy-supply";
 
 /** A crushing plant in the list (hasData false = announced, catchments not delivered yet). */
 export type SidePlant = { id: string; name: string; hasData: boolean };
@@ -19,7 +19,23 @@ type Props = {
   sel: string[];
   setSel: (ids: string[]) => void;
   catchments: Map<string, Catchment>;
+  /** The plant buffer new ticks use (each ticked plant keeps its own). */
+  buffer: PlantBuffer;
+  setBuffer: (b: PlantBuffer) => void;
 };
+
+/** 0–40 / 0–80 NM, wherever a plant's buffer is picked. */
+export function BufferSeg({ value, onChange, c, label }: { value: PlantBuffer; onChange: (b: PlantBuffer) => void; c: SoySupplyCopy; label: string }) {
+  return (
+    <div className="seg soy-buffer-seg" role="group" aria-label={label}>
+      {(["40", "80"] as const).map((b) => (
+        <button key={b} type="button" className={value === b ? "on" : ""} aria-pressed={value === b} onClick={() => onChange(b)}>
+          {b === "40" ? c.scopeQ40 : c.scopeQ80}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** The crushing plants — a compact list, as tall as the page title beside it. */
 export function SoyPlants({ c, plants, plantSel, setPlantSel }: Pick<Props, "c" | "plants" | "plantSel" | "setPlantSel">) {
@@ -52,16 +68,26 @@ export function SoyPlants({ c, plants, plantSel, setPlantSel }: Pick<Props, "c" 
  * plant. Nothing ticked = the whole selection; ticks combine and each field is
  * counted once.
  */
-export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catchments }: Omit<Props, "setPlantSel">) {
+export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catchments, buffer, setBuffer }: Omit<Props, "setPlantSel">) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [qa, setQa] = useState("");
   const pending = plants.find((p) => p.id === plantSel && !p.hasData);
   const plant = plantSel ? plantById(data, plantSel) : undefined;
   const directPlants = plant ? [plant] : data.plants;
   const sites = useMemo(() => data.admElevators.filter((e) => e.radiusM), [data]);
-  const points = data.admElevators.length;
   const tps = data.thirdParty;
-  const tpName = (id: string) => data.thirdParty.find((e) => e.id === id)?.company ?? id;
+  // Several points in one town (Evansville: an elevator and two terminals) read apart by their address.
+  const cityCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of sites) m.set(`${e.city}|${e.state}`, (m.get(`${e.city}|${e.state}`) ?? 0) + 1);
+    return m;
+  }, [sites]);
+  const siteMatches = useMemo(() => {
+    const needle = qa.trim().toLowerCase();
+    if (!needle) return sites;
+    return sites.filter((e) => [e.name, e.city, e.county, e.state, e.address].filter(Boolean).join(" ").toLowerCase().includes(needle));
+  }, [sites, qa]);
   const tpMatches = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return tps;
@@ -85,6 +111,44 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
       ) : null}
     </label>
   );
+
+  // One row per plant: a tick and its buffer (0–40 / 0–80 NM).
+  const plantRow = (p: Plant) => {
+    const ids = [`${p.key}40`, `${p.key}80`, `${p.key}80r`];
+    const cur = sel.includes(`${p.key}40`) ? "40" : sel.includes(`${p.key}80`) ? "80" : null;
+    const buf: PlantBuffer = cur ?? buffer;
+    const id = `${p.key}${buf}`;
+    return (
+      <div key={p.id} className={`side-row side-row-plant ${cur ? "on" : ""}`}>
+        <label>
+          <input
+            type="checkbox"
+            checked={!!cur}
+            onChange={() => setSel(cur ? sel.filter((x) => !ids.includes(x)) : [...sel.filter((x) => !/80r$/.test(x)), id])}
+          />
+          <span className="side-label">{p.city ?? p.name}</span>
+        </label>
+        <select
+          className="side-buffer"
+          value={buf}
+          aria-label={`${p.city ?? p.name} · ${c.bufferLabel}`}
+          onChange={(e) => {
+            const b = e.target.value as PlantBuffer;
+            setBuffer(b);
+            if (cur) setSel(sel.map((x) => (x === `${p.key}${cur}` ? `${p.key}${b}` : x)));
+          }}
+        >
+          <option value="40">{c.scopeQ40}</option>
+          <option value="80">{c.scopeQ80}</option>
+        </select>
+        {nc(id) > 0 ? (
+          <b className="side-nc tabular-nums" title={c.colNcN}>
+            {formatCount(nc(id), lang)}
+          </b>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <aside className="soy-related" aria-label={c.sideRelated}>
@@ -110,17 +174,13 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
 
               <fieldset className="side-group">
                 <legend>{c.sideDirect}</legend>
-                {directPlants.flatMap((p) => [
-                  row(`${p.key}40`, unitName(`${p.key}40`, data, c)!),
-                  row(`${p.key}80`, unitName(`${p.key}80`, data, c)!),
-                  ...(plant ? [row(`${p.key}80r`, unitName(`${p.key}80r`, data, c)!)] : []),
-                ])}
+                {directPlants.map(plantRow)}
               </fieldset>
 
               {sites.length ? (
                 <fieldset className="side-group">
                   <legend>
-                    {c.scopeAdm} · {fill(c.sideSites, { n: sites.length, p: points })}
+                    {c.scopeAdm} · {formatCount(sites.length, lang)}
                   </legend>
                   <div className="side-quick">
                     <button type="button" onClick={() => setSel([...new Set([...sel.filter((x) => !siteIds.includes(x)), ...siteIds])])} disabled={siteIds.every((id) => sel.includes(id))}>
@@ -130,7 +190,16 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
                       {c.comboNoSites}
                     </button>
                   </div>
-                  <div className="side-tp-list">{sites.map((e) => row(e.id, [e.city ?? e.name, e.state].filter(Boolean).join(", ")))}</div>
+                  <input className="side-search" type="search" value={qa} onChange={(e) => setQa(e.target.value)} placeholder={c.sideSearchAdm} aria-label={c.sideSearchAdm} />
+                  <div className="side-tp-list">
+                    {siteMatches.length ? (
+                      siteMatches.map((e) =>
+                        row(e.id, [e.city ?? e.name, e.state].filter(Boolean).join(", "), (cityCount.get(`${e.city}|${e.state}`) ?? 0) > 1 ? (e.address ?? e.name) : undefined),
+                      )
+                    ) : (
+                      <p className="side-note">{c.sideNoAdm}</p>
+                    )}
+                  </div>
                 </fieldset>
               ) : null}
 
@@ -146,11 +215,7 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
                     <div className="side-tp-list">
                       {tpMatches.length ? (
                         tpMatches.map((e) =>
-                          row(
-                            e.id,
-                            e.company ?? e.id,
-                            [[e.county, e.state].filter(Boolean).join(", "), e.sameAs?.length ? fill(c.sameLocation, { names: e.sameAs.map(tpName).join(", ") }) : ""].filter(Boolean).join(" · "),
-                          ),
+                          row(e.id, e.company ?? e.id, [e.county, e.state].filter(Boolean).join(", ")),
                         )
                       ) : (
                         <p className="side-note">{c.sideNoTp}</p>

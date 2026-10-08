@@ -154,6 +154,13 @@ export type SupplyData = {
   fieldsTotal: number;
   fieldsDelivered?: number;
   doubleCropFields?: number;
+  /** TRACT-ready GeoJSON per facility (fields/tract/<id>.part<n>.geojson, served by /soy-tract). */
+  tract?: {
+    /** Fields left out because TRACT rejects their outline (invalid at 6 decimals, holes, touching parts). */
+    leftOut: Record<string, number>;
+    /** facility id → label, kind, radius, field count, [part, features, bytes][] */
+    files: Record<string, { label: string; kind: string; radiusNm: number; fields: number; parts: [number, number, number][] }>;
+  };
   /** Fields grouped by the catchments they are in (bit per catchment), so any
    * union can be summed without counting a field twice. Masks are hex strings
    * (more than 32 catchments). */
@@ -219,6 +226,8 @@ export function plantUnit(id: string | null | undefined): { key: string; ring: "
   return m ? { key: m[1]!, ring: m[2] as "40" | "80r" | "80" } : null;
 }
 export const isPlantUnit = (id: string | null | undefined) => plantUnit(id) != null;
+/** A crushing plant's buffer as the user picks it: one row per plant, 0–40 or 0–80 NM. */
+export type PlantBuffer = "40" | "80";
 export function plantByKey(data: SupplyData, key: string): Plant | undefined {
   return data.plants.find((p) => p.key === key);
 }

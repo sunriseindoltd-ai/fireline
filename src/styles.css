@@ -5806,3 +5806,91 @@ html.soy-report-open body {
     align-items: flex-start;
   }
 }
+/* One row per crushing plant: tick + buffer (0–40 / 0–80 NM). */
+.side-row-plant > label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.side-buffer {
+  flex: none;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-bg, #fff);
+  color: var(--color-fg-2);
+  font: 500 11.5px var(--font-sans);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.side-group > .side-search {
+  margin: 2px 0 4px;
+}
+.soy-buffer-seg {
+  align-self: flex-start;
+  margin: 0 0 10px;
+}
+.soy-fac-head .soy-buffer-seg {
+  margin: 0;
+}
+/* SoyTrace: GeoJSON for TRACT / TRACES (soy-supply.tsx TractDialog). */
+.tract-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 17, 20, 0.45);
+}
+.tract-card {
+  width: min(760px, 100%);
+  max-height: min(85vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+}
+.tract-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tract-head h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.tract-table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.tract-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.tract-parts a {
+  color: var(--color-link);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.tract-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.tract-actions .chart-note {
+  margin: 0;
+}
+.tract-empty {
+  margin: 8px 0;
+  color: var(--color-muted);
+}

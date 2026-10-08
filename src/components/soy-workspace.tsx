@@ -26,7 +26,7 @@ import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/s
 import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
 import { SoyMapView } from "@/components/soy-mapview";
 import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
-import { idsFromScope, plantById, scopeForSel, type SupplyData } from "@/lib/soy-supply";
+import { idsFromScope, plantById, scopeForSel, type PlantBuffer, type SupplyData } from "@/lib/soy-supply";
 import { soySupplyCopy } from "@/lib/soy-supply-copy";
 import { usePersistentState } from "@/lib/use-persistent";
 import { TENANTS, type Tenant } from "@/lib/tenants";
@@ -111,6 +111,9 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   // "…2": the 7 Oct data renumbered the elevators, so selections stored before it are dropped.
   const [selStored, setSelStored] = usePersistentState<string[]>("soytrace.sel2", []);
   const [plantSel, setPlantSel] = usePersistentState<string>("soytrace.plant", "");
+  // One buffer for the crushing plants, 0–40 or 0–80 NM (one row per plant everywhere, not one per ring).
+  const [bufferStored, setBuffer] = usePersistentState<PlantBuffer>("soytrace.buffer", "80");
+  const buffer: PlantBuffer = bufferStored === "40" ? "40" : "80";
   const sel = useMemo(() => {
     if (!supply) return [];
     return scopeForSel(selStored, supply) === scope ? selStored : idsFromScope(scope, supply);
@@ -119,11 +122,11 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     setSelStored(ids);
     if (supply) setScope(scopeForSel(ids, supply));
   };
-  // Picking a plant ticks its whole catchment (0–80 NM); "all plants" clears the ticks.
+  // Picking a plant ticks its catchment at the current buffer; "all plants" clears the ticks.
   const choosePlant = (id: string) => {
     setPlantSel(id);
     const p = id && supply ? plantById(supply, id) : undefined;
-    setSel(p ? [`${p.key}80`] : []);
+    setSel(p ? [`${p.key}${buffer}`] : []);
   };
   const navigate = useNavigate();
   const [data, setData] = useState<SoyData | null>(null);
@@ -329,6 +332,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               canDownload={role !== "auditor"}
               showOwners={!present}
               otherPlants={otherPlants}
+              buffer={buffer}
+              setBuffer={setBuffer}
             />
           ) : (
             <div className={`page soy-page ${tab === "summary" ? "soy-page-wide" : ""}`}>
@@ -349,6 +354,9 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   setSel={setSel}
                   plantSel={plantSel}
                   setPlantSel={choosePlant}
+                  buffer={buffer}
+                  setBuffer={setBuffer}
+                  canDownload={role !== "auditor" && role !== "viewer"}
                 />
               ) : (
                 <SoyDocsView data={supply} c={ssc} lang={lang} present={present} />
