@@ -25,7 +25,10 @@
  *
  * Requires R2_ADM_SOY_ACCOUNT_ID / _ACCESS_KEY_ID / _SECRET_ACCESS_KEY / _BUCKET.
  *
- * Usage: node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs [--v2] [--keep-stale]
+ * --only=<prefix>: just the files under that path (e.g. fields/tract/), stale
+ * keys left alone — to send files a production build doesn't read yet.
+ *
+ * Usage: node --env-file=.env.local scripts/upload-soy-fields-to-r2.mjs [--v2] [--keep-stale] [--only=<prefix>]
  */
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
@@ -37,7 +40,8 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url)) + "/..";
 const TENANT_DIR = path.join(ROOT, "private-data", "tenants", "adm-soy");
 const PREFIXES = ["fields", "layers"];
 const CONCURRENCY = 6;
-const KEEP_STALE = process.argv.includes("--keep-stale");
+const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice(7) ?? null;
+const KEEP_STALE = process.argv.includes("--keep-stale") || !!ONLY;
 const V2 = process.argv.includes("--v2");
 // Mirrors SOY_V2 in src/lib/kanopi-data.server.ts.
 const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
@@ -94,6 +98,8 @@ for (const prefix of PREFIXES) {
   let files = (await walk(path.join(TENANT_DIR, prefix))).sort();
   if (files.length === 0) throw new Error(`no files in ${prefix}/ — run the prepare scripts first`);
   if (V2) files = files.filter((f) => SOY_V2.test(`${prefix}/${f}`));
+  if (ONLY) files = files.filter((f) => `${prefix}/${f}`.startsWith(ONLY));
+  if (ONLY && !files.length) continue;
   const kprefix = V2 ? `v2/${prefix}` : prefix;
   const remote = await listRemote(kprefix);
   const queue = [...files];
