@@ -73,7 +73,8 @@ const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads", "states", "cou
 // a 0.1° density grid below that. Grid colours step at a share of the cell (a 0.1° cell ≈ 22,000 acres).
 const US_MIN_ZOOM = 10;
 /** Soybean fields outside the selection: neutral, so the selection's green stands out. */
-const OUTSIDE_COLOR = "#c9cdd3";
+const OUTSIDE_COLOR = "#eceef1";
+const OUTSIDE_COLOR_LIGHT_MAP = "#9aa0a6";
 const US_GRID_ACRES = [220, 1100, 2200, 4400, 7700];
 let pmtilesProtocol = false;
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
@@ -503,24 +504,25 @@ export function SoySupplyMap({
           "source-layer": "fields",
           minzoom: US_MIN_ZOOM,
           layout: { visibility: "none" },
-          paint: { "fill-color": OUTSIDE_COLOR, "fill-opacity": 0.32 },
+          paint: { "fill-color": OUTSIDE_COLOR, "fill-opacity": 0.55 },
         });
         map.addLayer({
           id: "outside-line",
           type: "line",
           source: "us-soy",
           "source-layer": "fields",
-          minzoom: 11,
+          minzoom: US_MIN_ZOOM,
           layout: { visibility: "none" },
-          paint: { "line-color": "#ffffff", "line-width": 0.6, "line-opacity": 0.45 },
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 14, 1.2] as never, "line-opacity": 0.8 },
         });
-        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.85 } });
+        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.9 } });
         map.addLayer({
           id: "fields-line",
           type: "line",
           source: "fields",
-          minzoom: 12,
-          paint: { "line-color": "#0f3d22", "line-width": 0.6, "line-opacity": 0.6 },
+          minzoom: US_MIN_ZOOM,
+          // A light edge keeps neighbouring fields apart over imagery.
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.4, 14, 1.1] as never, "line-opacity": 0.6 },
         });
         map.addLayer({
           id: "roads",
@@ -1093,8 +1095,8 @@ export function SoySupplyMap({
     // Only around a selection whose own fields are drawn (one catchment or a combination).
     set(["outside-fill", "outside-line"], on.outside && !on.us && levelOf(selected) === 3);
     // With land cover on, the fields and density cells thin out so it shows through.
-    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.85);
-    if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", on.nlcd ? 0.12 : 0.32);
+    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.9);
+    if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", on.nlcd ? 0.2 : 0.55);
     // With all US fields on, the catchment density cells give way to the fields themselves from zoom 10.
     const gridOpacity = on.nlcd ? 0.25 : 0.72;
     for (const id of GRID_LAYERS)
@@ -1221,6 +1223,11 @@ export function SoySupplyMap({
       map.setPaintProperty("direct-area", "fill-color", ink);
       map.setPaintProperty("direct-area", "fill-opacity", light ? 0.07 : 0.14);
     }
+    // Fields outside the selection: light grey over imagery, a mid grey over the pale street map.
+    if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-color", light ? OUTSIDE_COLOR_LIGHT_MAP : OUTSIDE_COLOR);
+    if (map.getLayer("outside-line")) map.setPaintProperty("outside-line", "line-color", light ? "#5f6368" : "#ffffff");
+    // Field edges: white over imagery, dark green over the street map.
+    if (map.getLayer("fields-line")) map.setPaintProperty("fields-line", "line-color", light ? "#0f5a2e" : "#ffffff");
     for (const id of ["ring-label", "plant-label", "terminal-label", "plants-other-label", "adm-label", "tp-label", "states-label", "counties-label"]) {
       if (!map.getLayer(id)) continue;
       map.setPaintProperty(id, "text-color", ink);
@@ -1282,7 +1289,7 @@ export function SoySupplyMap({
       label: c.legendNc,
       symbol: <i className="nc-ring" />,
       detail: (
-        <div className="soy-nc-filters">
+        <div className="soy-key-detail soy-nc-filters">
           <label className="soy-nc-filter">
             <input type="checkbox" checked={ncReview} onChange={(e) => setNcReview(e.target.checked)} />
             <i className="sq" style={{ background: NC_REVIEW }} />
@@ -1306,7 +1313,7 @@ export function SoySupplyMap({
     roads: { label: c.layerRoads, symbol: <i className="ln road" /> },
     outside: {
       label: c.layerOutside,
-      symbol: <i className="sq" style={{ background: OUTSIDE_COLOR, opacity: 0.6 }} />,
+      symbol: <i className="sq" style={{ background: OUTSIDE_COLOR, boxShadow: "inset 0 0 0 1px #c9cdd3" }} />,
       detail: <p className="soy-key-note">{c.outsideNote}</p>,
     },
     us: {

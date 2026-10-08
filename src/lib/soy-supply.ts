@@ -571,7 +571,8 @@ export const NC_INK = "#8f3a31";
 export const NC_MARK = "#c8372b";
 /** ADM-listed fields already cropland in 2018–2020 ("to review", Feedback 5 P0-2). */
 export const NC_REVIEW = "#e0a128";
-export const FIELD_COLOR = "#3b8757";
+// Bright enough to read over satellite imagery (user, 8 Oct 2026); was #3b8757.
+export const FIELD_COLOR = "#34d27b";
 export const TP_COLOR = "#d2a95b";
 export const ADM_COLOR = "#ffffff";
 export const PLANT_COLOR = "#1f6fd1";

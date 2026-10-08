@@ -6071,3 +6071,38 @@ html.soy-report-open body {
 .soy-downloads > .panel-note {
   margin: 4px 0 10px;
 }
+
+/* Layers: the non-compliant layer's two filters, indented under it like the other details. */
+.soy-nc-filters {
+  display: grid;
+  gap: 5px;
+}
+.soy-layers .soy-nc-filter {
+  display: grid;
+  grid-template-columns: 14px 10px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--color-fg-2);
+  cursor: pointer;
+}
+.soy-layers .soy-nc-filter input {
+  width: 13px;
+  height: 13px;
+  margin: 1px 0 0;
+  accent-color: var(--color-brand);
+}
+.soy-layers .soy-nc-filter .sq {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin-top: 2.5px;
+  border-radius: 2px;
+}
+.soy-layers .soy-nc-filter .sq.faded {
+  opacity: 0.45;
+}
+.soy-nc-filters .soy-key-note {
+  margin-top: 2px;
+}
