@@ -250,7 +250,9 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
   const ncForCard = k ? (key === "all" ? ncAll : k.nonCompliant) : ncCombo;
   const outside = ncAll.fields - (catchments.get("all")?.nonCompliant.fields ?? 0);
   // Fields on ADM's list in this selection that were already cropland in 2018–2020 (Feedback 5, P0-2).
-  const reviewN = (key === "all" ? catchments.get("all")?.nonCompliant : k ? k.nonCompliant : ncCombo)?.byBefore.crop ?? 0;
+  // null while a combination's non-compliant fields are still loading (not a 0 that looks real).
+  const reviewSrc = key === "all" ? catchments.get("all")?.nonCompliant : k ? k.nonCompliant : ncCombo;
+  const reviewN = reviewSrc ? (reviewSrc.byBefore.crop ?? 0) : null;
   // A statistics row opens the map on that scope (the whole chain for an empty list).
   const openIds = (ids: string[]) => {
     setSel(ids);
@@ -313,8 +315,15 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
           </section>
         ) : (
           <>
-            {/* Feedback 5 (P0-1): the non-compliant figures lead; the compliant share is secondary text. */}
+            {/* Positive first, then negative (user, 8 Oct 2026): compliant, non-compliant, then the review note. */}
             <div className="kpi-row soy-supply-kpis">
+              <KpiTile
+                value={countF(tot.fields)}
+                label={c.kpiFields}
+                hint={c.kpiFieldsHint}
+                sub={k?.compliant.doubleCropFields ? fill(c.kpiDoubleCrop, { n: countF(k.compliant.doubleCropFields), area: haF(k.compliant.doubleCropAcres ?? 0) }) : undefined}
+              />
+              <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />
               <KpiTile
                 tone="danger"
                 value={haF(tot.ncAcres)}
@@ -330,20 +339,13 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
                 sub={fill(c.kpiCompliantSub, { p: formatSharePct(pct(tot.acres, tot.acres + tot.ncAcres), lang) })}
               />
               <KpiTile
-                value={countF(reviewN)}
+                value={reviewN == null ? "…" : countF(reviewN)}
                 label={c.kpiReview}
                 hint={c.kpiReviewHint}
                 sub={c.kpiReviewSub}
                 onClick={onOpenReview}
                 action={onOpenReview ? c.kpiReviewAction : undefined}
               />
-              <KpiTile
-                value={countF(tot.fields)}
-                label={c.kpiFields}
-                hint={c.kpiFieldsHint}
-                sub={k?.compliant.doubleCropFields ? fill(c.kpiDoubleCrop, { n: countF(k.compliant.doubleCropFields), area: haF(k.compliant.doubleCropAcres ?? 0) }) : undefined}
-              />
-              <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />
             </div>
             {/* Feedback 5 (P0-3): how much of ADM's list the figures cover. */}
             <div className="eudr-notice info soy-nc-scope" role="note">

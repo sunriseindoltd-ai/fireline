@@ -1451,12 +1451,12 @@ export function SoySupplyMap({
               <span>{c.inViewTotal}</span>
             </div>
             <div>
-              <b className="bad">{formatAcres(inView.ncAcres, lang)}</b>
-              <span>{c.inViewNcArea}</span>
-            </div>
-            <div>
               <b className="ok">{inView.total > 0 ? formatSharePct(pct(inView.total - inView.ncAcres, inView.total), lang) : "—"}</b>
               <span>{c.inViewCompliant}</span>
+            </div>
+            <div>
+              <b className="bad">{formatAcres(inView.ncAcres, lang)}</b>
+              <span>{c.inViewNcArea}</span>
             </div>
             <div>
               <b>{inView.total > 0 ? formatSharePct(pct(inView.ncAcres, inView.total), lang) : "—"}</b>

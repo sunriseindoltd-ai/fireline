@@ -368,7 +368,7 @@ export function SoyMapView({
   }
   const total = (k?.compliant.fields ?? 0) + (k?.nonCompliant.fields ?? 0);
   const kindLabel = (x: CatchmentInfo) =>
-    x.kind === "combo" ? c.comboKind : x.kind === "plant" ? c.levelPlant : x.kind === "group" ? c.levelGroup : x.kind === "adm" ? c.kindAdm : x.kind === "tp" ? c.kindTp : c.kindPlant;
+    x.kind === "combo" ? c.comboKind : x.kind === "plant" ? c.facChain : x.kind === "group" ? c.levelGroup : x.kind === "adm" ? c.kindAdm : x.kind === "tp" ? c.kindTp : c.kindPlant;
   const nameOf = (id: string) => infos.find((x) => x.id === id)?.name ?? id;
 
   // ------------------------------------------------------------ field card
@@ -854,7 +854,7 @@ export function SoyMapView({
                 {c.download} · {node.name}
               </p>
               <div className="seg soy-dl-set" role="group" aria-label={c.dlSetLabel}>
-                {(["both", "ok", "nc"] as const).map((v) => (
+                {(["ok", "nc", "both"] as const).map((v) => (
                   <button
                     key={v}
                     type="button"
