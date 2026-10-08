@@ -347,6 +347,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               setBuffer={setBuffer}
               ncReview={ncReview}
               setNcReview={setNcReview}
+              sel={sel}
+              setSel={setSel}
             />
           ) : (
             <div className={`page soy-page ${tab === "summary" ? "soy-page-wide" : ""}`}>

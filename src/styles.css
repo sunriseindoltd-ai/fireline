@@ -5987,3 +5987,82 @@ html.soy-report-open body {
   color: var(--color-fg);
   font-weight: 600;
 }
+
+/* Map & data: combine catchments without leaving the map (the Summary sidebar's picker). */
+.soy-map-combine {
+  margin: 0 0 14px;
+  border: 1px solid var(--color-line-soft);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.soy-map-combine > summary {
+  display: grid;
+  gap: 2px;
+  padding: 10px 34px 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+}
+.soy-map-combine > summary::-webkit-details-marker {
+  display: none;
+}
+.soy-map-combine > summary::after {
+  content: "+";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 600 16px var(--font-sans);
+  color: var(--color-muted);
+}
+.soy-map-combine[open] > summary::after {
+  content: "−";
+}
+.soy-map-combine > summary span {
+  font: 500 12px var(--font-sans);
+  color: var(--color-muted);
+}
+.soy-map-combine > summary b {
+  font: 600 14px var(--font-sans);
+  color: var(--color-fg);
+}
+.soy-map-combine > .soy-combine-hint {
+  margin: 0 12px 4px;
+}
+.soy-map-combine .soy-related {
+  position: static;
+  max-height: 46vh;
+  padding: 4px 12px 12px;
+  background: transparent;
+  border-radius: 0;
+}
+/* The picker's own phone toggle isn't needed inside the map panel. */
+.soy-map-combine .soy-side-toggle {
+  display: none;
+}
+.soy-map-combine .soy-side-body {
+  display: block;
+  margin-top: 0;
+}
+.soy-map-combine .side-summary {
+  display: none;
+}
+/* Map & data downloads: which fields, then the format. */
+.soy-downloads .soy-dl-set {
+  width: 100%;
+  margin: 2px 0 8px;
+}
+.soy-downloads .soy-dl-set button {
+  flex: 1;
+}
+.soy-downloads .soy-dl-set button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.soy-downloads .download-row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.soy-downloads > .panel-note {
+  margin: 4px 0 10px;
+}

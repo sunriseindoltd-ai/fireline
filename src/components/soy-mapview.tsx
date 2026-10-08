@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { KpiTile } from "@/components/kpi-tile";
-import { BufferSeg } from "@/components/soy-side";
+import { BufferSeg, SoyRelated, scopeSummary } from "@/components/soy-side";
 import {
   SoySupplyMap,
   bboxOf,
@@ -51,12 +51,8 @@ function csv(rows: (string | number | null | undefined)[][]) {
   };
   return rows.map((r) => r.map(cell).join(",")).join("\n");
 }
-// Downloads carry neither the map centre nor the owner's name and address.
-const stripCenter = (f: SoyFeature): SoyFeature => {
-  const { _x, _y, on, oa, pv, ...props } = f.properties;
-  void [_x, _y, on, oa, pv];
-  return { ...f, properties: props };
-};
+// Downloads carry neither the map centre nor the owner's name and address: fieldRow below lists
+// every column that goes out.
 
 export type CatchmentInfo = {
   id: string;
@@ -135,6 +131,8 @@ export function SoyMapView({
   setBuffer = () => {},
   ncReview = false,
   setNcReview = () => {},
+  sel,
+  setSel,
 }: {
   data: SupplyData;
   cdlNames: Record<string, string>;
@@ -156,6 +154,9 @@ export function SoyMapView({
   /** Only ADM-listed fields already cropland in 2018–2020 ("to review"). */
   ncReview?: boolean;
   setNcReview?: (on: boolean) => void;
+  /** The Summary's selection (ticked catchments), so a combination can be built on the map too. */
+  sel?: string[];
+  setSel?: (ids: string[]) => void;
 }) {
   const corridor = mode === "corridor";
   const [band, setBand] = useState<Band>(10);
@@ -177,6 +178,8 @@ export function SoyMapView({
   const [page, setPage] = useState(0);
   const [findText, setFindText] = useState("");
   const [findMiss, setFindMiss] = useState(false);
+  const [combineOpen, setCombineOpen] = useState(false);
+  const sidePlants = useMemo(() => data.plants.map((p) => ({ id: p.id, name: p.city ?? p.name, hasData: true })), [data]);
   const nonce = useRef(0);
   const infos = useMemo(() => catchmentInfos(data, catchments, c), [data, catchments, c]);
   const countF = (n: number) => formatCount(n, lang);
@@ -240,72 +243,82 @@ export function SoyMapView({
   // ------------------------------------------------------------ downloads
   const scopeName = infos.find((x) => x.id === scope)?.name ?? c.scopeAll;
   const slug = (scope || "all").replace(/[^\w-]+/g, "-");
+  // Fields of the current selection (one catchment or a combination): compliant, non-compliant or both,
+  // as CSV or GeoJSON (user, 8 Oct 2026). One set of columns for both kinds, blank where one doesn't apply.
   // review_flag: already cropland in 2018–2020 (a note, ADM's status unchanged); in_any_catchment: counted in the figures.
-  const ncHeader = ["field_id", "state", "county", "field_acres", "cover_2018_2020", "first_cropped", "crop_2024", "crop_2025", "F2026_Soy", "review_flag", "in_any_catchment", "point_only", "lon", "lat"]; // prettier-ignore
-  const ncRow = (f: SoyFeature) => {
+  const fieldRow = (f: SoyFeature, nc: boolean) => {
     const p = f.properties;
-    return [p.id, p.s, p.n, p.a, p.b, p.y, p.c24, p.c25, p.s26, p.rf ?? "", String(p.k ?? "") ? "true" : "false", p.po ? "yes" : "no", Number(p._x).toFixed(5), Number(p._y).toFixed(5)] as (string | number | null)[]; // prettier-ignore
+    return {
+      status: nc ? "non-compliant" : "compliant",
+      field_id: p.id,
+      state: p.s,
+      county: p.n,
+      field_acres: p.a,
+      soy_seasons_2018_2025: nc ? (p.sy ?? null) : p.y,
+      rail_mi: p.r ?? null,
+      river_mi: p.v ?? null,
+      cdl_2018_2025: nc ? null : String(p.c ?? "").replace(/,/g, " "),
+      cover_2018_2020: nc ? p.b : null,
+      first_cropped: nc ? p.y : null,
+      crop_2024: nc ? p.c24 : null,
+      crop_2025: nc ? p.c25 : null,
+      F2026_Soy: nc ? p.s26 : null,
+      review_flag: nc ? (p.rf ?? "") : "",
+      in_any_catchment: nc ? (String(p.k ?? "") ? "true" : "false") : "true",
+      point_only: nc && p.po ? "yes" : "no",
+    } as unknown as Record<string, string | number | null | undefined>;
   };
-  const downloads = [
-    {
-      label: c.dlNcCsv,
-      hint: c.dlNcCsvHint,
-      tag: "CSV",
-      run: () => downloadBlob(`soytrace-${slug}-noncompliant.csv`, csv([ncHeader, ...scopeFields.nc.map(ncRow)]), "text/csv"),
-    },
-    {
-      label: c.dlNcGeo,
-      hint: c.dlNcGeoHint,
-      tag: "GeoJSON",
-      run: () =>
-        downloadBlob(
-          `soytrace-${slug}-noncompliant.geojson`,
-          JSON.stringify({ type: "FeatureCollection", features: scopeFields.nc.map(stripCenter) }),
-          "application/geo+json",
-        ),
-    },
-    {
-      label: c.dlFieldsCsv,
-      hint: c.dlFieldsCsvHint,
-      tag: "CSV",
-      run: () =>
-        downloadBlob(
-          `soytrace-${slug}-fields.csv`,
-          csv([
-            ["field_id", "state", "county", "acres", "soy_seasons_2018_2025", "rail_mi", "river_mi", "cdl_2018_2025", "lon", "lat"],
-            ...scopeFields.fields.map((f) => {
-              const p = f.properties;
-              return [p.id, p.s, p.n, p.a, p.y, p.r, p.v, String(p.c).replace(/,/g, " "), Number(p._x).toFixed(5), Number(p._y).toFixed(5)] as (string | number | null)[]; // prettier-ignore
-            }),
-          ]),
-          "text/csv",
-        ),
-    },
-    {
-      label: c.dlSummary,
-      hint: c.dlSummaryHint,
-      tag: "CSV",
-      run: () =>
-        downloadBlob(
-          "soytrace-catchments.csv",
-          csv([
-            ["catchment_id", "kind", "name", "place", "compliant_fields", "compliant_acres", "noncompliant_fields", "noncompliant_acres", "noncompliant_share_pct"],
-            ...infos.map((x) => [
-              x.id,
-              x.kind,
-              x.name,
-              x.sub,
-              x.k?.compliant.fields,
-              x.k?.compliant.acres,
-              x.k?.nonCompliant.fields,
-              x.k?.nonCompliant.acres,
-              x.k ? pct(x.k.nonCompliant.acres, x.k.compliant.acres + x.k.nonCompliant.acres).toFixed(2) : null,
-            ]),
-          ]),
-          "text/csv",
-        ),
-    },
+  const [dlSet, setDlSet] = useState<"both" | "ok" | "nc">("both");
+  // Compliant fields are loaded once one catchment or a combination is picked.
+  const okReady = scopeFields.complete;
+  const set = okReady ? dlSet : "nc";
+  const dlRows = [
+    ...(set !== "ok" ? scopeFields.nc.map((f) => ({ f, nc: true })) : []),
+    ...(set !== "nc" ? scopeFields.fields.map((f) => ({ f, nc: false })) : []),
   ];
+  const dlName = (ext: string) => `soytrace-${slug}-${set === "ok" ? "compliant" : set === "nc" ? "noncompliant" : "fields"}.${ext}`;
+  function downloadCsv() {
+    const rowsOut = dlRows.map(({ f, nc }) => {
+      const r = fieldRow(f, nc);
+      return [...Object.values(r), Number(f.properties._x).toFixed(5), Number(f.properties._y).toFixed(5)];
+    });
+    const head = [...Object.keys(fieldRow(dlRows[0]!.f, dlRows[0]!.nc)), "lon", "lat"];
+    downloadBlob(dlName("csv"), csv([head, ...rowsOut]), "text/csv");
+  }
+  function downloadGeo() {
+    // Built in pieces: a whole 0–80 NM catchment is over 100,000 outlines.
+    const parts: string[] = ['{"type":"FeatureCollection","features":['];
+    dlRows.forEach(({ f, nc }, i) => {
+      parts.push((i ? "," : "") + JSON.stringify({ type: "Feature", properties: fieldRow(f, nc), geometry: f.geometry }));
+    });
+    parts.push("]}");
+    const url = URL.createObjectURL(new Blob(parts, { type: "application/geo+json" }));
+    const el = document.createElement("a");
+    el.href = url;
+    el.download = dlName("geojson");
+    el.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+  function downloadSummary() {
+    downloadBlob(
+      "soytrace-catchments.csv",
+      csv([
+        ["catchment_id", "kind", "name", "place", "compliant_fields", "compliant_acres", "noncompliant_fields", "noncompliant_acres", "noncompliant_share_pct"],
+        ...infos.map((x) => [
+          x.id,
+          x.kind,
+          x.name,
+          x.sub,
+          x.k?.compliant.fields,
+          x.k?.compliant.acres,
+          x.k?.nonCompliant.fields,
+          x.k?.nonCompliant.acres,
+          x.k ? pct(x.k.nonCompliant.acres, x.k.compliant.acres + x.k.nonCompliant.acres).toFixed(2) : null,
+        ]),
+      ]),
+      "text/csv",
+    );
+  }
 
   // ------------------------------------------------------------ side panel
   const level = levelOf(scope);
@@ -653,6 +666,32 @@ export function SoyMapView({
           {level < 3 ? <p className="soy-panel-sub">{node.sub}</p> : null}
         </div>
         <div className="panel-body">
+          {sel && setSel ? (
+            // The same picker as the Summary's sidebar (user, 8 Oct 2026): combine without leaving the map.
+            <details className="soy-map-combine" open={combineOpen} onToggle={(e) => setCombineOpen((e.currentTarget as HTMLDetailsElement).open)}>
+              <summary>
+                <span>{c.combineTitle}</span>
+                <b>{scopeSummary(sel, data, c, lang)}</b>
+              </summary>
+              <p className="side-note soy-combine-hint">{c.combineHint}</p>
+              <SoyRelated
+                data={data}
+                c={c}
+                lang={lang}
+                plants={sidePlants}
+                plantSel=""
+                sel={sel}
+                setSel={(ids) => {
+                  setSel(ids);
+                  setPicked(null);
+                  setPage(0);
+                }}
+                catchments={catchments}
+                buffer={buffer}
+                setBuffer={setBuffer}
+              />
+            </details>
+          ) : null}
           {corridor ? <p className="panel-note soy-corr-purpose">{c.corrPurpose}</p> : null}
           {corridor ? (
             <div className="soy-corr-controls">
@@ -810,23 +849,56 @@ export function SoyMapView({
           ) : null}
           {/* Rail & river had the same Download as Map & data (Feedback 5): shown on Map & data only. */}
           {canDownload && !corridor ? (
-            <div className="downloads">
-              <p className="eyebrow">{c.download}</p>
-              {downloads
-                .filter((d) => level === 3 || d.tag !== "CSV" || d.label !== c.dlFieldsCsv)
-                .map((d) => (
-                  <button key={d.label + d.tag} type="button" className="download-row" onClick={d.run}>
+            <div className="downloads soy-downloads">
+              <p className="eyebrow">
+                {c.download} · {node.name}
+              </p>
+              <div className="seg soy-dl-set" role="group" aria-label={c.dlSetLabel}>
+                {(["both", "ok", "nc"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={set === v ? "on" : ""}
+                    aria-pressed={set === v}
+                    disabled={v !== "nc" && !okReady}
+                    onClick={() => setDlSet(v)}
+                  >
+                    {v === "both" ? c.dlBoth : v === "ok" ? c.statusCompliant : c.statusNc}
+                  </button>
+                ))}
+              </div>
+              <div className="soy-dl-formats">
+                {(
+                  [
+                    ["CSV", downloadCsv, c.dlCsvHint],
+                    ["GeoJSON", downloadGeo, c.dlGeoHint],
+                  ] as const
+                ).map(([tag, run, hint]) => (
+                  <button key={tag} type="button" className="download-row" disabled={!dlRows.length} onClick={run}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                      <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                  <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
                     <span>
                       <b>
-                        {d.label} · {d.tag}
+                        {tag} · {fill(c.fieldsN, { n: countF(dlRows.length) })}
                       </b>
-                      {d.hint}
+                      {hint}
                     </span>
                   </button>
                 ))}
+              </div>
+              <p className="panel-note">{okReady ? c.dlNote : scopeFields.loading ? c.loadingScope : c.dlNoteNcOnly}</p>
+              <button type="button" className="download-row" onClick={downloadSummary}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>
+                  <b>
+                    {c.dlSummary} · CSV
+                  </b>
+                  {c.dlSummaryHint}
+                </span>
+              </button>
             </div>
           ) : null}
         </div>

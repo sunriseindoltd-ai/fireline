@@ -66,17 +66,19 @@ export type ScopeFields = {
 export type OtherPlant = { id: string; name: string; address?: string | null; lat: number; lon: number };
 export type MapFocus = { bbox?: [[number, number], [number, number]]; center?: [number, number]; zoom?: number; nonce: number };
 
-type LayerKey = "fields" | "us" | "nc" | "rings" | "plants" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "nlcd";
+type LayerKey = "fields" | "outside" | "us" | "nc" | "rings" | "plants" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "nlcd";
 type Remote = "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "national-grid";
 const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads", "states", "counties", "national-grid"];
 // All US soybean fields (USDA CSB 2025, scripts/prepare-soy-national-tiles.py): vector tiles from zoom 10,
 // a 0.1° density grid below that. Grid colours step at a share of the cell (a 0.1° cell ≈ 22,000 acres).
 const US_MIN_ZOOM = 10;
+/** Soybean fields outside the selection: neutral, so the selection's green stands out. */
+const OUTSIDE_COLOR = "#c9cdd3";
 const US_GRID_ACRES = [220, 1100, 2200, 4400, 7700];
 let pmtilesProtocol = false;
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
-  supply: { fields: true, us: false, nc: true, rings: true, plants: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, states: true, counties: false, nlcd: false },
-  corridor: { fields: true, us: false, nc: false, rings: true, plants: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, states: true, counties: false, nlcd: false },
+  supply: { fields: true, outside: true, us: false, nc: true, rings: true, plants: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, states: true, counties: false, nlcd: false },
+  corridor: { fields: true, outside: true, us: false, nc: false, rings: true, plants: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, states: true, counties: false, nlcd: false },
 };
 const DATA_FLOOR = ["nlcd", "direct-area", "grid", "corridors", "rivers", "fields"];
 // Soybean density: coarse cells in supply.json, finer ones (layers/grid.json)
@@ -492,7 +494,27 @@ export function SoySupplyMap({
           layout: { visibility: "none" },
           paint: { "line-color": "#0f3d22", "line-width": 0.5, "line-opacity": 0.5 },
         });
-        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.8 } });
+        // The soybean fields outside the selection (same national tiles), faded grey under its own fields so the
+        // catchment reads in context (user, 8 Oct 2026). The selection's fields cover them where they overlap.
+        map.addLayer({
+          id: "outside-fill",
+          type: "fill",
+          source: "us-soy",
+          "source-layer": "fields",
+          minzoom: US_MIN_ZOOM,
+          layout: { visibility: "none" },
+          paint: { "fill-color": OUTSIDE_COLOR, "fill-opacity": 0.32 },
+        });
+        map.addLayer({
+          id: "outside-line",
+          type: "line",
+          source: "us-soy",
+          "source-layer": "fields",
+          minzoom: 11,
+          layout: { visibility: "none" },
+          paint: { "line-color": "#ffffff", "line-width": 0.6, "line-opacity": 0.45 },
+        });
+        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.85 } });
         map.addLayer({
           id: "fields-line",
           type: "line",
@@ -739,7 +761,7 @@ export function SoySupplyMap({
         label("terminal-label", "terminal", 0, 12.5);
         label("plants-other-label", "plants-other", 0, 13);
 
-        for (const layer of ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"]) {
+        for (const layer of ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill", "outside-fill"]) {
           map.on("mouseenter", layer, () => map && (map.getCanvas().style.cursor = "pointer"));
           map.on("mouseleave", layer, () => map && (map.getCanvas().style.cursor = ""));
         }
@@ -758,7 +780,7 @@ export function SoySupplyMap({
         };
         map.on("click", (e) => {
           if (!map) return;
-          const layers = ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill"].filter((l) => map!.getLayer(l));
+          const layers = ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill", "outside-fill"].filter((l) => map!.getLayer(l));
           const hit = map.queryRenderedFeatures(e.point, { layers })[0];
           const { data: dt, c: cc, lang: l, catchments: cm, cdlNames: names, onSelectField: pick } = live.current;
           if (!hit) {
@@ -855,7 +877,7 @@ export function SoySupplyMap({
                 return `<li><span>${2018 + i}</span><i style="background:${SOY_GROUP_COLORS[soyGroupOf(n)]}"></i>${esc(name)}</li>`;
               })
               .join("")}</ul>`;
-          if (lid === "us-soy-fill") {
+          if (lid === "us-soy-fill" || lid === "outside-fill") {
             const p = hit.properties as { i?: string; a?: number; y?: number; n?: string; s?: string; h?: string };
             open(
               e.lngLat,
@@ -1068,8 +1090,11 @@ export function SoySupplyMap({
     set(["counties-line", "counties-label"], on.counties);
     set(["nlcd"], on.nlcd);
     set(["us-grid", "us-soy-fill", "us-soy-line"], on.us);
+    // Only around a selection whose own fields are drawn (one catchment or a combination).
+    set(["outside-fill", "outside-line"], on.outside && !on.us && levelOf(selected) === 3);
     // With land cover on, the fields and density cells thin out so it shows through.
-    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.8);
+    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.85);
+    if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", on.nlcd ? 0.12 : 0.32);
     // With all US fields on, the catchment density cells give way to the fields themselves from zoom 10.
     const gridOpacity = on.nlcd ? 0.25 : 0.72;
     for (const id of GRID_LAYERS)
@@ -1279,6 +1304,11 @@ export function SoySupplyMap({
     rivers: { label: c.layerRivers, symbol: <i className="ln thick" style={{ borderTopColor: RIVER_COLOR }} /> },
     corridors: { label: c.layerCorridors, symbol: <i className="sq" style={{ background: "#dfe9f7" }} /> },
     roads: { label: c.layerRoads, symbol: <i className="ln road" /> },
+    outside: {
+      label: c.layerOutside,
+      symbol: <i className="sq" style={{ background: OUTSIDE_COLOR, opacity: 0.6 }} />,
+      detail: <p className="soy-key-note">{c.outsideNote}</p>,
+    },
     us: {
       label: c.layerUs,
       symbol: <i className="sq" style={{ background: SOY_YEARS_COLORS[4] }} />,
@@ -1331,8 +1361,8 @@ export function SoySupplyMap({
   };
   const order: LayerKey[] = (
     mode === "corridor"
-      ? (["fields", "us", "rail", "rivers", "corridors", "rings", "plants", "adm", "tp", "nc", "roads", "states", "counties", "nlcd"] as LayerKey[])
-      : (["fields", "us", "nc", "rings", "plants", "adm", "tp", "rail", "rivers", "roads", "states", "counties", "nlcd"] as LayerKey[])
+      ? (["fields", "outside", "us", "rail", "rivers", "corridors", "rings", "plants", "adm", "tp", "nc", "roads", "states", "counties", "nlcd"] as LayerKey[])
+      : (["fields", "outside", "us", "nc", "rings", "plants", "adm", "tp", "rail", "rivers", "roads", "states", "counties", "nlcd"] as LayerKey[])
   ).filter((k) => k !== "plants" || otherPlants.length > 0); // announced plants only while some have no catchments yet
 
   return (
