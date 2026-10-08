@@ -29,6 +29,9 @@ import {
   placeOf,
   tpName,
   type SupplyNcStats,
+  areaStats,
+  countyOf,
+  type SoyAreas,
 } from "@/lib/soy-supply";
 
 type Common = {
@@ -42,6 +45,10 @@ type Common = {
   setScope: (id: string) => void;
   present: boolean;
   onOpenMap: () => void;
+  /** The supply chain per state / county (areas.json), when loaded. */
+  areas?: SoyAreas | null;
+  /** Open Map & data on the whole chain narrowed to a state / county. */
+  onOpenArea?: (a: { s?: string; n?: string }) => void;
   /** All US soybean fields (national.json), when loaded. */
   national?: SoyNational | null;
   /** Crushing plants announced without catchments yet (none since the 7 Oct data). */
@@ -134,6 +141,63 @@ function ncForSelection(features: SoyFeature[], sel: string[], tpl: SupplyNcStat
   };
 }
 
+/** The whole supply chain in one state or county (areas.json): figures, then the map. */
+function AreaCard({ areas, c, lang, onOpen }: { areas: SoyAreas; c: SoySupplyCopy; lang: Lang; onOpen?: (a: { s?: string; n?: string }) => void }) {
+  const [s, setS] = useState("");
+  const [n, setN] = useState("");
+  const st = s ? areas.states.find((x) => x.s === s) : undefined;
+  const v = areaStats(areas, s || undefined, n || undefined);
+  const countF = (x: number) => formatCount(x, lang);
+  const share = v ? pct(v.na, v.a + v.na) : 0;
+  const name = s ? [n ? countyOf(n, s) : null, stateName(s)].filter(Boolean).join(", ") : "";
+  return (
+    <section className="chart-card supply-wide soy-area-card">
+      <div className="soy-fac-head">
+        <div>
+          <h3>{c.areaCardTitle}</h3>
+          <p className="chart-note">{c.areaCardIntro}</p>
+        </div>
+      </div>
+      <div className="soy-area-row soy-area-card-row">
+        <select aria-label={c.areaState} value={s} onChange={(e) => { setS(e.target.value); setN(""); }}>
+          <option value="">{c.areaPickState}</option>
+          {[...areas.states]
+            .sort((a, b) => stateName(a.s).localeCompare(stateName(b.s)))
+            .map((x) => (
+              <option key={x.s} value={x.s}>
+                {stateName(x.s)} · {countF(x.f + x.nf)}
+              </option>
+            ))}
+        </select>
+        <select aria-label={c.areaCounty} value={n} disabled={!st} onChange={(e) => setN(e.target.value)}>
+          <option value="">{c.areaAllCounties}</option>
+          {st?.counties
+            .filter((x) => x.n)
+            .map((x) => (
+              <option key={x.n} value={x.n}>
+                {countyOf(x.n, s)} · {countF(x.f + x.nf)}
+              </option>
+            ))}
+        </select>
+        {onOpen ? (
+          <button type="button" className="btn-secondary" disabled={!s} onClick={() => onOpen({ s: s || undefined, n: n || undefined })}>
+            {c.openMap}
+          </button>
+        ) : null}
+      </div>
+      {v ? (
+        <div className="kpi-row soy-area-kpis">
+          <KpiTile value={countF(v.f)} label={c.kpiFields} />
+          <KpiTile value={formatAcres(v.a, lang)} label={c.kpiArea} sub={formatHa(v.a * AC_TO_HA, lang)} />
+          <KpiTile tone="danger" value={formatAcres(v.na, lang)} label={c.kpiNcArea} sub={fill(c.areaNcFields, { n: countF(v.nf) })} />
+          <KpiTile tone="danger" value={formatSharePct(share, lang)} label={c.kpiNcShare} />
+        </div>
+      ) : null}
+      {v ? <p className="chart-note">{fill(n ? c.areaCardNoteCounty : c.areaCardNoteState, { area: name })}</p> : null}
+    </section>
+  );
+}
+
 function Chevron({ open }: { open?: boolean }) {
   return (
     <svg className={`soy-combo-caret${open ? " open" : ""}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
@@ -217,7 +281,7 @@ function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: So
 }
 
 /** Summary: the supply chain of the chosen plant(s), narrowed by the sidebar's ticks. */
-export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel, buffer, setBuffer, canDownload = false, onOpenReview }: Common) {
+export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national, otherPlants = [], sel, setSel, plantSel, setPlantSel, buffer, setBuffer, canDownload = false, onOpenReview, areas = null, onOpenArea }: Common) {
   const [tractOpen, setTractOpen] = useState(false);
   const catchments = useCatchments(data);
   const plants = useMemo<SidePlant[]>(
@@ -351,6 +415,8 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
             <div className="eudr-notice info soy-nc-scope" role="note">
               <p>{fill(c.ncScopeBox, { total: countF(ncAll.fields), inside: countF(tot.ncFields), outside: countF(Math.max(0, ncAll.fields - tot.ncFields)) })}</p>
             </div>
+
+            {areas ? <AreaCard areas={areas} c={c} lang={lang} onOpen={onOpenArea} /> : null}
 
             <ComboTable data={data} c={c} lang={lang} open={openIds} plant={plant} buffer={buffer} setBuffer={setBuffer} />
 

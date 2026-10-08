@@ -307,7 +307,7 @@ const NATIONAL_PMTILES = "layers/national/soy.pmtiles";
 // elevators, double crops) live under v2/ in the soy bucket, so a deployment
 // still on the earlier data keeps reading its own. Mirrored in
 // scripts/upload-soy-fields-to-r2.mjs (--v2).
-const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
+const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/counties\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
 const soyKey = (rel: string) => (SOY_V2.test(rel) ? `v2/${rel}` : rel);
 
 /**
@@ -454,7 +454,7 @@ export async function serveKanopiData(request: Request): Promise<Response> {
     // Supply-chain files (fields/units/*, fields/noncomply, layers/*) are
     // single objects; only the per-area field files of the older view come
     // in parts — skip the part probe (an extra R2 request) for the rest.
-    const single = rel.startsWith("fields/units/") || rel === "fields/noncomply.geojson" || rel.startsWith("layers/");
+    const single = rel.startsWith("fields/units/") || rel.startsWith("fields/counties/") || rel === "fields/noncomply.geojson" || rel.startsWith("layers/");
     const result = single ? await loadPlotRel(stored, r2Soy, soyKey(rel)) : await loadPlotFeatureCollection(stored, r2Soy, rel);
     if (!result.ok) {
       return new Response("Upstream storage error", { status: result.reason === "not-found" ? 404 : 502 });

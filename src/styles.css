@@ -6149,3 +6149,22 @@ html.soy-report-open body {
   line-height: 1.4;
   color: var(--color-muted);
 }
+
+/* Summary: the whole supply chain in one state / county. */
+.soy-area-card-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  margin: 4px 0 14px;
+}
+.soy-area-card .soy-area-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 8px;
+}
+@media (max-width: 700px) {
+  .soy-area-card-row,
+  .soy-area-card .soy-area-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+  .soy-area-card-row .btn-secondary {
+    grid-column: 1 / -1;
+  }
+}

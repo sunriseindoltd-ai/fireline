@@ -435,6 +435,21 @@ export function tpName(t: ThirdParty, data: SupplyData) {
   return twins.length > 1 && t.ref ? `${t.company ?? t.id} · ${t.ref}` : (t.company ?? t.id);
 }
 
+/** areas.json (scripts/prepare-soy-areas.py): the supply chain per state and county. */
+export type SoyAreaStats = { f: number; a: number; nf: number; na: number; bbox: [number, number, number, number] };
+export type SoyAreas = {
+  version: number;
+  fields: number;
+  ncFields: number;
+  states: (SoyAreaStats & { s: string; counties: (SoyAreaStats & { n: string; file: string | null; bytes: number })[] })[];
+};
+/** One state's or county's figures from areas.json (null when not there). */
+export function areaStats(areas: SoyAreas | null | undefined, s?: string, n?: string) {
+  const st = s ? areas?.states.find((x) => x.s === s) : undefined;
+  if (!st) return null;
+  return n ? (st.counties.find((x) => x.n === n) ?? null) : st;
+}
+
 /** "City, County, State" for any facility (Feedback 5, P1-3). */
 export function placeOf(e: { city?: string | null; county?: string | null; state?: string | null }) {
   return [e.city, countyOf(e.county, e.state), e.state].filter(Boolean).join(", ");

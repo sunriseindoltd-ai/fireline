@@ -120,6 +120,20 @@ let gridLevels: Promise<{ deg: number; minZoom: number; rows: GridRow[] }[]> | n
 const unitCache = new Map<string, SoyFeature[]>();
 const unitInflight = new Map<string, Promise<SoyFeature[]>>();
 
+const countyCache = new Map<string, SoyFeature[]>();
+/** The supply chain's fields in one county (fields/counties/<ST>/<county>.geojson, scripts/prepare-soy-areas.py). */
+export function loadCounty(file: string): Promise<SoyFeature[]> {
+  const hit = countyCache.get(file);
+  if (hit) return Promise.resolve(hit);
+  return fetch(`/data/fields/counties/${file.split("/").map(encodeURIComponent).join("/")}.geojson`)
+    .then((res) => (res.ok ? (res.json() as Promise<FC>) : Promise.reject(new Error(String(res.status)))))
+    .then((fc) => {
+      for (const f of fc.features) addCenter(f);
+      countyCache.set(file, fc.features);
+      return fc.features;
+    });
+}
+
 /** One catchment's fields (fields/units/<id>.geojson), like a PalmTrace mill's plot file. */
 export function loadUnit(id: string): Promise<SoyFeature[]> {
   const hit = unitCache.get(id);
@@ -225,6 +239,7 @@ export function SoySupplyMap({
   lang,
   onScopeFields,
   area,
+  countyFile = null,
   selectedField,
   onSelectField,
   focus,
@@ -248,6 +263,8 @@ export function SoySupplyMap({
   onScopeFields?: (s: ScopeFields) => void;
   /** Narrow the selection's fields to a state / county (Map & data's area filter). */
   area?: SoyArea;
+  /** Whole supply chain + one county: that county's field file (fields are drawn as for one catchment). */
+  countyFile?: string | null;
   selectedField?: string | null;
   onSelectField?: (f: SoyFeature | null) => void;
   focus?: MapFocus | null;
@@ -293,8 +310,10 @@ export function SoySupplyMap({
     if (window.matchMedia("(max-width: 640px)").matches) setLayersOpen(false);
   }, []);
   const [ncLoaded, setNcLoaded] = useState<FC | null>(ncCache);
-  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area });
-  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area };
+  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area, countyFile });
+  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area, countyFile };
+  // Fields are drawn for one catchment / combination, or for one county of the whole chain.
+  const fieldsShown = levelOf(selected) === 3 || !!countyFile;
   const refreshRef = useRef<() => void>(() => undefined);
 
   // ------------------------------------------------------------------ build
@@ -939,8 +958,9 @@ export function SoySupplyMap({
 
         const push = (allFeats: SoyFeature[], state: { loading: boolean; failed: boolean }) => {
           if (!map) return;
-          const { selected: scope, ncLoaded: ncFc, area } = live.current;
+          const { selected: scope, ncLoaded: ncFc, area, countyFile: cf } = live.current;
           const level = levelOf(scope);
+          const withFields = level === 3 || !!cf;
           const ncAll = (ncFc?.features ?? []).filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
           // State → county → fields of the whole selection, for the area filter's choices.
           const areas: Record<string, Record<string, number>> = {};
@@ -969,7 +989,7 @@ export function SoySupplyMap({
           // Mark the selection's own fields on the national tiles so the grey context layer skips them.
           // Kept while the same selection is shown, even with its field layer switched off (no fields pushed then).
           const key = `${live.current.selected}|${area?.s ?? ""}|${area?.n ?? ""}|${feats.length}`;
-          const keep = feats.length === 0 && levelOf(live.current.selected) === 3 && ownKey.startsWith(`${live.current.selected}|`);
+          const keep = feats.length === 0 && withFields && ownKey.startsWith(`${live.current.selected}|`);
           if (map.getSource("us-soy") && key !== ownKey && !keep) {
             ownKey = key;
             map.removeFeatureState({ source: "us-soy", sourceLayer: "fields" });
@@ -992,17 +1012,33 @@ export function SoySupplyMap({
           } as never);
           setUnitState({ level, ...state });
           measure(state.loading);
-          live.current.onScopeFields?.({ fields: feats, nc, complete: level === 3 && !state.loading && !state.failed, ...state, scope, areas: level === 3 ? areas : undefined });
+          live.current.onScopeFields?.({ fields: feats, nc, complete: withFields && !state.loading && !state.failed, ...state, scope, areas: level === 3 ? areas : undefined });
         };
 
         const refresh = () => {
           if (!map) return;
-          const { selected: scope, data: dt, on: onNow } = live.current;
+          const { selected: scope, data: dt, on: onNow, countyFile: cf } = live.current;
           const level = levelOf(scope);
           const parts = level === 3 ? unitParts(scope, dt) : null;
-          // Grid (soybean density) only on the overview; fields only for one catchment.
-          for (const id of GRID_LAYERS) map.setLayoutProperty(id, "visibility", level === 1 && onNow.fields ? "visible" : "none");
+          // Grid (soybean density) only on the overview; fields only for one catchment (or one county of the chain).
+          for (const id of GRID_LAYERS) map.setLayoutProperty(id, "visibility", level === 1 && !cf && onNow.fields ? "visible" : "none");
           const my = ++token;
+          if (level === 1 && cf && onNow.fields) {
+            const hit = countyCache.get(cf);
+            if (hit) {
+              push(hit, { loading: false, failed: false });
+              return;
+            }
+            push([], { loading: true, failed: false });
+            loadCounty(cf)
+              .then((feats) => {
+                if (my === token) push(feats, { loading: false, failed: false });
+              })
+              .catch(() => {
+                if (my === token) push([], { loading: false, failed: true });
+              });
+            return;
+          }
           if (!parts || !onNow.fields) {
             push([], { loading: false, failed: false });
             return;
@@ -1044,7 +1080,7 @@ export function SoySupplyMap({
         function measure(loading = false) {
           if (!map) return;
           const { selected: scope, ncLoaded: ncFc, data: dt } = live.current;
-          const one = levelOf(scope) === 3;
+          const one = levelOf(scope) === 3 || !!live.current.countyFile;
           if (one && loading) {
             setInView(null);
             return;
@@ -1111,7 +1147,7 @@ export function SoySupplyMap({
   // Scope or loaded data changed → reload / refilter.
   useEffect(() => {
     if (ready) refreshRef.current();
-  }, [ready, selected, ncLoaded, on.fields, area?.s, area?.n]);
+  }, [ready, selected, ncLoaded, on.fields, area?.s, area?.n, countyFile]);
 
   // Layer switches; remote layers load the first time they're switched on.
   useEffect(() => {
@@ -1143,7 +1179,7 @@ export function SoySupplyMap({
     set(["nlcd"], on.nlcd);
     set(["us-grid", "us-soy-fill", "us-soy-line"], on.us);
     // Only around a selection whose own fields are drawn (one catchment or a combination).
-    set(["outside-fill", "outside-line"], on.outside && !on.us && levelOf(selected) === 3);
+    set(["outside-fill", "outside-line"], on.outside && !on.us && fieldsShown);
     // With land cover on, the fields and density cells thin out so it shows through.
     if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.72);
     if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", outsideOpacity(on.nlcd ? 0.2 : 0.55) as never);
@@ -1170,7 +1206,7 @@ export function SoySupplyMap({
         })
         .catch(() => setRemote((s) => ({ ...s, [r]: "error" })));
     }
-  }, [on, ready, remote, selected, ncOutside, ncReview]);
+  }, [on, ready, remote, selected, ncOutside, ncReview, fieldsShown]);
 
   // The NLCD year: swap the tile URL in place.
   useEffect(() => {
@@ -1314,7 +1350,7 @@ export function SoySupplyMap({
               </div>
             ),
           }
-        : level === 1
+        : level === 1 && !countyFile
           ? {
               label: c.legendDensity,
               symbol: <i className="sq" style={{ background: SOY_YEARS_COLORS[5] }} />,
@@ -1524,7 +1560,7 @@ export function SoySupplyMap({
           </p>
         </div>
       ) : null}
-      {on.fields && unitState.level < 3 ? <p className="soy-map-status">{c.pickForFields}</p> : null}
+      {on.fields && unitState.level < 3 && !countyFile ? <p className="soy-map-status">{c.pickForFields}</p> : null}
       {on.fields && unitState.loading ? (
         <p className="soy-map-status">
           <span className="spinner" aria-hidden="true" /> {c.loadingFields}

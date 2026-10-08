@@ -30,7 +30,7 @@ import {
   type Basis,
   type Catchment,
   type PlantBuffer,
-  type SupplyData, countyOf, stateName
+  type SupplyData, countyOf, stateName, areaStats, type SoyAreas
 } from "@/lib/soy-supply";
 
 type StatusFilter = "all" | "ok" | "nc";
@@ -133,6 +133,9 @@ export function SoyMapView({
   setNcReview = () => {},
   sel,
   setSel,
+  areas = null,
+  area: areaProp,
+  setArea: setAreaProp,
 }: {
   data: SupplyData;
   cdlNames: Record<string, string>;
@@ -157,6 +160,11 @@ export function SoyMapView({
   /** The Summary's selection (ticked catchments), so a combination can be built on the map too. */
   sel?: string[];
   setSel?: (ids: string[]) => void;
+  /** The supply chain per state / county (areas.json), for the whole-chain area filter. */
+  areas?: SoyAreas | null;
+  /** The area filter, shared with the Summary (state / county). */
+  area?: SoyArea;
+  setArea?: (a: SoyArea) => void;
 }) {
   const corridor = mode === "corridor";
   const [band, setBand] = useState<Band>(10);
@@ -180,12 +188,16 @@ export function SoyMapView({
   const [findMiss, setFindMiss] = useState(false);
   const [combineOpen, setCombineOpen] = useState(false);
   // State / county filter on the selection (user feedback, 8 Oct 2026); cleared when the selection changes.
-  const [area, setArea] = useState<SoyArea>({});
+  const [areaLocal, setAreaLocal] = useState<SoyArea>({});
+  const area = areaProp ?? areaLocal;
+  const setArea = setAreaProp ?? setAreaLocal;
   const [areaFor, setAreaFor] = useState(scope);
   if (areaFor !== scope) {
     setAreaFor(scope);
-    setArea({});
+    if (area.s) setArea({});
   }
+  // Whole supply chain + one county: that county's own field file.
+  const countyFile = levelOf(scope) === 1 && area.s && area.n ? (areaStats(areas, area.s, area.n) as { file?: string | null } | null)?.file ?? null : null;
   const areaName = area.s ? [area.n ? countyOf(area.n, area.s) : null, stateName(area.s)].filter(Boolean).join(", ") : "";
   const sidePlants = useMemo(() => data.plants.map((p) => ({ id: p.id, name: p.city ?? p.name, hasData: true })), [data]);
   const nonce = useRef(0);
@@ -207,6 +219,15 @@ export function SoyMapView({
           : { center: f.geometry.coordinates as [number, number], zoom: 14, nonce: nonce.current },
       );
     }
+  }
+  // Whole supply chain + a state (no county): fit the map to the state.
+  const stateFit = levelOf(scope) === 1 && area.s && !area.n ? areaStats(areas, area.s)?.bbox : null;
+  const fitKey = stateFit ? stateFit.join(",") : "";
+  const [fitDone, setFitDone] = useState("");
+  if (stateFit && fitKey !== fitDone) {
+    setFitDone(fitKey);
+    nonce.current++;
+    setFocus({ bbox: [[stateFit[0], stateFit[1]], [stateFit[2], stateFit[3]]], nonce: nonce.current });
   }
   function choose(id: string) {
     setScope(id);
@@ -349,14 +370,29 @@ export function SoyMapView({
         );
   const nodePlant = node.kind === "direct" ? plantOfScope(node.id, data) : undefined;
   // With an area chosen the figures come from the loaded fields of that area (each counted once).
-  const k: Catchment | undefined =
-    area.s && scopeFields.complete
+  const wholeArea = levelOf(scope) === 1 && area.s ? areaStats(areas, area.s, area.n) : null;
+  const k: Catchment | undefined = wholeArea
+    ? ({
+        ...node.k!,
+        compliant: { ...node.k!.compliant, fields: wholeArea.f, acres: wholeArea.a },
+        nonCompliant: { ...node.k!.nonCompliant, fields: wholeArea.nf, acres: wholeArea.na },
+      } as Catchment)
+    : area.s && scopeFields.complete
       ? ({
           ...node.k!,
           compliant: { ...node.k!.compliant, fields: scopeFields.fields.length, acres: scopeFields.fields.reduce((a, f) => a + (Number(f.properties.a) || 0), 0) },
           nonCompliant: { ...node.k!.nonCompliant, fields: scopeFields.nc.length, acres: scopeFields.nc.reduce((a, f) => a + (Number(f.properties.a) || 0), 0) },
         } as Catchment)
       : node.k;
+  // Area choices: the loaded selection's own fields, or every county of the whole chain (areas.json).
+  const areaOpts: Record<string, Record<string, number>> | null =
+    level === 3
+      ? (scopeFields.areas ?? null)
+      : level === 1 && areas
+        ? Object.fromEntries(areas.states.map((st) => [st.s, Object.fromEntries(st.counties.map((co) => [co.n, co.f + co.nf]))]))
+        : null;
+  // A state of the whole chain: fit the map to it (its fields are too many to draw; a county's are drawn).
+  const fieldsMode = level === 3 || !!countyFile;
   const facts: [string, string][] = [];
   {
     const adm = data.admElevators.find((e) => e.id === node.id);
@@ -421,6 +457,7 @@ export function SoyMapView({
           lang={lang}
           onScopeFields={setScopeFields}
           area={area}
+          countyFile={countyFile}
           selectedField={p ? String(p.id) : null}
           onSelectField={(f) => pick(f)}
           focus={focus}
@@ -709,7 +746,7 @@ export function SoyMapView({
               />
             </details>
           ) : null}
-          {level === 3 && scopeFields.areas && Object.keys(scopeFields.areas).length ? (
+          {areaOpts && Object.keys(areaOpts).length ? (
             <div className="soy-area">
               <p className="soy-area-head">
                 <span>{c.areaTitle}</span>
@@ -729,7 +766,7 @@ export function SoyMapView({
                   }}
                 >
                   <option value="">{c.areaAllStates}</option>
-                  {Object.entries(scopeFields.areas)
+                  {Object.entries(areaOpts)
                     .map(([st, cos]) => [st, Object.values(cos).reduce((a, b) => a + b, 0)] as const)
                     .sort((a, b) => stateName(a[0]).localeCompare(stateName(b[0])))
                     .map(([st, n]) => (
@@ -749,7 +786,7 @@ export function SoyMapView({
                 >
                   <option value="">{c.areaAllCounties}</option>
                   {area.s
-                    ? Object.entries(scopeFields.areas[area.s] ?? {})
+                    ? Object.entries(areaOpts[area.s] ?? {})
                         .filter(([co]) => co)
                         .sort((a, b) => a[0].localeCompare(b[0]))
                         .map(([co, n]) => (
@@ -760,7 +797,7 @@ export function SoyMapView({
                     : null}
                 </select>
               </div>
-              {area.s ? <p className="soy-area-note">{fill(c.areaNote, { area: areaName })}</p> : null}
+              {area.s ? <p className="soy-area-note">{fill(level === 1 && !area.n ? c.areaNoteState : c.areaNote, { area: areaName })}</p> : null}
             </div>
           ) : null}
           {corridor ? <p className="panel-note soy-corr-purpose">{c.corrPurpose}</p> : null}
@@ -827,7 +864,7 @@ export function SoyMapView({
             </div>
           ) : null}
 
-          {level === 3 ? (
+          {fieldsMode ? (
             <>
               {nodePlant ? (
                 <BufferSeg
@@ -860,7 +897,7 @@ export function SoyMapView({
                   ? c.loadingScope
                   : scopeFields.failed
                     ? c.fieldsError
-                    : fill(c.loadedAll, { n: countF(scopeFields.fields.length + scopeFields.nc.length) })}
+                    : fill(countyFile ? c.loadedCounty : c.loadedAll, { n: countF(scopeFields.fields.length + scopeFields.nc.length) })}
               </p>
             </>
           ) : (

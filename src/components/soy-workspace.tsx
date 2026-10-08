@@ -25,9 +25,10 @@ import { useI18n } from "@/lib/i18n";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/soy-copy";
 import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
 import { scopeSummary } from "@/components/soy-side";
+import type { SoyArea as SoyPlace } from "@/components/soy-supply-map";
 import { SoyMapView } from "@/components/soy-mapview";
 import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
-import { idsFromScope, plantById, scopeForSel, type PlantBuffer, type SupplyData } from "@/lib/soy-supply";
+import { idsFromScope, plantById, scopeForSel, type PlantBuffer, type SupplyData, type SoyAreas } from "@/lib/soy-supply";
 import { soySupplyCopy } from "@/lib/soy-supply-copy";
 import { usePersistentState } from "@/lib/use-persistent";
 import { TENANTS, type Tenant } from "@/lib/tenants";
@@ -114,6 +115,9 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   // "…2": the 7 Oct data renumbered the elevators, so selections stored before it are dropped.
   const [selStored, setSelStored] = usePersistentState<string[]>("soytrace.sel2", []);
   const [plantSel, setPlantSel] = usePersistentState<string>("soytrace.plant", "");
+  const [areas, setAreas] = useState<SoyAreas | null>(null);
+  // State / county filter, shared by the Summary's area card and Map & data.
+  const [place, setPlace] = useState<SoyPlace>({});
   // One buffer for the crushing plants, 0–40 or 0–80 NM (one row per plant everywhere, not one per ring).
   const [bufferStored, setBuffer] = usePersistentState<PlantBuffer>("soytrace.buffer", "80");
   const buffer: PlantBuffer = bufferStored === "40" ? "40" : "80";
@@ -154,6 +158,11 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       )
       .then(setSupply)
       .catch(() => setSupplyError(true));
+    // The supply chain per state / county (scripts/prepare-soy-areas.py): optional.
+    void fetchWithRetry("/data/areas.json")
+      .then((res) => (res.ok ? (res.json() as Promise<SoyAreas>) : null))
+      .then(setAreas)
+      .catch(() => setAreas(null));
     // All US soybean fields: a context block on the Summary tab, optional.
     void fetchWithRetry("/data/national.json")
       .then((res) => (res.ok ? (res.json() as Promise<SoyNational>) : null))
@@ -349,6 +358,9 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               setNcReview={setNcReview}
               sel={sel}
               setSel={setSel}
+              areas={areas}
+              area={place}
+              setArea={setPlace}
             />
           ) : (
             <div className={`page soy-page ${tab === "summary" ? "soy-page-wide" : ""}`}>
@@ -372,6 +384,12 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                   buffer={buffer}
                   setBuffer={setBuffer}
                   canDownload={role !== "auditor" && role !== "viewer"}
+                  areas={areas}
+                  onOpenArea={(a) => {
+                    setSel([]);
+                    setPlace(a);
+                    setTab("map");
+                  }}
                   onOpenReview={() => {
                     setNcReview(true);
                     setTab("map");
