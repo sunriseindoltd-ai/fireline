@@ -1974,8 +1974,13 @@ button.kpi-action:hover {
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
-.soy-map-back:hover {
-  background: #000;
+/* The button wears the map-card look (light glass, dark text); hover only deepens it a little. */
+.soy-map-back.map-card {
+  color: var(--color-ink);
+}
+.soy-map-back.map-card:hover {
+  background: var(--color-bg-3);
+  color: var(--color-ink);
 }
 .panel-body .eudr-summary {
   padding: 0;
