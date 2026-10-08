@@ -34,6 +34,13 @@ Output (private-data/tenants/adm-soy/):
                               tp<n> (each third party); each field lists every
                               catchment it's in ("k")
   fields/noncomply.geojson    non-compliant fields at their true shape
+  fields/tract/<facility>.part<n>.geojson
+                              TRACT / TRACES-ready compliant fields per facility
+                              (<p>40, <p>80, adm<n>, tp<n>): the original USDA
+                              outlines at 6 decimals, CRS84, counter-clockwise
+                              rings, ≤ ~40 MB a part; what TRACT rejects is
+                              repaired (invalid made valid, holes filled,
+                              touching parts merged — user, 8 Oct 2026)
   layers/rail.geojson, layers/rivers.geojson, layers/corridors.geojson
                               (5- and 10-mile bands), layers/grid.json
                               (finer soybean density grids)
@@ -176,6 +183,48 @@ def owner_props(o):
     return {k: v for k, v in out.items() if v}
 
 
+# Typos in delivered place names (Feedback 5, 8 Oct 2026).
+COUNTY_FIXES = {"Permiscot": "Pemiscot"}
+CITY_FIXES = {"Norforlk": "Norfolk", "Mitchel": "Mitchell"}
+
+
+def tp_city(code):
+    """City from a third party's facility code: "ST-CHS-Morris-East-IL" → "Morris East"."""
+    parts = [x.strip() for x in (code or "").split("-")]
+    if len(parts) < 4:
+        return None
+    city = " ".join(parts[2:-1])
+    return CITY_FIXES.get(city, city) or None
+
+
+_COUNTIES = None
+
+
+def county_at(lon, lat):
+    """The county a point is in (US Census cb_2024 layer, made by prepare-soy-boundaries.py)."""
+    global _COUNTIES
+    if _COUNTIES is None:
+        p = os.path.join(OUT, "layers", "counties.geojson")
+        feats = json.load(open(p, encoding="utf-8"))["features"] if os.path.exists(p) else []
+        _COUNTIES = [(shape(f["geometry"]), f["properties"]) for f in feats]
+    pt = shapely.Point(lon, lat)
+    for g, pr in _COUNTIES:
+        if g.contains(pt):
+            return f"{pr['n']} {'Parish' if pr['s'] == 'LA' else 'County'}"
+    return None
+
+
+def county_name(county, st):
+    c = clean(county)
+    if not c:
+        return None
+    c = COUNTY_FIXES.get(c, c)
+    # Louisiana has parishes; the delivered list names most of them so, not all.
+    if st == "LA" and not c.endswith("Parish"):
+        c += " Parish"
+    return c
+
+
 # Typos in the delivered names (Feedback 4, 8 Oct 2026); the delivered name stays in "nameAsDelivered".
 NAME_FIXES = {"St. Lousi": "St. Louis", "Mt. Aubrun": "Mt. Auburn", "GRAIN CO.": "Grain Co."}
 
@@ -295,7 +344,7 @@ def main():
         r80 = float(next(b["BUFF_DIST"] for b in b80_rows if clean(b["Field2"]) == city))
         plants.append({
             "id": pid, "key": key, "name": f"{clean(r['Buyer'])} {city.replace(' (West)', ' West')}", "company": clean(r["Buyer"]),
-            "city": city.replace(" (West)", " West"), "state": state_abbr(r["State"]),
+            "city": city.replace(" (West)", " West"), "state": state_abbr(r["State"]), "county": county_at(x, y),
             "address": clean(re.sub(r",\s*Estados Unidos$", "", r["Address"] or "")),
             "lat": round(y, 5), "lon": round(x, 5), "f50": clean(r["F50"]), "f100": clean(r["F100"]),
             "railMi": round(float(plant_rd[i]), 2), "riverMi": round(float(plant_vd[i]), 2),
@@ -320,33 +369,46 @@ def main():
     adm_ll = wgs(adm_g)
     tp_ll = wgs(tp_g)
 
-    # Evansville is listed three times (an elevator and two grain terminals)
-    # at separate points; each keeps its own row, but only one catchment.
+    # Every delivered point is its own facility with its own catchment — also
+    # Evansville's three (an elevator and two grain terminals at separate
+    # addresses), as the user asked on 8 Oct 2026 (not merged into one site).
     adm = []
-    seen_catch = {}
     for i, r in enumerate(adm_rows):
         x, y = shapely.get_coordinates(adm_ll[i])[0]
         delivered_name = clean(r["Facility_Name"])
         name = tidy_name(delivered_name) or f"ADM elevator {i + 1}"
-        catch = name not in seen_catch
-        seen_catch.setdefault(name, i)
         adm.append({
             "id": f"adm{i + 1}", "name": name, **({"nameAsDelivered": delivered_name} if delivered_name != name else {}),
             "code": clean(r["STACT_Naming_Convention"]), "city": city_of(name),
             "county": clean(r["County"]), "state": state_abbr(r["State"]), "address": clean(r["Address"]),
             "type": clean(r["Type_of_facility"]), "lat": round(y, 5), "lon": round(x, 5),
-            "radiusM": R20 if catch else None, "site": f"adm{seen_catch[name] + 1}",
+            "radiusM": R20, "site": f"adm{i + 1}",
             "railMi": round(float(adm_rd[i]), 2), "riverMi": round(float(adm_vd[i]), 2),
         })
+    # The state a point really lies in (Feedback 5: "LDC · Porter, KY" sits at Burns Harbor, Indiana).
+    st_rows, st_g = read("State_Boundary")
+    st_tree = STRtree(st_g)
+
+    def state_at(pt):
+        hit = st_tree.query(pt, predicate="within")
+        return (st_rows[hit[0]]["shapeISO"] or "")[-2:] if len(hit) else None
+
     tp = []
     for i, r in enumerate(tp_rows):
         x, y = shapely.get_coordinates(tp_ll[i])[0]
-        tp.append({
-            "id": f"tp{i + 1}", "tract": clean(r["TRACT_Naming_Convention"]), "company": clean(r["Company_Name"]),
-            "county": clean(r["County"]), "state": clean(r["State"]), "type": clean(r["Type_of_facility"]),
+        delivered_st = clean(r["State"])
+        st = state_at(tp_g[i]) or delivered_st
+        e = {
+            "id": f"tp{i + 1}", "ref": f"TP-{i + 1:02d}", "tract": clean(r["TRACT_Naming_Convention"]), "company": clean(r["Company_Name"]),
+            "city": tp_city(r["TRACT_Naming_Convention"]), "county": county_name(r["County"], st), "state": st,
+            "type": clean(r["Type_of_facility"]),
             "lat": round(y, 5), "lon": round(x, 5), "radiusM": R_TP, "core": False,
             "railMi": round(float(tp_rd[i]), 2), "riverMi": round(float(tp_vd[i]), 2),
-        })
+        }
+        if st != delivered_st:
+            e["stateAsDelivered"] = delivered_st
+            log(f"  {e['id']} {e['company']} {e['city']}: state {delivered_st} as delivered, {st} by its coordinates")
+        tp.append(e)
     # Third parties delivered at exactly the same point (12 at 5 places, e.g. CGB / LDC / Cofco at
     # Cahokia): identical catchments and figures, kept as delivered and marked "same location as".
     at = collections.defaultdict(list)
@@ -539,6 +601,8 @@ def main():
             "c": ",".join("" if c is None else str(c) for c in cdl), "b": before, "y": conv, "s26": soy26,
             "c24": clean(pt["CDL2024"]), "c25": clean(pt["CDL2025"]), "f": f, "po": point_only, "k": "|".join(nc_member[k]),
             "sy": sum(1 for c in cdl if c in SOY),
+            # Feedback 5 (P0-2): already cropland at field level in 2018–2020 — "to review"; ADM's status is unchanged.
+            **({"rf": "cropped_pre_2021"} if before == "crop" else {}),
             "ex": ex, "u": use,
             **owner_props(pt),
             "r": None if math.isnan(nc_rd[k]) else round(float(nc_rd[k]), 1),
@@ -758,6 +822,113 @@ def main():
     big = max(unit_index, key=lambda u: u[2])
     log(f"{len(unit_index)} unit files, {total_bytes / 1e6:,.1f} MB (largest {big[0]}: {big[1]:,} fields, {big[2] / 1e6:.1f} MB)")
 
+    # ------------------------------------------------------------ TRACT files
+    # Per facility, for upload to TRACT / TRACES. The user chose to repair what
+    # TRACT would reject (8 Oct 2026, option c): invalid outlines made valid,
+    # holes filled, touching parts merged; only what still fails is dropped.
+    # Area (ha) is the repaired outline's own equal-area size.
+    log("TRACT files (original outlines, 6 decimals)")
+    tract_dir = os.path.join(fields_dir, "tract")
+    if os.path.isdir(tract_dir):
+        for f in os.listdir(tract_dir):
+            os.remove(os.path.join(tract_dir, f))
+    os.makedirs(tract_dir, exist_ok=True)
+    with open(os.path.join(OUT, "soy.json"), encoding="utf-8") as fh:
+        cdl_names = json.load(fh)["cdlNames"]
+    exact = np.empty(n_all, dtype=object)
+    exact_ha = np.zeros(n_all)
+    ok = np.zeros(n_all, bool)
+    reason = collections.Counter()
+    from shapely.geometry.polygon import orient
+
+    def polys_of(g):
+        return [pp for pp in shapely.get_parts(g) if pp.geom_type == "Polygon" and not pp.is_empty and pp.area > 0] if g is not None else []
+
+    def clean_albers(g):
+        """Valid, no holes, touching parts merged (in metres, before rounding)."""
+        if not shapely.is_valid(g):
+            reason["repaired_invalid"] += 1
+            g = shapely.make_valid(g)
+        ps = polys_of(g)
+        if any(len(pp.interiors) for pp in ps):
+            reason["filled_holes"] += 1
+        ps = [shapely.Polygon(pp.exterior) for pp in ps]
+        if not ps:
+            return None
+        if len(ps) > 1:
+            u = shapely.union_all(ps)
+            if len(polys_of(u)) < len(ps):
+                reason["merged_parts"] += 1
+            ps = [shapely.Polygon(pp.exterior) for pp in polys_of(u)]
+        return ps[0] if len(ps) == 1 else shapely.MultiPolygon(ps)
+
+    for k in keep:
+        g = clean_albers(geoms[k])
+        if g is None:
+            reason["dropped"] += 1
+            continue
+        w = wgs(g, 6)
+        if not shapely.is_valid(w):
+            # Rounding to 6 decimals can still pinch a ring: repair once more in degrees.
+            ps = [shapely.Polygon(pp.exterior) for pp in polys_of(shapely.make_valid(w))]
+            w = shapely.set_precision(ps[0] if len(ps) == 1 else shapely.MultiPolygon(ps), 1e-6) if ps else None
+            if w is None or w.is_empty or not shapely.is_valid(w) or any(len(pp.interiors) for pp in polys_of(w)):
+                reason["dropped"] += 1
+                continue
+            reason["repaired_after_rounding"] += 1
+        parts = polys_of(w)
+        exact[k] = orient(parts[0], 1.0) if len(parts) == 1 else shapely.MultiPolygon([orient(pp, 1.0) for pp in parts])
+        exact_ha[k] = shapely.area(g) / 1e4
+        ok[k] = True
+    log(f"  TRACT-ready: {int(ok[keep].sum()):,} of {len(keep):,} fields; {dict(reason)}")
+    geo_txt = np.empty(n_all, dtype=object)
+    geo_txt[ok] = shapely.to_geojson(exact[ok])
+
+    def base_props(k):
+        r = rows_out[k]
+        c25 = r["cdl"][-1]
+        return {
+            "PlotID": f"USA-CSB-{r['id']}", "CSBID": r["id"], "Area": round(float(exact_ha[k]), 4),
+            "Acres": round(r["acres"], 2), "ProducerCountry": "US", "State": r["st"], "County": r["county"],
+            "Crop2025": cdl_names.get(str(c25), str(c25)), "EUDR_Comply": "YES",
+        }
+
+    PART_BYTES = 40_000_000
+    tract_index = {}
+
+    def write_tract(fid, label, kind, radius_nm, ix):
+        ix = [int(k) for k in ix if ok[k]]
+        extra = {"Facility": label, "FacilityType": kind, "Radius_NM": radius_nm}
+        head = '{"type":"FeatureCollection","name":' + json.dumps(label) + ',"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":['
+        parts, buf, size = [], [], len(head)
+        for k in ix:
+            feat = '{"type":"Feature","geometry":' + geo_txt[k] + ',"properties":' + json.dumps({**base_props(k), **extra}, separators=(",", ":"), ensure_ascii=False) + "}"
+            if buf and size + len(feat) + 3 > PART_BYTES:
+                parts.append(buf)
+                buf, size = [], len(head)
+            buf.append(feat)
+            size += len(feat) + 1
+        if buf or not parts:
+            parts.append(buf)
+        out = []
+        for n, feats in enumerate(parts, 1):
+            path = os.path.join(tract_dir, f"{fid}.part{n}.geojson")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(head + ",".join(feats) + "]}")
+            out.append([n, len(feats), os.path.getsize(path)])
+        tract_index[fid] = {"label": label, "kind": kind, "radiusNm": radius_nm, "fields": len(ix), "parts": out}
+
+    for pl in plants:
+        ix40, ix80 = plant_members[pl["id"]]
+        write_tract(f"{pl['key']}40", f"{pl['name']} 0-40 NM", "crushing plant", 40, ix40)
+        write_tract(f"{pl['key']}80", f"{pl['name']} 0-80 NM", "crushing plant", 80, ix80)
+    for e in adm:
+        write_tract(e["id"], e["name"], "ADM elevator", 20, adm_members[e["id"]])
+    for e in tp:
+        write_tract(e["id"], f"{e['company'] or e['id']} ({e['county']}, {e['state']})", "third-party facility", 20, tp_members[e["id"]])
+    tb = sum(pp[2] for v in tract_index.values() for pp in v["parts"])
+    log(f"  {sum(len(v['parts']) for v in tract_index.values())} TRACT files, {tb / 1e6:,.0f} MB")
+
     nc_simple = shapely.simplify(nc_geoms, 5, preserve_topology=True)
     nc_bytes = write_fc(os.path.join(OUT, "fields", "noncomply.geojson"), wgs(nc_simple, 6), nc_props)
     log(f"noncomply.geojson {nc_bytes / 1e6:.1f} MB")
@@ -773,9 +944,15 @@ def main():
     rail_all = wgs(shapely.simplify(rail_g[in_region], 60), 4)
     rail_props = [{"u": r["railusage"], "n": clean(r["name"]), "d": clean(r["railsubdiv"])} for r in rail_rows_r]
     rb = write_fc(os.path.join(OUT, "layers", "rail.geojson"), rail_all, rail_props)
-    riv_show = shapely.get_parts(shapely.make_valid(shapely.simplify(river, 60, preserve_topology=True)))
-    riv_show = riv_show[shapely.area(riv_show) > 0]
-    vb = write_fc(os.path.join(OUT, "layers", "rivers.geojson"), wgs(riv_show, 4), [{"m": True, "t": 460}] * len(riv_show))
+    # The river system is one huge polygon (thousands of holes): rounded to the
+    # map's precision it turned invalid and MapLibre drew it as giant
+    # triangles. Cut it into 50 km pieces, round, and repair each piece.
+    riv_pieces = tiles_of(shapely.make_valid(shapely.simplify(river, 30, preserve_topology=True)), 50000)
+    riv_ll = shapely.make_valid(shapely.set_precision(wgs(shapely.get_parts(riv_pieces), 6), 1e-5))
+    riv_show = shapely.get_parts(riv_ll)
+    riv_show = riv_show[(shapely.get_type_id(riv_show) == 3) & (shapely.area(riv_show) > 0)]
+    log(f"  rivers: {len(riv_show):,} polygons, all valid: {bool(shapely.is_valid(riv_show).all())}")
+    vb = write_fc(os.path.join(OUT, "layers", "rivers.geojson"), riv_show, [{"m": True, "t": 460}] * len(riv_show))
     log(f"rail.geojson {rb / 1e6:.1f} MB ({len(rail_rows_r):,} lines), rivers.geojson {vb / 1e6:.1f} MB")
 
     rail_region = rail_active[shapely.intersects(rail_active, region)]
@@ -814,6 +991,7 @@ def main():
         "network": {"railKm": rail_km, "riverSystemKm2": round(river_km2), "riverSystems": 1, "riverSystemPolygons": len(riv_show)},
         "fieldsTotal": int(len(keep)), "fieldsDelivered": n_all,
         "doubleCropFields": int(double[keep].sum()),
+        "tract": {"leftOut": {"dropped": reason.get("dropped", 0)}, "repaired": {k2: v for k2, v in reason.items() if k2 != "dropped"}, "files": tract_index},
         "combos": combos,
     }
     sb = write_json(os.path.join(OUT, "supply.json"), supply)
