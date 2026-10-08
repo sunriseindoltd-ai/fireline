@@ -6106,3 +6106,46 @@ html.soy-report-open body {
 .soy-nc-filters .soy-key-note {
   margin-top: 2px;
 }
+
+/* Map & data: narrow the selection to a state / county. */
+.soy-area {
+  margin: 0 0 14px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--color-line-soft);
+  border-radius: 12px;
+}
+.soy-area-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font: 500 12px var(--font-sans);
+  color: var(--color-muted);
+}
+.soy-area-head .btn-text {
+  padding: 0 4px;
+  font-size: 12px;
+}
+.soy-area-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.soy-area-row select {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-surface);
+  font: 500 13px var(--font-sans);
+  color: var(--color-fg);
+}
+.soy-area-row select:disabled {
+  opacity: 0.5;
+}
+.soy-area-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-muted);
+}

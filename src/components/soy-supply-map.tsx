@@ -61,7 +61,13 @@ export type ScopeFields = {
   failed?: boolean;
   /** The scope these fields belong to (the view may already show another). */
   scope: string | null;
+  /** Fields of the whole selection per state → county (field counts), for the area filter. */
+  areas?: Record<string, Record<string, number>>;
 };
+/** A state (and optionally one of its counties) the selection is narrowed to. */
+export type SoyArea = { s?: string; n?: string };
+const inArea = (area: SoyArea | undefined, f: SoyFeature) =>
+  !area?.s || (f.properties.s === area.s && (!area.n || f.properties.n === area.n));
 /** Another crushing plant shown as a point while its catchments are prepared. */
 export type OtherPlant = { id: string; name: string; address?: string | null; lat: number; lon: number };
 export type MapFocus = { bbox?: [[number, number], [number, number]]; center?: [number, number]; zoom?: number; nonce: number };
@@ -75,6 +81,10 @@ const US_MIN_ZOOM = 10;
 /** Soybean fields outside the selection: neutral, so the selection's green stands out. */
 const OUTSIDE_COLOR = "#eceef1";
 const OUTSIDE_COLOR_LIGHT_MAP = "#9aa0a6";
+/** Edge of the selection's own fields: a deeper green than their fill. */
+const FIELD_EDGE = "#0f9a4a";
+/** Context fields fade out where they are the selection's own fields (feature state "own"). */
+const outsideOpacity = (v: number) => ["case", ["boolean", ["feature-state", "own"], false], 0, v] as never;
 const US_GRID_ACRES = [220, 1100, 2200, 4400, 7700];
 let pmtilesProtocol = false;
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
@@ -214,6 +224,7 @@ export function SoySupplyMap({
   c,
   lang,
   onScopeFields,
+  area,
   selectedField,
   onSelectField,
   focus,
@@ -235,6 +246,8 @@ export function SoySupplyMap({
   c: SoySupplyCopy;
   lang: Lang;
   onScopeFields?: (s: ScopeFields) => void;
+  /** Narrow the selection's fields to a state / county (Map & data's area filter). */
+  area?: SoyArea;
   selectedField?: string | null;
   onSelectField?: (f: SoyFeature | null) => void;
   focus?: MapFocus | null;
@@ -280,8 +293,8 @@ export function SoySupplyMap({
     if (window.matchMedia("(max-width: 640px)").matches) setLayersOpen(false);
   }, []);
   const [ncLoaded, setNcLoaded] = useState<FC | null>(ncCache);
-  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded });
-  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded };
+  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area });
+  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area };
   const refreshRef = useRef<() => void>(() => undefined);
 
   // ------------------------------------------------------------------ build
@@ -462,7 +475,8 @@ export function SoySupplyMap({
           paint: { "line-color": RIVER_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.6, 8, 1.8, 12, 1.4] as never },
         });
         // All US soybean fields, under the catchment's own fields: a density grid zoomed out, the fields from zoom 10.
-        map.addSource("us-soy", { type: "vector", url: `pmtiles://${window.location.origin}/data/layers/national/soy.pmtiles` });
+        // promoteId: the CSBID, so the selection's own fields can be marked (feature state) and left out of the grey context layer.
+        map.addSource("us-soy", { type: "vector", url: `pmtiles://${window.location.origin}/data/layers/national/soy.pmtiles`, promoteId: "i" });
         map.addLayer({
           id: "us-grid",
           type: "fill",
@@ -504,7 +518,7 @@ export function SoySupplyMap({
           "source-layer": "fields",
           minzoom: US_MIN_ZOOM,
           layout: { visibility: "none" },
-          paint: { "fill-color": OUTSIDE_COLOR, "fill-opacity": 0.55 },
+          paint: { "fill-color": OUTSIDE_COLOR, "fill-opacity": outsideOpacity(0.55) },
         });
         map.addLayer({
           id: "outside-line",
@@ -513,16 +527,16 @@ export function SoySupplyMap({
           "source-layer": "fields",
           minzoom: US_MIN_ZOOM,
           layout: { visibility: "none" },
-          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 14, 1.2] as never, "line-opacity": 0.8 },
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.5, 14, 1.2] as never, "line-opacity": outsideOpacity(0.8) },
         });
-        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.9 } });
+        map.addLayer({ id: "fields", type: "fill", source: "fields", paint: { "fill-opacity": 0.72 } });
         map.addLayer({
           id: "fields-line",
           type: "line",
           source: "fields",
           minzoom: US_MIN_ZOOM,
-          // A light edge keeps neighbouring fields apart over imagery.
-          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.4, 14, 1.1] as never, "line-opacity": 0.6 },
+          // A green edge, a little heavier than the grey context fields' (user, 8 Oct 2026).
+          paint: { "line-color": FIELD_EDGE, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.8, 14, 2] as never, "line-opacity": 0.95 },
         });
         map.addLayer({
           id: "roads",
@@ -914,6 +928,8 @@ export function SoySupplyMap({
 
         // ------------------------------------------------ field loading
         let shown: SoyFeature[] = [];
+        let ownKey = "";
+        let areaKey = "";
         let token = 0;
 
         function findFeature(src: "fields" | "nc", id: string): SoyFeature | null {
@@ -921,16 +937,49 @@ export function SoySupplyMap({
           return shown.find((f) => String(f.properties.id) === id) ?? null;
         }
 
-        const push = (feats: SoyFeature[], state: { loading: boolean; failed: boolean }) => {
+        const push = (allFeats: SoyFeature[], state: { loading: boolean; failed: boolean }) => {
           if (!map) return;
-          const { selected: scope, ncLoaded: ncFc } = live.current;
+          const { selected: scope, ncLoaded: ncFc, area } = live.current;
           const level = levelOf(scope);
+          const ncAll = (ncFc?.features ?? []).filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
+          // State → county → fields of the whole selection, for the area filter's choices.
+          const areas: Record<string, Record<string, number>> = {};
+          for (const f of [...allFeats, ...ncAll]) {
+            const st = String(f.properties.s ?? "");
+            const co = String(f.properties.n ?? "");
+            if (!st) continue;
+            (areas[st] ??= {})[co] = (areas[st][co] ?? 0) + 1;
+          }
+          // The area filter narrows the selection; the rest of it joins the grey context.
+          const feats = area?.s ? allFeats.filter((f) => inArea(area, f)) : allFeats;
           shown = feats;
+          const aKey = `${scope}|${area?.s ?? ""}|${area?.n ?? ""}`;
+          if (area?.s && aKey !== areaKey && feats.length) {
+            let W = 180, E = -180, S = 90, N = -90; // prettier-ignore
+            for (const f of feats) {
+              const x = Number(f.properties._x), y = Number(f.properties._y); // prettier-ignore
+              if (x < W) W = x;
+              if (x > E) E = x;
+              if (y < S) S = y;
+              if (y > N) N = y;
+            }
+            map.fitBounds([W, S, E, N], { padding: fitPadding(), duration: 700, maxZoom: 12 });
+          }
+          if (!state.loading) areaKey = aKey;
+          // Mark the selection's own fields on the national tiles so the grey context layer skips them.
+          // Kept while the same selection is shown, even with its field layer switched off (no fields pushed then).
+          const key = `${live.current.selected}|${area?.s ?? ""}|${area?.n ?? ""}|${feats.length}`;
+          const keep = feats.length === 0 && levelOf(live.current.selected) === 3 && ownKey.startsWith(`${live.current.selected}|`);
+          if (map.getSource("us-soy") && key !== ownKey && !keep) {
+            ownKey = key;
+            map.removeFeatureState({ source: "us-soy", sourceLayer: "fields" });
+            for (const f of feats) map.setFeatureState({ source: "us-soy", sourceLayer: "fields", id: String(f.properties.id) }, { own: true });
+          }
           (map.getSource("fields") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats } as never);
           // The map always shows every non-compliant field ADM listed; the
           // table and figures count only those in the chosen scope.
           const all = ncFc?.features ?? [];
-          const nc = all.filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
+          const nc = area?.s ? ncAll.filter((f) => inArea(area, f)) : ncAll;
           (map.getSource("nc") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: all } as never);
           setNcCounts({
             all: all.length,
@@ -943,7 +992,7 @@ export function SoySupplyMap({
           } as never);
           setUnitState({ level, ...state });
           measure(state.loading);
-          live.current.onScopeFields?.({ fields: feats, nc, complete: level === 3 && !state.loading && !state.failed, ...state, scope });
+          live.current.onScopeFields?.({ fields: feats, nc, complete: level === 3 && !state.loading && !state.failed, ...state, scope, areas: level === 3 ? areas : undefined });
         };
 
         const refresh = () => {
@@ -1016,6 +1065,7 @@ export function SoySupplyMap({
           let ncAcres = 0, ncFields = 0; // prettier-ignore
           for (const f of ncFc?.features ?? []) {
             if (!inScope(one ? scope : "all", { flags: Number(f.properties.f), k: String(f.properties.k ?? "") })) continue;
+            if (one && !inArea(live.current.area, f)) continue;
             if (!inB(Number(f.properties._x), Number(f.properties._y))) continue;
             ncFields++;
             ncAcres += Number(f.properties.a) || 0;
@@ -1061,7 +1111,7 @@ export function SoySupplyMap({
   // Scope or loaded data changed → reload / refilter.
   useEffect(() => {
     if (ready) refreshRef.current();
-  }, [ready, selected, ncLoaded, on.fields]);
+  }, [ready, selected, ncLoaded, on.fields, area?.s, area?.n]);
 
   // Layer switches; remote layers load the first time they're switched on.
   useEffect(() => {
@@ -1095,8 +1145,8 @@ export function SoySupplyMap({
     // Only around a selection whose own fields are drawn (one catchment or a combination).
     set(["outside-fill", "outside-line"], on.outside && !on.us && levelOf(selected) === 3);
     // With land cover on, the fields and density cells thin out so it shows through.
-    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.9);
-    if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", on.nlcd ? 0.2 : 0.55);
+    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.72);
+    if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", outsideOpacity(on.nlcd ? 0.2 : 0.55) as never);
     // With all US fields on, the catchment density cells give way to the fields themselves from zoom 10.
     const gridOpacity = on.nlcd ? 0.25 : 0.72;
     for (const id of GRID_LAYERS)
@@ -1226,8 +1276,6 @@ export function SoySupplyMap({
     // Fields outside the selection: light grey over imagery, a mid grey over the pale street map.
     if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-color", light ? OUTSIDE_COLOR_LIGHT_MAP : OUTSIDE_COLOR);
     if (map.getLayer("outside-line")) map.setPaintProperty("outside-line", "line-color", light ? "#5f6368" : "#ffffff");
-    // Field edges: white over imagery, dark green over the street map.
-    if (map.getLayer("fields-line")) map.setPaintProperty("fields-line", "line-color", light ? "#0f5a2e" : "#ffffff");
     for (const id of ["ring-label", "plant-label", "terminal-label", "plants-other-label", "adm-label", "tp-label", "states-label", "counties-label"]) {
       if (!map.getLayer(id)) continue;
       map.setPaintProperty(id, "text-color", ink);

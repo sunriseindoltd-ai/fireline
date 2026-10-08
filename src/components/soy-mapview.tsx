@@ -9,7 +9,7 @@ import {
   type SoyFeature,
   type SupplyColorBy,
 } from "@/components/soy-supply-map";
-import type { OtherPlant } from "@/components/soy-supply-map";
+import type { OtherPlant, SoyArea } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa } from "@/lib/format";
 import { SOY_GROUP_COLORS, soyGroupOf } from "@/lib/soy-copy";
@@ -30,7 +30,7 @@ import {
   type Basis,
   type Catchment,
   type PlantBuffer,
-  type SupplyData,
+  type SupplyData, countyOf, stateName
 } from "@/lib/soy-supply";
 
 type StatusFilter = "all" | "ok" | "nc";
@@ -179,6 +179,14 @@ export function SoyMapView({
   const [findText, setFindText] = useState("");
   const [findMiss, setFindMiss] = useState(false);
   const [combineOpen, setCombineOpen] = useState(false);
+  // State / county filter on the selection (user feedback, 8 Oct 2026); cleared when the selection changes.
+  const [area, setArea] = useState<SoyArea>({});
+  const [areaFor, setAreaFor] = useState(scope);
+  if (areaFor !== scope) {
+    setAreaFor(scope);
+    setArea({});
+  }
+  const areaName = area.s ? [area.n ? countyOf(area.n, area.s) : null, stateName(area.s)].filter(Boolean).join(", ") : "";
   const sidePlants = useMemo(() => data.plants.map((p) => ({ id: p.id, name: p.city ?? p.name, hasData: true })), [data]);
   const nonce = useRef(0);
   const infos = useMemo(() => catchmentInfos(data, catchments, c), [data, catchments, c]);
@@ -241,8 +249,8 @@ export function SoyMapView({
   }
 
   // ------------------------------------------------------------ downloads
-  const scopeName = infos.find((x) => x.id === scope)?.name ?? c.scopeAll;
-  const slug = (scope || "all").replace(/[^\w-]+/g, "-");
+  const scopeName = [infos.find((x) => x.id === scope)?.name ?? c.scopeAll, areaName].filter(Boolean).join(" · ");
+  const slug = [scope || "all", area.s, area.n].filter(Boolean).join("-").replace(/[^\w-]+/g, "-");
   // Fields of the current selection (one catchment or a combination): compliant, non-compliant or both,
   // as CSV or GeoJSON (user, 8 Oct 2026). One set of columns for both kinds, blank where one doesn't apply.
   // review_flag: already cropland in 2018–2020 (a note, ADM's status unchanged); in_any_catchment: counted in the figures.
@@ -340,7 +348,15 @@ export function SoyMapView({
             (!q || `${x.name} ${x.sub}`.toLowerCase().includes(q)),
         );
   const nodePlant = node.kind === "direct" ? plantOfScope(node.id, data) : undefined;
-  const k = node.k;
+  // With an area chosen the figures come from the loaded fields of that area (each counted once).
+  const k: Catchment | undefined =
+    area.s && scopeFields.complete
+      ? ({
+          ...node.k!,
+          compliant: { ...node.k!.compliant, fields: scopeFields.fields.length, acres: scopeFields.fields.reduce((a, f) => a + (Number(f.properties.a) || 0), 0) },
+          nonCompliant: { ...node.k!.nonCompliant, fields: scopeFields.nc.length, acres: scopeFields.nc.reduce((a, f) => a + (Number(f.properties.a) || 0), 0) },
+        } as Catchment)
+      : node.k;
   const facts: [string, string][] = [];
   {
     const adm = data.admElevators.find((e) => e.id === node.id);
@@ -404,6 +420,7 @@ export function SoyMapView({
           c={c}
           lang={lang}
           onScopeFields={setScopeFields}
+          area={area}
           selectedField={p ? String(p.id) : null}
           onSelectField={(f) => pick(f)}
           focus={focus}
@@ -692,6 +709,60 @@ export function SoyMapView({
               />
             </details>
           ) : null}
+          {level === 3 && scopeFields.areas && Object.keys(scopeFields.areas).length ? (
+            <div className="soy-area">
+              <p className="soy-area-head">
+                <span>{c.areaTitle}</span>
+                {area.s ? (
+                  <button type="button" className="btn-text" onClick={() => setArea({})}>
+                    {c.sideClear}
+                  </button>
+                ) : null}
+              </p>
+              <div className="soy-area-row">
+                <select
+                  aria-label={c.areaState}
+                  value={area.s ?? ""}
+                  onChange={(e) => {
+                    setArea(e.target.value ? { s: e.target.value } : {});
+                    setPage(0);
+                  }}
+                >
+                  <option value="">{c.areaAllStates}</option>
+                  {Object.entries(scopeFields.areas)
+                    .map(([st, cos]) => [st, Object.values(cos).reduce((a, b) => a + b, 0)] as const)
+                    .sort((a, b) => stateName(a[0]).localeCompare(stateName(b[0])))
+                    .map(([st, n]) => (
+                      <option key={st} value={st}>
+                        {stateName(st)} · {countF(n)}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  aria-label={c.areaCounty}
+                  value={area.n ?? ""}
+                  disabled={!area.s}
+                  onChange={(e) => {
+                    setArea({ s: area.s, n: e.target.value || undefined });
+                    setPage(0);
+                  }}
+                >
+                  <option value="">{c.areaAllCounties}</option>
+                  {area.s
+                    ? Object.entries(scopeFields.areas[area.s] ?? {})
+                        .filter(([co]) => co)
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([co, n]) => (
+                          <option key={co} value={co}>
+                            {countyOf(co, area.s)} · {countF(n)}
+                          </option>
+                        ))
+                    : null}
+                </select>
+              </div>
+              {area.s ? <p className="soy-area-note">{fill(c.areaNote, { area: areaName })}</p> : null}
+            </div>
+          ) : null}
           {corridor ? <p className="panel-note soy-corr-purpose">{c.corrPurpose}</p> : null}
           {corridor ? (
             <div className="soy-corr-controls">
@@ -851,7 +922,7 @@ export function SoyMapView({
           {canDownload && !corridor ? (
             <div className="downloads soy-downloads">
               <p className="eyebrow">
-                {c.download} · {node.name}
+                {c.download} · {scopeName}
               </p>
               <div className="seg soy-dl-set" role="group" aria-label={c.dlSetLabel}>
                 {(["ok", "nc", "both"] as const).map((v) => (
