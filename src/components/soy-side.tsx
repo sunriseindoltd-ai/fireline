@@ -46,22 +46,22 @@ export function SoyPlants({ c, plants, plantSel, setPlantSel }: Pick<Props, "c" 
 }
 
 /**
- * The catchments of the chosen plant, or — with all plants — every plant's
- * catchments plus the ADM and third-party elevators (not tied to a plant in
- * ADM's data, so they only appear here). Nothing ticked = the whole selection;
- * ticks combine and each field is counted once. A single third party is
- * viewed on its own.
+ * The chosen plant's catchments (every plant's with "All plants"), then the ADM
+ * and third-party elevators. Which plant an elevator delivers to isn't in the
+ * data, so every elevator and third party can be ticked together with any
+ * plant. Nothing ticked = the whole selection; ticks combine and each field is
+ * counted once.
  */
 export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catchments }: Omit<Props, "setPlantSel">) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const pending = plants.find((p) => p.id === plantSel && !p.hasData);
-  // Elevators only list under a plant once ADM says which plant they deliver to.
-  const forPlant = (e: { plants?: string[] }) => !plantSel || (e.plants ?? []).includes(plantSel);
   const plant = plantSel ? plantById(data, plantSel) : undefined;
   const directPlants = plant ? [plant] : data.plants;
-  const sites = useMemo(() => data.admElevators.filter((e) => e.radiusM && forPlant(e)), [data, plantSel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const tps = useMemo(() => data.thirdParty.filter(forPlant), [data, plantSel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sites = useMemo(() => data.admElevators.filter((e) => e.radiusM), [data]);
+  const points = data.admElevators.length;
+  const tps = data.thirdParty;
+  const tpName = (id: string) => data.thirdParty.find((e) => e.id === id)?.company ?? id;
   const tpMatches = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return tps;
@@ -120,7 +120,7 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
               {sites.length ? (
                 <fieldset className="side-group">
                   <legend>
-                    {c.scopeAdm} · {sites.length}
+                    {c.scopeAdm} · {fill(c.sideSites, { n: sites.length, p: points })}
                   </legend>
                   <div className="side-quick">
                     <button type="button" onClick={() => setSel([...new Set([...sel.filter((x) => !siteIds.includes(x)), ...siteIds])])} disabled={siteIds.every((id) => sel.includes(id))}>
@@ -145,12 +145,18 @@ export function SoyRelated({ data, c, lang, plants, plantSel, sel, setSel, catch
                     <input className="side-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={c.sideSearchTp} aria-label={c.sideSearchTp} />
                     <div className="side-tp-list">
                       {tpMatches.length ? (
-                        tpMatches.map((e) => row(e.id, e.company ?? e.id, [e.county, e.state].filter(Boolean).join(", ")))
+                        tpMatches.map((e) =>
+                          row(
+                            e.id,
+                            e.company ?? e.id,
+                            [[e.county, e.state].filter(Boolean).join(", "), e.sameAs?.length ? fill(c.sameLocation, { names: e.sameAs.map(tpName).join(", ") }) : ""].filter(Boolean).join(" · "),
+                          ),
+                        )
                       ) : (
                         <p className="side-note">{c.sideNoTp}</p>
                       )}
                     </div>
-                    <p className="side-note">{c.sideOnlyOne}</p>
+
                   </details>
                 </fieldset>
               ) : null}

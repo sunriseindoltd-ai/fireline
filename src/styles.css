@@ -5438,6 +5438,7 @@ html.soy-report-open body {
 .side-tp-list {
   max-height: 260px;
   overflow-y: auto;
+  overflow-x: hidden;
   margin: 8px 0 0;
 }
 .soy-showing {
@@ -5791,4 +5792,17 @@ html.soy-report-open body {
   margin: 4px 10px -10px;
   font: 500 11.5px var(--font-sans);
   color: var(--color-muted);
+}
+/* 40-mile tab: the earlier-delivery banner (Feedback 4, B1). */
+.soy-old-banner {
+  align-items: center;
+}
+.soy-old-banner .btn-secondary {
+  flex: none;
+}
+@media (max-width: 860px) {
+  .soy-old-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

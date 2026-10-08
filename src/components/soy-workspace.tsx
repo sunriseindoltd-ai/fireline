@@ -425,6 +425,16 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             </div>
           </div>
 
+          {/* Feedback 4 (B1): an earlier delivery — say so on the tab itself, not only under Data & method. */}
+          <div className="eudr-notice warn soy-old-banner" role="note">
+            <p>
+              <b>{sc.oldBannerTitle}</b> {sc.oldBannerBody}
+            </p>
+            <button type="button" className="btn-secondary" onClick={() => setTab("summary")}>
+              {sc.oldBannerCta}
+            </button>
+          </div>
+
           <div className="soy-plant-seg seg" role="tablist" aria-label={sc.plantsLabel}>
             <button
               type="button"
@@ -679,7 +689,6 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                       <tr>
                         <th>{sc.colName}</th>
                         <th>{sc.colCity}</th>
-                        <th className="num">{sc.colCapacity}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -692,9 +701,6 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                             ) : null}
                           </td>
                           <td>{[e.city, e.state].filter(Boolean).join(", ")}</td>
-                          <td className="num tabular-nums">
-                            {e.capacity == null ? "—" : countF(e.capacity)}
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -704,6 +710,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
                 <p className="chart-note">{sc.none}</p>
               )}
               <p className="chart-note">
+                <b>{sc.elevatorsRaw}</b>{" "}
                 {fill(sc.elevatorsNote, {
                   bad: countF(data.elevators.filter((e) => e.locationMismatch).length),
                   n: countF(data.elevators.length),

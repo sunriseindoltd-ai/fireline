@@ -99,6 +99,11 @@ function comboInfo(scope: string, data: SupplyData, c: SoySupplyCopy): Catchment
   if (picked.length === sites.length) parts.push(fill(c.comboAdm, { n: sites.length }));
   else if (picked.length > 3) parts.push(fill(c.comboAdmN, { n: picked.length }));
   else parts.push(...picked.map((e) => e.name));
+  // Third parties combine with any plant too (one by one, or all of them).
+  const tps = data.thirdParty.filter((e) => mem.includes(e.id));
+  if (mem.includes("tp")) parts.push(fill(c.comboTp, { n: data.thirdParty.length }));
+  else if (tps.length > 3) parts.push(fill(c.comboTpN, { n: tps.length }));
+  else parts.push(...tps.map((e) => [e.company, e.state].filter(Boolean).join(", ")));
   const t = comboTotals(data, mem);
   const k = t
     ? ({ id: scope, kind: "tier", name: "", compliant: { fields: t.fields, acres: t.acres }, nonCompliant: { fields: t.ncFields, acres: t.ncAcres, changeAcres: t.defo } } as unknown as Catchment) // prettier-ignore

@@ -299,7 +299,13 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
                 sub={k?.compliant.doubleCropFields ? fill(c.kpiDoubleCrop, { n: countF(k.compliant.doubleCropFields), area: haF(k.compliant.doubleCropAcres ?? 0) }) : undefined}
               />
               <KpiTile value={haF(tot.acres)} label={c.kpiArea} hint={c.kpiAreaHint} sub={acF(tot.acres)} />
-              <KpiTile tone="danger" value={countF(tot.ncFields)} label={c.kpiNcFields} hint={c.kpiNcFieldsHint} />
+              <KpiTile
+                tone="danger"
+                value={countF(tot.ncFields)}
+                label={c.kpiNcFields}
+                hint={c.kpiNcFieldsHint}
+                sub={fill(c.kpiNcOfList, { n: countF(tot.ncFields), total: countF(ncAll.fields), out: countF(Math.max(0, ncAll.fields - tot.ncFields)) })}
+              />
               <KpiTile tone="danger" value={haF(tot.ncAcres)} label={c.kpiNcArea} hint={c.kpiNcAreaHint} />
               <KpiTile
                 tone="comply"
@@ -318,9 +324,9 @@ export function SoySupplyView({ data, c, sc, lang, scope, setScope, present, onO
                   <section className="chart-card">
                     <h3>{c.ncTitle}</h3>
                     <p className="chart-note">
-                      {k
-                        ? fill(c.ncIntro, { n: countF(ncAll.fields), states: countF(ncAll.byState.length), outside: countF(outside) })
-                        : `${c.sideNcTitle} · ${countF(ncForCard.fields)}`}
+                      {key === "all"
+                        ? fill(c.ncIntro, { n: countF(ncAll.fields), states: countF(ncAll.byState.length), inside: countF(ncAll.fields - outside), outside: countF(outside) })
+                        : fill(c.ncIntroScope, { inside: countF(ncForCard.fields), n: countF(ncAll.fields), outside: countF(Math.max(0, ncAll.fields - ncForCard.fields)) })}
                     </p>
                     <h3 className="soy-subhead">{c.ncByYear}</h3>
                     <ResponsiveContainer width="100%" height={170}>
@@ -454,16 +460,20 @@ function FacilityTable({
     { id: `${p.key}80`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ80}`, place: place(p) },
     { id: `${p.key}40`, kind: "plant" as const, name: `${p.name} · ${c.scopeQ40}`, place: place(p), sub: true },
   ]);
-  const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = plant
-    ? plantRows
-    : [
-        { id: "all", kind: "chain", name: c.scopeAll, place: fill(c.chainSub, { p: data.plants.length, a: data.admElevators.filter((e) => e.radiusM).length, t: data.thirdParty.length }) },
-        ...plantRows,
-        ...data.admElevators
-          .filter((e) => e.radiusM)
-          .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
-        ...data.thirdParty.map((t) => ({ id: t.id, kind: "tp" as const, name: t.company ?? t.id, place: [t.county, t.state].filter(Boolean).join(", ") })),
-      ];
+  // Elevators and third parties are listed with any plant: which plant they deliver to isn't known.
+  const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = [
+    ...(plant ? [] : [{ id: "all", kind: "chain" as const, name: c.scopeAll, place: fill(c.chainSub, { p: data.plants.length, a: data.admElevators.filter((e) => e.radiusM).length, t: data.thirdParty.length }) }]),
+    ...plantRows,
+    ...data.admElevators
+      .filter((e) => e.radiusM)
+      .map((e) => ({ id: e.id, kind: "adm" as const, name: e.name, place: [e.city, e.state].filter(Boolean).join(", ") })),
+    ...data.thirdParty.map((t) => ({
+      id: t.id,
+      kind: "tp" as const,
+      name: t.company ?? t.id,
+      place: [[t.county, t.state].filter(Boolean).join(", "), t.sameAs?.length ? fill(c.sameLocation, { names: t.sameAs.map((x) => data.thirdParty.find((o) => o.id === x)?.company ?? x).join(", ") }) : ""].filter(Boolean).join(" · "),
+    })),
+  ];
   const q = query.trim().toLowerCase();
   const shown = rows.filter((r) => (kind === "all" || r.kind === kind || r.kind === "chain") && (!q || r.kind === "chain" || `${r.name} ${r.place}`.toLowerCase().includes(q)));
   const kindLabel: Record<FacilityKind, string> = { chain: c.facChain, plant: c.kindPlant, adm: c.kindAdm, tp: c.kindTp };
@@ -503,7 +513,7 @@ function FacilityTable({
       </div>
       <div className="supply-tp-tools">
         <div className="seg" role="group" aria-label={c.facTitle}>
-          {(plant ? (["plant"] as const) : (["all", "plant", "adm", "tp"] as const)).map((v) => (
+          {(["all", "plant", "adm", "tp"] as const).map((v) => (
             <button key={v} type="button" className={kind === v ? "on" : ""} aria-pressed={kind === v} onClick={() => setKind(v)}>
               {v === "all" ? c.statusAll : kindLabel[v]}
             </button>
@@ -746,11 +756,15 @@ function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySu
   const parts80 = data.plants.map((p) => [unitName(`${p.key}80`, data, c)!, [`${p.key}80`]] as [string, string[]]);
   const plants40 = fill(c.comboPlants40, { n: data.plants.length });
   const plants80 = fill(c.comboPlants80, { n: data.plants.length });
+  const pl80 = plant ? unitName(`${plant.key}80`, data, c)! : "";
   const presets: [string, string, string[], [string, string[]][]][] = plant
     ? [
         ["p40", unitName(`${plant.key}40`, data, c)!, [`${plant.key}40`], []],
         ["p80r", unitName(`${plant.key}80r`, data, c)!, [`${plant.key}80r`], []],
-        ["p80", unitName(`${plant.key}80`, data, c)!, [`${plant.key}80`], []],
+        ["p80", pl80, [`${plant.key}80`], []],
+        ["p80adm", fill(c.comboPlusAdm, { a: pl80 }), [`${plant.key}80`, ...siteIds], [[pl80, [`${plant.key}80`]], [admLabel, siteIds]]],
+        ["p80tp", fill(c.comboPlusTp, { a: pl80 }), [`${plant.key}80`, "tp"], [[pl80, [`${plant.key}80`]], [tpLabel, ["tp"]]]],
+        ["p80all", fill(c.comboPlusAll, { a: pl80 }), [`${plant.key}80`, ...siteIds, "tp"], [[pl80, [`${plant.key}80`]], [admLabel, siteIds], [tpLabel, ["tp"]]]],
       ]
     : [
         ["p40", plants40, p40, parts40],
@@ -776,7 +790,7 @@ function ComboTable({ data, c, lang, open, plant }: { data: SupplyData; c: SoySu
                 <ComboRow
                   label={label}
                   t={comboTotals(data, ids)}
-                  cls={key === "all" ? "total" : ""}
+                  cls={key === "all" || key === "p80all" ? "total" : ""}
                   lang={lang}
                   expanded={openKey === key}
                   onOpen={() => setOpenKey(openKey === key ? null : key)}
@@ -808,6 +822,10 @@ function DataNotes({ c }: { c: SoySupplyCopy }) {
         <li>{c.note1}</li>
         <li>{c.note2}</li>
         <li>{c.note3}</li>
+        <li>{c.note4}</li>
+        <li>{c.note5}</li>
+        <li>{c.note6}</li>
+        <li>{c.note7}</li>
       </ul>
     </section>
   );
@@ -840,6 +858,7 @@ export function SoyDocsView({ data, c, lang, present }: { data: SupplyData; c: S
           <li>{c.docsDef1}</li>
           <li>{c.docsDef2}</li>
           <li>{c.docsDef3}</li>
+          <li>{c.docsDef4}</li>
           <li>{fill(c.method1, { x: formatCount(data.network.railKm.X ?? 0, lang) })}</li>
           <li>{fill(c.method2, { km2: formatCount(data.network.riverSystemKm2, lang), n: data.network.riverSystems ?? 1 })}</li>
         </ul>

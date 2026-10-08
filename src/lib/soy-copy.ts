@@ -5,6 +5,10 @@ import type { Lang } from "@/lib/copy";
 const en = {
   scopeLabel: "US soybean",
   title: "Soybean sourcing areas",
+  oldBannerTitle: "Earlier delivery — not the figures in use.",
+  oldBannerBody: "This tab is ADM's first data: five crushing plants with 40 statute-mile (64 km) areas, Decatur East and West as one, and 235 non-compliant points sent with the Quincy dataset. The current supply chain (7 Oct 2026: four plants, 40 / 80 NM, ADM's full list of 1,073 non-compliant fields) is on the other tabs. Decatur East is not in the 7 Oct delivery, which lists Decatur West only.",
+  oldBannerCta: "Go to the current Summary",
+  elevatorsRaw: "Raw data as delivered, not checked.",
   intro:
     "Fields planted with soybeans in 2025 within {miles} miles of each ADM crushing plant. Source: USDA NASS Crop Sequence Boundaries 2018–2025, as delivered by ADM.",
   allPlants: "All sourcing areas",
@@ -107,6 +111,10 @@ export type SoyCopy = typeof en;
 const id: SoyCopy = {
   scopeLabel: "Kedelai AS",
   title: "Wilayah pasokan kedelai",
+  oldBannerTitle: "Kiriman lama — bukan angka yang dipakai sekarang.",
+  oldBannerBody: "Tab ini data pertama dari ADM: lima pabrik crushing dengan wilayah 40 mil biasa (64 km), Decatur East dan West sebagai satu, dan 235 titik non-comply yang dikirim bersama dataset Quincy. Rantai pasok yang berlaku (7 Okt 2026: empat pabrik, 40 / 80 NM, daftar lengkap ADM 1.073 ladang non-comply) ada di tab lain. Decatur East tidak ada di kiriman 7 Okt — hanya Decatur West.",
+  oldBannerCta: "Ke Ringkasan yang berlaku",
+  elevatorsRaw: "Data mentah sesuai kiriman, belum dicek.",
   intro:
     "Ladang yang ditanami kedelai pada 2025 dalam radius {miles} mil dari tiap pabrik crushing ADM. Sumber: USDA NASS Crop Sequence Boundaries 2018–2025, sesuai kiriman ADM.",
   allPlants: "Semua wilayah pasokan",

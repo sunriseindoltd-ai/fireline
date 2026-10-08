@@ -176,6 +176,20 @@ def owner_props(o):
     return {k: v for k, v in out.items() if v}
 
 
+# Typos in the delivered names (Feedback 4, 8 Oct 2026); the delivered name stays in "nameAsDelivered".
+NAME_FIXES = {"St. Lousi": "St. Louis", "Mt. Aubrun": "Mt. Auburn", "GRAIN CO.": "Grain Co."}
+
+
+def tidy_name(name):
+    """Fixed typos, one casing for "ADM Grain Co.", one spacing around dashes."""
+    s = clean(name) or ""
+    for bad, good in NAME_FIXES.items():
+        s = s.replace(bad, good)
+    s = re.sub(r"\s+-\s*|\s*-\s+", " - ", s)  # "Illinois- Morris" → "Illinois - Morris"; "Agris-Industries" stays
+    s = re.sub(r"\s{2,}", " ", s).strip()
+    return s or None
+
+
 def city_of(name):
     """"ADM Northern Illinois - Ottawa North (DCX)" → "Ottawa North"."""
     s = clean(name) or ""
@@ -312,11 +326,13 @@ def main():
     seen_catch = {}
     for i, r in enumerate(adm_rows):
         x, y = shapely.get_coordinates(adm_ll[i])[0]
-        name = clean(r["Facility_Name"]) or f"ADM elevator {i + 1}"
+        delivered_name = clean(r["Facility_Name"])
+        name = tidy_name(delivered_name) or f"ADM elevator {i + 1}"
         catch = name not in seen_catch
         seen_catch.setdefault(name, i)
         adm.append({
-            "id": f"adm{i + 1}", "name": name, "code": clean(r["STACT_Naming_Convention"]), "city": city_of(name),
+            "id": f"adm{i + 1}", "name": name, **({"nameAsDelivered": delivered_name} if delivered_name != name else {}),
+            "code": clean(r["STACT_Naming_Convention"]), "city": city_of(name),
             "county": clean(r["County"]), "state": state_abbr(r["State"]), "address": clean(r["Address"]),
             "type": clean(r["Type_of_facility"]), "lat": round(y, 5), "lon": round(x, 5),
             "radiusM": R20 if catch else None, "site": f"adm{seen_catch[name] + 1}",
@@ -331,6 +347,15 @@ def main():
             "lat": round(y, 5), "lon": round(x, 5), "radiusM": R_TP, "core": False,
             "railMi": round(float(tp_rd[i]), 2), "riverMi": round(float(tp_vd[i]), 2),
         })
+    # Third parties delivered at exactly the same point (12 at 5 places, e.g. CGB / LDC / Cofco at
+    # Cahokia): identical catchments and figures, kept as delivered and marked "same location as".
+    at = collections.defaultdict(list)
+    for e in tp:
+        at[(e["lat"], e["lon"])].append(e["id"])
+    for e in tp:
+        others = [x for x in at[(e["lat"], e["lon"])] if x != e["id"]]
+        if others:
+            e["sameAs"] = others
     nola_rows, nola_g = read("Nola_Terminal")
     terminals = []
     for r, g in zip(nola_rows, wgs(nola_g)):
@@ -590,12 +615,14 @@ def main():
         catchments.append({"id": cid, "kind": kind, "name": name, **(extra or {}),
                            "compliant": field_stats(ix), "nonCompliant": nc_stats(nc_mask)})
 
-    # Combinations (any plant ring, any set of ADM elevator sites, third
-    # parties): fields grouped by which catchments they are in, so any union
-    # can be summed in the browser without counting a field twice. More than
-    # 32 bits, so masks are hex strings (BigInt in the browser).
+    # Combinations (any plant ring, any set of ADM elevator sites and third
+    # parties, each on its own): fields grouped by which catchments they are
+    # in, so any union can be summed in the browser without counting a field
+    # twice. More than 32 bits, so masks are hex strings (BigInt in the
+    # browser). "tp" = any third party.
     sites = list(adm_area)
-    order = [f"{pl['key']}{r}" for pl in plants for r in ("40", "80")] + sites + ["tp"]
+    tps = list(tp_area)
+    order = [f"{pl['key']}{r}" for pl in plants for r in ("40", "80")] + sites + ["tp"] + tps
     combo_bits = {cid: i for i, cid in enumerate(order)}
     fmask = np.zeros(n_all, dtype=object)
     fmask[:] = 0
@@ -609,6 +636,9 @@ def main():
             fmask[k] |= 1 << combo_bits[sid]
     for k in np.where(in_tp)[0]:
         fmask[k] |= 1 << combo_bits["tp"]
+    for tid in tps:
+        for k in tp_members[tid]:
+            fmask[k] |= 1 << combo_bits[tid]
     soy8 = soy_years == 8
     combo_fields = collections.defaultdict(lambda: [0, 0.0, 0.0, 0])
     for k in keep:
@@ -629,6 +659,9 @@ def main():
             nmask[k] |= 1 << combo_bits[sid]
     for k in np.where(nc_tp)[0]:
         nmask[k] |= 1 << combo_bits["tp"]
+    for tid in tps:
+        for k in np.where(nc_units[tid])[0]:
+            nmask[k] |= 1 << combo_bits[tid]
     combo_nc = collections.defaultdict(lambda: [0, 0.0, 0.0])
     for k, m in enumerate(nmask):
         if not m:

@@ -58,6 +58,8 @@ export type Catchment = {
 export type AdmElevator = {
   id: string;
   name: string;
+  /** The name as ADM delivered it, when SoyTrace fixed a typo or the casing. */
+  nameAsDelivered?: string;
   /** ADM's facility code. */
   code?: string | null;
   city: string | null;
@@ -93,6 +95,8 @@ export type ThirdParty = {
   radiusM: number;
   /** One of the 56 in IL, IA, MO, KY, MN, IN (earlier delivery; false since 7 Oct). */
   core: boolean;
+  /** Other third parties delivered at exactly the same point (same catchment, same figures). */
+  sameAs?: string[];
   /** Crushing plants this elevator delivers to; absent = not known (shown under all plants only). */
   plants?: string[];
   railMi: number;
@@ -365,10 +369,11 @@ export function inScope(scope: string | null, f: { flags: number; k?: string }):
  * The Summary's selection (the sidebar) is a list of catchment ids: none =
  * the whole chain; one or more are combined, each field counted once.
  * Members: <plant>40, <plant>80 (0–80 NM), <plant>80r (40–80 NM ring, alone),
- * adm<n> (ADM elevators), tp (all third parties) and tp<n> (one third party,
- * alone). The map's scope string is derived from it.
+ * adm<n> (ADM elevators), tp (all third parties) and tp<n> (one third party).
+ * Elevators and third parties combine with any plant: which plant they deliver
+ * to isn't known. The map's scope string is derived from the selection.
  */
-export const isExclusiveId = (id: string) => plantUnit(id)?.ring === "80r" || /^tp\d+$/.test(id);
+export const isExclusiveId = (id: string) => plantUnit(id)?.ring === "80r";
 
 /** The ADM elevator sites that have a catchment (one id per site). */
 export function admSiteIds(data: SupplyData): string[] {
@@ -397,7 +402,7 @@ export function statsKey(sel: string[], data: SupplyData): string | null {
   return null;
 }
 
-/** The map-safe scope for a selection (third parties are too many fields to draw with others). */
+/** The map-safe scope for a selection (all third parties together are too many fields to draw). */
 export function scopeForSel(sel: string[], data: SupplyData): string {
   const key = statsKey(sel, data);
   if (key) return key;
