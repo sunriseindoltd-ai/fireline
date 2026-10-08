@@ -110,6 +110,18 @@ for f in nc:
         area["na"] += a
 log(f"{nc_in} non-compliant fields inside catchments")
 
+# The county's own outline bounds (US Census layer from prepare-soy-boundaries.py), so the map can show the whole
+# county — its supply-chain fields may cover only the part inside a catchment.
+cbox = {}
+cpath = os.path.join(TENANT, "layers", "counties.geojson")
+if os.path.exists(cpath):
+    for f in json.load(open(cpath, encoding="utf-8"))["features"]:
+        p = f["properties"]
+        if f["geometry"]["type"] == "Point":
+            continue
+        bb = cbox.setdefault((p.get("s") or "", p.get("n") or ""), [180.0, 90.0, -180.0, -90.0])
+        bounds(f["geometry"], bb)
+
 # County files (rewritten from scratch so a renamed county leaves nothing behind).
 shutil.rmtree(OUT_DIR, ignore_errors=True)
 total_bytes = 0
@@ -129,6 +141,7 @@ for (st, co), c in sorted(counties.items()):
         "n": co, "file": rel if size else None, "bytes": size,
         "f": c["f"], "a": round(c["a"], 1), "nf": c["nf"], "na": round(c["na"], 1),
         "bbox": [round(v, 4) for v in c["bb"]],
+        **({"cbox": [round(v, 4) for v in cbox[(st, co)]]} if (st, co) in cbox else {}),
     })
 log(f"{sum(1 for c in counties.values() if c['feats']):,} county files, {total_bytes / 1e6:,.0f} MB (largest {biggest[1]} {biggest[0] / 1e6:.1f} MB)")
 

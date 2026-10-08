@@ -30,7 +30,7 @@ import {
   type Basis,
   type Catchment,
   type PlantBuffer,
-  type SupplyData, countyOf, stateName, areaStats, type SoyAreas
+  type SupplyData, countyOf, stateName, areaStats, type SoyAreas, type SoyAreaStats
 } from "@/lib/soy-supply";
 
 type StatusFilter = "all" | "ok" | "nc";
@@ -226,8 +226,9 @@ export function SoyMapView({
       );
     }
   }
-  // Whole supply chain + a state (no county): fit the map to the state.
-  const stateFit = levelOf(scope) === 1 && area.s && !area.n ? areaStats(areas, area.s)?.bbox : null;
+  // Whole supply chain + a state or a county: fit the map to it (a county to its own outline, not just its fields).
+  const fitArea = levelOf(scope) === 1 && area.s ? (areaStats(areas, area.s, area.n) as (SoyAreaStats & { cbox?: [number, number, number, number] }) | null) : null;
+  const stateFit = fitArea ? (fitArea.cbox ?? fitArea.bbox) : null;
   const fitKey = stateFit ? stateFit.join(",") : "";
   const [fitDone, setFitDone] = useState("");
   if (stateFit && fitKey !== fitDone) {
@@ -803,7 +804,7 @@ export function SoyMapView({
                     : null}
                 </select>
               </div>
-              {area.s ? <p className="soy-area-note">{fill(level === 1 && !area.n ? c.areaNoteState : c.areaNote, { area: areaName })}</p> : null}
+              {area.s ? <p className="soy-area-note">{fill(level === 1 ? (area.n ? c.areaNoteCounty : c.areaNoteState) : c.areaNote, { area: areaName })}</p> : null}
             </div>
           ) : null}
           {corridor ? <p className="panel-note soy-corr-purpose">{c.corrPurpose}</p> : null}

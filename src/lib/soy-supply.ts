@@ -441,7 +441,8 @@ export type SoyAreas = {
   version: number;
   fields: number;
   ncFields: number;
-  states: (SoyAreaStats & { s: string; counties: (SoyAreaStats & { n: string; file: string | null; bytes: number })[] })[];
+  /** cbox: the county's own outline bounds (bbox covers only its supply-chain fields). */
+  states: (SoyAreaStats & { s: string; counties: (SoyAreaStats & { n: string; file: string | null; bytes: number; cbox?: [number, number, number, number] })[] })[];
 };
 /** One state's or county's figures from areas.json (null when not there). */
 export function areaStats(areas: SoyAreas | null | undefined, s?: string, n?: string) {

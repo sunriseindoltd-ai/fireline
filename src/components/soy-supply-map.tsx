@@ -222,7 +222,7 @@ function bandColorExpr(basis: Basis) {
 /** Fit padding: the Layers card covers the map's left edge on a wide screen (Feedback 5, P1-7). */
 function fitPadding() {
   const wide = typeof window !== "undefined" && window.innerWidth > 900;
-  return wide ? { top: 40, bottom: 40, right: 40, left: 300 } : 30;
+  return wide ? { top: 40, bottom: 160, right: 40, left: 300 } : 30;
 }
 
 export function SoySupplyMap({
@@ -580,6 +580,15 @@ export function SoySupplyMap({
           layout: { visibility: "none" },
           paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.4, 10, 1] as never, "line-opacity": 0.55 },
         });
+        // The county picked in the area filter, outlined (its supply-chain fields may cover only part of it).
+        map.addLayer({
+          id: "county-sel",
+          type: "line",
+          source: "counties",
+          filter: ["==", ["get", "n"], "__none__"],
+          layout: { visibility: "none", "line-join": "round" },
+          paint: { "line-color": "#ffffff", "line-width": 3, "line-opacity": 0.95 },
+        });
         map.addLayer({
           id: "states-line",
           type: "line",
@@ -597,17 +606,26 @@ export function SoySupplyMap({
           filter: ["!=", ["get", "u"], "X"],
           paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 12, 4] as never, "line-opacity": 0.75 },
         });
+        // Active rail (FRA usage M / O) as solid lines — a dash pattern read as gaps zoomed out (user, 8 Oct 2026);
+        // abandoned track (X, left out of the distances) stays dashed and faint.
         map.addLayer({
           id: "rail",
           type: "line",
           source: "rail",
-          layout: { visibility: "none" },
+          layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
+          filter: ["!=", ["get", "u"], "X"],
           paint: {
             "line-color": RAIL_COLOR,
             "line-width": ["interpolate", ["linear"], ["zoom"], 4, ["match", ["get", "u"], "M", 1.6, 1], 8, ["match", ["get", "u"], "M", 2, 1.3], 12, ["match", ["get", "u"], "M", 2.6, 1.6]] as never, // prettier-ignore
-            "line-opacity": ["match", ["get", "u"], "X", 0.4, 1] as never,
-            "line-dasharray": [3, 2],
           },
+        });
+        map.addLayer({
+          id: "rail-x",
+          type: "line",
+          source: "rail",
+          layout: { visibility: "none" },
+          filter: ["==", ["get", "u"], "X"],
+          paint: { "line-color": RAIL_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.8, 12, 1.4] as never, "line-opacity": 0.45, "line-dasharray": [2, 2] },
         });
         map.addLayer({
           id: "tp-catch",
@@ -974,7 +992,8 @@ export function SoySupplyMap({
           const feats = area?.s ? allFeats.filter((f) => inArea(area, f)) : allFeats;
           shown = feats;
           const aKey = `${scope}|${area?.s ?? ""}|${area?.n ?? ""}`;
-          if (area?.s && aKey !== areaKey && feats.length) {
+          // (A county of the whole chain is fitted by Map & data, to the county's own outline.)
+          if (area?.s && !cf && aKey !== areaKey && feats.length) {
             let W = 180, E = -180, S = 90, N = -90; // prettier-ignore
             for (const f of feats) {
               const x = Number(f.properties._x), y = Number(f.properties._y); // prettier-ignore
@@ -1170,12 +1189,15 @@ export function SoySupplyMap({
     set(["direct-area", "ring-label"], on.rings && (group === "direct" || !!combo?.some((m) => isPlantUnit(m))));
     set(["adm", "adm-catch", "adm-label"], on.adm && (!group || group === "adm"));
     set(["tp", "tp-catch", "tp-label"], on.tp && (group ? group === "tp" : !combo));
-    set(["rail", "rail-casing"], on.rail);
+    set(["rail", "rail-casing", "rail-x"], on.rail);
     set(["rivers", "rivers-line"], on.rivers);
     set(["corridors"], on.corridors);
     set(["roads"], on.roads);
     set(["states-line", "states-label"], on.states);
     set(["counties-line", "counties-label"], on.counties);
+    set(["county-sel"], !!area?.n);
+    if (area?.n && map.getLayer("county-sel"))
+      map.setFilter("county-sel", ["all", ["!=", ["geometry-type"], "Point"], ["==", ["get", "s"], area.s ?? ""], ["==", ["get", "n"], area.n]] as never);
     set(["nlcd"], on.nlcd);
     set(["us-grid", "us-soy-fill", "us-soy-line"], on.us);
     // Only around a selection whose own fields are drawn (one catchment or a combination).
@@ -1188,7 +1210,7 @@ export function SoySupplyMap({
     for (const id of GRID_LAYERS)
       if (map.getLayer(id)) map.setPaintProperty(id, "fill-opacity", (on.us ? ["step", ["zoom"], gridOpacity, US_MIN_ZOOM, 0] : gridOpacity) as never);
     for (const r of REMOTE) {
-      const want = r === "national-grid" ? on.us : on[r];
+      const want = r === "national-grid" ? on.us : r === "counties" ? on.counties || !!area?.n : on[r];
       if (!want || remote[r] !== "idle") continue;
       const cached = remoteCache.get(r);
       if (cached) {
@@ -1206,7 +1228,7 @@ export function SoySupplyMap({
         })
         .catch(() => setRemote((s) => ({ ...s, [r]: "error" })));
     }
-  }, [on, ready, remote, selected, ncOutside, ncReview, fieldsShown]);
+  }, [on, ready, remote, selected, ncOutside, ncReview, fieldsShown, area?.s, area?.n]);
 
   // The NLCD year: swap the tile URL in place.
   useEffect(() => {
@@ -1293,7 +1315,7 @@ export function SoySupplyMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !focus) return;
-    if (focus.bbox) map.fitBounds(focus.bbox, { padding: 120, maxZoom: 14, duration: 700 });
+    if (focus.bbox) map.fitBounds(focus.bbox, { padding: fitPadding(), maxZoom: 14, duration: 700 });
     else if (focus.center) map.flyTo({ center: focus.center, zoom: focus.zoom ?? 14, duration: 700 });
   }, [focus?.nonce, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1304,7 +1326,7 @@ export function SoySupplyMap({
     setBasemap(map, basemap, DATA_FLOOR);
     const light = basemap === "osm";
     const ink = light ? "#1d1d1f" : "#ffffff";
-    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line", "states-line", "counties-line"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
+    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line", "states-line", "counties-line", "county-sel"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
     if (map.getLayer("direct-area")) {
       map.setPaintProperty("direct-area", "fill-color", ink);
       map.setPaintProperty("direct-area", "fill-opacity", light ? 0.07 : 0.14);
@@ -1391,7 +1413,7 @@ export function SoySupplyMap({
     rings: { label: c.keyRings, symbol: <><i className="dot" style={{ background: PLANT_COLOR }} /><i className="ln" /></> },
     adm: { label: c.keyAdm, symbol: <><i className="dot adm" /><i className="ln dash" /></> },
     tp: { label: c.keyTp, symbol: <><i className="dot" style={{ background: TP_COLOR }} /><i className="ln dash tp" /></> },
-    rail: { label: c.layerRail, symbol: <i className="ln" style={{ borderTopColor: RAIL_COLOR }} /> },
+    rail: { label: c.layerRail, symbol: <i className="ln" style={{ borderTopColor: RAIL_COLOR }} />, detail: <p className="soy-key-note">{c.railNote}</p> },
     rivers: { label: c.layerRivers, symbol: <i className="ln thick" style={{ borderTopColor: RIVER_COLOR }} /> },
     corridors: { label: c.layerCorridors, symbol: <i className="sq" style={{ background: "#dfe9f7" }} /> },
     roads: { label: c.layerRoads, symbol: <i className="ln road" /> },
