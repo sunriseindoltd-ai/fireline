@@ -934,14 +934,16 @@ def main():
     log(f"noncomply.geojson {nc_bytes / 1e6:.1f} MB")
 
     # ---------------------------------------------------------------- layers
-    # Rail is national; the map shows the lines within 25 km of a catchment.
+    # Rail is national, and so is the map layer: clipped to 25 km of a catchment, lines ended in mid-air at the
+    # edge of that zone (user, 8 Oct 2026). Loaded only when the layer is switched on (~25 MB, ~3 MB gzip).
     log("rail / river / corridor layers")
     region = shapely.buffer(shapely.union_all(np.concatenate([
         np.array([pl["_b80"] for pl in plants], dtype=object), np.array(list(adm_area.values()), dtype=object),
         np.array(list(tp_area.values()), dtype=object)])), 25000)
     in_region = shapely.intersects(rail_g, region)
-    rail_rows_r = [r for r, m in zip(rail_rows, in_region) if m]
-    rail_all = wgs(shapely.simplify(rail_g[in_region], 60), 4)
+    rail_rows_r = list(rail_rows)
+    rail_rows_zone = [r for r, m in zip(rail_rows, in_region) if m]  # network figures stay those of the catchment zone
+    rail_all = wgs(shapely.simplify(rail_g, 60), 4)
     rail_props = [{"u": r["railusage"], "n": clean(r["name"]), "d": clean(r["railsubdiv"])} for r in rail_rows_r]
     rb = write_fc(os.path.join(OUT, "layers", "rail.geojson"), rail_all, rail_props)
     # The river system is one huge polygon (thousands of holes): rounded to the
@@ -972,7 +974,7 @@ def main():
     log(f"grid.json {os.path.getsize(os.path.join(OUT, 'layers', 'grid.json')) / 1e6:.1f} MB, corridors.geojson {cb / 1e6:.1f} MB")
 
     # ----------------------------------------------------------- supply.json
-    rail_km = {u: round(float(sum(r["lengthkm"] or 0 for r in rail_rows_r if r["railusage"] == u))) for u in ("M", "O", "X")}
+    rail_km = {u: round(float(sum(r["lengthkm"] or 0 for r in rail_rows_zone if r["railusage"] == u))) for u in ("M", "O", "X")}
     for pl in plants:
         for k in [k for k in pl if k.startswith("_")]:
             del pl[k]
