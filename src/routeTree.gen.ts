@@ -23,6 +23,7 @@ import { Route as SoyRouteImport } from './routes/soy'
 import { Route as TentangRouteImport } from './routes/tentang'
 import { Route as AccessRequestsIndexRouteImport } from './routes/access-requests/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppFireRouteImport } from './routes/app/fire'
 import { Route as AppPortfolioRouteImport } from './routes/app/portfolio'
 import { Route as AppRequestsRouteImport } from './routes/app/requests'
 import { Route as AssistantIndexRouteImport } from './routes/assistant/index'
@@ -31,6 +32,11 @@ import { Route as CoverageIndexRouteImport } from './routes/coverage/index'
 import { Route as DataSplatRouteImport } from './routes/data/$'
 import { Route as DocsSplatRouteImport } from './routes/docs/$'
 import { Route as EudrSummaryIndexRouteImport } from './routes/eudr-summary/index'
+import { Route as FireIndexRouteImport } from './routes/fire/index'
+import { Route as FirePhotoRouteImport } from './routes/fire/photo'
+import { Route as FireReportsRouteImport } from './routes/fire/reports'
+import { Route as FireSubmitRouteImport } from './routes/fire/submit'
+import { Route as FireVerifyRouteImport } from './routes/fire/verify'
 import { Route as MarketSunrisePriceRouteImport } from './routes/market/sunrise-price'
 import { Route as SoyTractIndexRouteImport } from './routes/soy-tract/index'
 import { Route as SoyMethodRouteImport } from './routes/soy_.method'
@@ -112,6 +118,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppFireRoute = AppFireRouteImport.update({
+  id: '/fire',
+  path: '/fire',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppPortfolioRoute = AppPortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -150,6 +161,31 @@ const DocsSplatRoute = DocsSplatRouteImport.update({
 const EudrSummaryIndexRoute = EudrSummaryIndexRouteImport.update({
   id: '/eudr-summary/',
   path: '/eudr-summary/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireIndexRoute = FireIndexRouteImport.update({
+  id: '/fire/',
+  path: '/fire/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FirePhotoRoute = FirePhotoRouteImport.update({
+  id: '/fire/photo',
+  path: '/fire/photo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireReportsRoute = FireReportsRouteImport.update({
+  id: '/fire/reports',
+  path: '/fire/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireSubmitRoute = FireSubmitRouteImport.update({
+  id: '/fire/submit',
+  path: '/fire/submit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireVerifyRoute = FireVerifyRouteImport.update({
+  id: '/fire/verify',
+  path: '/fire/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MarketSunrisePriceRoute = MarketSunrisePriceRouteImport.update({
@@ -216,10 +252,15 @@ export interface FileRoutesByFullPath {
   '/palm': typeof PalmRoute
   '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
+  '/app/fire': typeof AppFireRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/requests': typeof AppRequestsRoute
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
+  '/fire/photo': typeof FirePhotoRoute
+  '/fire/reports': typeof FireReportsRoute
+  '/fire/submit': typeof FireSubmitRoute
+  '/fire/verify': typeof FireVerifyRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
   '/soy/method': typeof SoyMethodRoute
   '/access-requests/': typeof AccessRequestsIndexRoute
@@ -228,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/contact-request/': typeof ContactRequestIndexRoute
   '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
+  '/fire/': typeof FireIndexRoute
   '/soy-tract/': typeof SoyTractIndexRoute
   '/village-flows/': typeof VillageFlowsIndexRoute
   '/app/$group/data': typeof AppGroupDataRoute
@@ -249,10 +291,15 @@ export interface FileRoutesByTo {
   '/palm': typeof PalmRoute
   '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
+  '/app/fire': typeof AppFireRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/requests': typeof AppRequestsRoute
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
+  '/fire/photo': typeof FirePhotoRoute
+  '/fire/reports': typeof FireReportsRoute
+  '/fire/submit': typeof FireSubmitRoute
+  '/fire/verify': typeof FireVerifyRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
   '/soy/method': typeof SoyMethodRoute
   '/access-requests': typeof AccessRequestsIndexRoute
@@ -261,6 +308,7 @@ export interface FileRoutesByTo {
   '/contact-request': typeof ContactRequestIndexRoute
   '/coverage': typeof CoverageIndexRoute
   '/eudr-summary': typeof EudrSummaryIndexRoute
+  '/fire': typeof FireIndexRoute
   '/soy-tract': typeof SoyTractIndexRoute
   '/village-flows': typeof VillageFlowsIndexRoute
   '/app/$group/data': typeof AppGroupDataRoute
@@ -284,10 +332,15 @@ export interface FileRoutesById {
   '/palm': typeof PalmRoute
   '/soy': typeof SoyRoute
   '/tentang': typeof TentangRoute
+  '/app/fire': typeof AppFireRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/requests': typeof AppRequestsRoute
   '/data/$': typeof DataSplatRoute
   '/docs/$': typeof DocsSplatRoute
+  '/fire/photo': typeof FirePhotoRoute
+  '/fire/reports': typeof FireReportsRoute
+  '/fire/submit': typeof FireSubmitRoute
+  '/fire/verify': typeof FireVerifyRoute
   '/market/sunrise-price': typeof MarketSunrisePriceRoute
   '/soy_/method': typeof SoyMethodRoute
   '/access-requests/': typeof AccessRequestsIndexRoute
@@ -296,6 +349,7 @@ export interface FileRoutesById {
   '/contact-request/': typeof ContactRequestIndexRoute
   '/coverage/': typeof CoverageIndexRoute
   '/eudr-summary/': typeof EudrSummaryIndexRoute
+  '/fire/': typeof FireIndexRoute
   '/soy-tract/': typeof SoyTractIndexRoute
   '/village-flows/': typeof VillageFlowsIndexRoute
   '/app/$group/data': typeof AppGroupDataRoute
@@ -320,10 +374,15 @@ export interface FileRouteTypes {
     | '/palm'
     | '/soy'
     | '/tentang'
+    | '/app/fire'
     | '/app/portfolio'
     | '/app/requests'
     | '/data/$'
     | '/docs/$'
+    | '/fire/photo'
+    | '/fire/reports'
+    | '/fire/submit'
+    | '/fire/verify'
     | '/market/sunrise-price'
     | '/soy/method'
     | '/access-requests/'
@@ -332,6 +391,7 @@ export interface FileRouteTypes {
     | '/contact-request/'
     | '/coverage/'
     | '/eudr-summary/'
+    | '/fire/'
     | '/soy-tract/'
     | '/village-flows/'
     | '/app/$group/data'
@@ -353,10 +413,15 @@ export interface FileRouteTypes {
     | '/palm'
     | '/soy'
     | '/tentang'
+    | '/app/fire'
     | '/app/portfolio'
     | '/app/requests'
     | '/data/$'
     | '/docs/$'
+    | '/fire/photo'
+    | '/fire/reports'
+    | '/fire/submit'
+    | '/fire/verify'
     | '/market/sunrise-price'
     | '/soy/method'
     | '/access-requests'
@@ -365,6 +430,7 @@ export interface FileRouteTypes {
     | '/contact-request'
     | '/coverage'
     | '/eudr-summary'
+    | '/fire'
     | '/soy-tract'
     | '/village-flows'
     | '/app/$group/data'
@@ -387,10 +453,15 @@ export interface FileRouteTypes {
     | '/palm'
     | '/soy'
     | '/tentang'
+    | '/app/fire'
     | '/app/portfolio'
     | '/app/requests'
     | '/data/$'
     | '/docs/$'
+    | '/fire/photo'
+    | '/fire/reports'
+    | '/fire/submit'
+    | '/fire/verify'
     | '/market/sunrise-price'
     | '/soy_/method'
     | '/access-requests/'
@@ -399,6 +470,7 @@ export interface FileRouteTypes {
     | '/contact-request/'
     | '/coverage/'
     | '/eudr-summary/'
+    | '/fire/'
     | '/soy-tract/'
     | '/village-flows/'
     | '/app/$group/data'
@@ -424,6 +496,10 @@ export interface RootRouteChildren {
   TentangRoute: typeof TentangRoute
   DataSplatRoute: typeof DataSplatRoute
   DocsSplatRoute: typeof DocsSplatRoute
+  FirePhotoRoute: typeof FirePhotoRoute
+  FireReportsRoute: typeof FireReportsRoute
+  FireSubmitRoute: typeof FireSubmitRoute
+  FireVerifyRoute: typeof FireVerifyRoute
   MarketSunrisePriceRoute: typeof MarketSunrisePriceRoute
   SoyMethodRoute: typeof SoyMethodRoute
   AccessRequestsIndexRoute: typeof AccessRequestsIndexRoute
@@ -431,6 +507,7 @@ export interface RootRouteChildren {
   ContactRequestIndexRoute: typeof ContactRequestIndexRoute
   CoverageIndexRoute: typeof CoverageIndexRoute
   EudrSummaryIndexRoute: typeof EudrSummaryIndexRoute
+  FireIndexRoute: typeof FireIndexRoute
   SoyTractIndexRoute: typeof SoyTractIndexRoute
   VillageFlowsIndexRoute: typeof VillageFlowsIndexRoute
 }
@@ -535,6 +612,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/fire': {
+      id: '/app/fire'
+      path: '/fire'
+      fullPath: '/app/fire'
+      preLoaderRoute: typeof AppFireRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/portfolio': {
       id: '/app/portfolio'
       path: '/portfolio'
@@ -589,6 +673,41 @@ declare module '@tanstack/react-router' {
       path: '/eudr-summary'
       fullPath: '/eudr-summary/'
       preLoaderRoute: typeof EudrSummaryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/': {
+      id: '/fire/'
+      path: '/fire'
+      fullPath: '/fire/'
+      preLoaderRoute: typeof FireIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/photo': {
+      id: '/fire/photo'
+      path: '/fire/photo'
+      fullPath: '/fire/photo'
+      preLoaderRoute: typeof FirePhotoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/reports': {
+      id: '/fire/reports'
+      path: '/fire/reports'
+      fullPath: '/fire/reports'
+      preLoaderRoute: typeof FireReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/submit': {
+      id: '/fire/submit'
+      path: '/fire/submit'
+      fullPath: '/fire/submit'
+      preLoaderRoute: typeof FireSubmitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/verify': {
+      id: '/fire/verify'
+      path: '/fire/verify'
+      fullPath: '/fire/verify'
+      preLoaderRoute: typeof FireVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/market/sunrise-price': {
@@ -665,6 +784,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppFireRoute: typeof AppFireRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
   AppRequestsRoute: typeof AppRequestsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -677,6 +797,7 @@ interface AppRouteRouteChildren {
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppFireRoute: AppFireRoute,
   AppPortfolioRoute: AppPortfolioRoute,
   AppRequestsRoute: AppRequestsRoute,
   AppIndexRoute: AppIndexRoute,
@@ -707,6 +828,10 @@ const rootRouteChildren: RootRouteChildren = {
   TentangRoute: TentangRoute,
   DataSplatRoute: DataSplatRoute,
   DocsSplatRoute: DocsSplatRoute,
+  FirePhotoRoute: FirePhotoRoute,
+  FireReportsRoute: FireReportsRoute,
+  FireSubmitRoute: FireSubmitRoute,
+  FireVerifyRoute: FireVerifyRoute,
   MarketSunrisePriceRoute: MarketSunrisePriceRoute,
   SoyMethodRoute: SoyMethodRoute,
   AccessRequestsIndexRoute: AccessRequestsIndexRoute,
@@ -714,6 +839,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRequestIndexRoute: ContactRequestIndexRoute,
   CoverageIndexRoute: CoverageIndexRoute,
   EudrSummaryIndexRoute: EudrSummaryIndexRoute,
+  FireIndexRoute: FireIndexRoute,
   SoyTractIndexRoute: SoyTractIndexRoute,
   VillageFlowsIndexRoute: VillageFlowsIndexRoute,
 }

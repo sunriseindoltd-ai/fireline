@@ -16,6 +16,7 @@ export function AccountMenu({
   tenants,
   onSwitchTenant,
   showRequests,
+  showFire = false,
   canPresent,
   present,
   onPresent,
@@ -28,6 +29,8 @@ export function AccountMenu({
   tenants: readonly TenantInfo[];
   onSwitchTenant: (next: Tenant) => void;
   showRequests: boolean;
+  /** PalmTrace: the FireLine page (palm tenants). */
+  showFire?: boolean;
   canPresent: boolean;
   present: boolean;
   onPresent: (on: boolean) => void;
@@ -161,6 +164,11 @@ export function AccountMenu({
             </section>
           ) : null}
           <section>
+            {showFire ? (
+              <Link to="/app/fire" className="acct-item" role="menuitem" onClick={() => setOpen(false)}>
+                {t.fireNav}
+              </Link>
+            ) : null}
             {showRequests ? (
               <Link
                 to="/app/requests"

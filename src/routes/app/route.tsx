@@ -5,6 +5,7 @@ import { isSoyTenant } from "@/lib/tenants";
 import { Workspace } from "@/components/workspace";
 import { SoyWorkspace } from "@/components/soy-workspace";
 import { AccessRequestsPage } from "@/components/access-requests";
+import { FirePage } from "@/components/fire-page";
 
 /**
  * Layer 3 — the authenticated workspace shell. The workspace itself renders
@@ -33,6 +34,8 @@ function AppShell() {
   // The soy workspace has no mill roster/ledger — its own view, whatever the
   // child route (/app/portfolio etc. all land here).
   if (isSoyTenant(session.tenant)) return <SoyWorkspace role={session.role} tenant={session.tenant} />;
+  // FireLine (fire monitoring, one page for every group in scope).
+  if (pathname.startsWith("/app/fire")) return <FirePage role={session.role} tenant={session.tenant} />;
   return (
     <LedgerProvider>
       <Workspace role={session.role} tenant={session.tenant} />

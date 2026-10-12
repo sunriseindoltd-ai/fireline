@@ -7263,3 +7263,338 @@ td.soy-pl-share {
   background: #e4ecf7;
   color: #2f5790;
 }
+
+/* ---------------------------------------------------------------- FireLine */
+.fire-page {
+  display: grid;
+  gap: 20px;
+}
+.fire-intro {
+  max-width: 72ch;
+  margin-top: 6px;
+}
+.fire-meta {
+  margin: -8px 0 0;
+}
+.fire-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.fire-map-card .chart-head,
+.fire-list .chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.fire-map-card .chart-head h2,
+.fire-list .chart-head h2 {
+  font: 600 16px var(--font-display);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.fire-list .chart-head .muted {
+  color: var(--color-muted);
+  font-weight: 500;
+  margin-left: 4px;
+}
+.fire-map-wrap {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #0f172a;
+}
+.fire-map {
+  height: min(62vh, 560px);
+  min-height: 360px;
+}
+.fire-card {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: min(360px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+  padding: 16px 18px 18px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.fire-card h3 {
+  font: 600 16px var(--font-display);
+  margin: 6px 0 0;
+}
+.fire-card h4 {
+  font: 600 13px var(--font-display);
+  margin: 16px 0 6px;
+}
+.fire-card .muted {
+  color: var(--color-muted);
+  margin: 2px 0 0;
+}
+.fire-card-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--color-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.fire-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 12px 0 0;
+}
+.fire-facts dt {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.fire-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fire-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.fire-reports {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.fire-reports li {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-line);
+}
+.fire-reports li p {
+  margin: 0;
+}
+.fire-reports img {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+.fire-tools {
+  padding: 0 0 12px;
+}
+.fire-tools select,
+.fire-tools input[type="search"] {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: inherit;
+  min-width: 160px;
+}
+.fire-tools input[type="search"] {
+  flex: 1 1 220px;
+}
+.fire-table td small {
+  display: block;
+  color: var(--color-muted);
+  font-size: 12px;
+  margin-top: 2px;
+  max-width: 28ch;
+  overflow-wrap: anywhere;
+}
+.fire-table td b {
+  font-weight: 600;
+}
+.fire-table tbody tr {
+  cursor: pointer;
+}
+.fire-table tbody tr.selected td {
+  background: var(--color-bg-2);
+}
+.fire-table th.num,
+.fire-table td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+.fire-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+.fire-actions {
+  white-space: nowrap;
+}
+.fire-actions .btn-secondary.small,
+.fire-card-actions .small,
+.btn-text.small {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.fire-actions .btn-text.small {
+  margin-left: 6px;
+}
+
+/* Field verification page (phone first) */
+body:has(.fv-page) {
+  background: var(--color-bg-2);
+}
+.fv-page {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+  display: grid;
+  gap: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.fv-page h1 {
+  font: 600 22px var(--font-display);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.fv-page .fv-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.fv-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-soft);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+.fv-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+.fv-card dt {
+  color: var(--color-muted);
+}
+.fv-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.fv-form {
+  display: grid;
+  gap: 14px;
+}
+.fv-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 500;
+}
+.fv-form input[type="text"],
+.fv-form textarea {
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.fv-status {
+  display: grid;
+  gap: 8px;
+}
+.fv-status label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+}
+.fv-status label:has(input:checked) {
+  border-color: var(--color-fg);
+  background: var(--color-surface);
+}
+.fv-status input {
+  width: 18px;
+  height: 18px;
+}
+.fv-photo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1.5px dashed var(--color-line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+}
+.fv-photo-btn input {
+  display: none;
+}
+.fv-preview {
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+.fv-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fv-page .btn-primary.block {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+}
+.fv-done {
+  text-align: center;
+  display: grid;
+  gap: 12px;
+  padding: 24px 0;
+}
+.fv-prev {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.fv-prev li {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-line);
+}
+.fire-list .table-scroll {
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+.fire-table {
+  min-width: 1080px;
+}
+.fire-table td {
+  white-space: normal;
+  vertical-align: top;
+}
+.fire-table td small {
+  word-break: break-word;
+}
+.fire-table td:first-child,
+.fire-table td.num,
+.fire-table td.fire-actions {
+  white-space: nowrap;
+}

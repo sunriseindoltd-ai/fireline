@@ -738,6 +738,7 @@ export function Workspace({ role, tenant }: { role: GateRole; tenant: Tenant }) 
               tenants={role === "admin" ? TENANTS : role === "viewer" ? TENANTS.filter((tn) => tn.commodity === "palm") : []}
               onSwitchTenant={(next) => void switchTenant(next)}
               showRequests={role === "admin"}
+              showFire={tenant === "adm"}
               canPresent={canPresent}
               present={present}
               onPresent={setPresent}
