@@ -4,7 +4,9 @@
  * ingest lands (prepare-plots → prepare-eudr-stats → upload:plots) — it is
  * the cut-off date clients see under the EUDR figures.
  */
-export const DATA_AS_OF = "2026-10-06";
+export const DATA_AS_OF = "2026-10-09";
+/** ADM's soybean delivery (ADM_Facilities.gdb) behind SoyTrace. */
+export const SOY_DATA_AS_OF = "2026-10-07";
 
 /** The JRC export behind private-data/forest (scripts/prepare-forest-cover.mjs). */
 export const JRC_LAYER = {

@@ -3,6 +3,7 @@ import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 
 import { KpiTile } from "@/components/kpi-tile";
 import { BufferSeg, SoyPlants, SoyRelated, type SidePlant } from "@/components/soy-side";
 import { SoyNationalView, type SoyNational } from "@/components/soy-national";
+import { soyNavCopy } from "@/lib/soy-nav-copy";
 import { loadNonCompliant, type SoyFeature } from "@/components/soy-supply-map";
 import type { OtherPlant } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
@@ -94,7 +95,7 @@ export { placeOf };
 export const tpLabel = tpName;
 
 /** The largest states, the rest folded into one "other states" row. */
-function topStates(rows: { state: string; fields: number }[], n: number) {
+export function topStates(rows: { state: string; fields: number }[], n: number) {
   const sorted = [...rows].sort((a, b) => b.fields - a.fields);
   if (sorted.length <= n + 1) return sorted.map((r) => ({ ...r, n: 1 }));
   const rest = sorted.slice(n);
@@ -105,7 +106,7 @@ function topStates(rows: { state: string; fields: number }[], n: number) {
 }
 
 /** ADM's non-compliant fields, loaded when a combination needs them. */
-function useNcFeatures(enabled: boolean) {
+export function useNcFeatures(enabled: boolean) {
   const [nc, setNc] = useState<SoyFeature[] | null>(null);
   useEffect(() => {
     if (!enabled) return;
@@ -210,7 +211,7 @@ function useCatchments(data: SupplyData) {
   return useMemo(() => new Map(data.catchments.map((k) => [k.id, k])), [data]);
 }
 
-function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: SoyCopy; lang: Lang }) {
+export function CropCharts({ k, c, sc, lang }: { k: Catchment; c: SoySupplyCopy; sc: SoyCopy; lang: Lang }) {
   const countF = (n: number) => formatCount(n, lang);
   return (
     <div className="chart-grid soy-charts">
@@ -509,7 +510,7 @@ export function SoySupplyView({ data, c, sc, lang, present, onOpenMap, national,
 
             <FacilityTable data={data} catchments={catchments} c={c} lang={lang} scope={key ?? "all"} setScope={(id) => setSel(idsFromScope(id, data))} plant={plant} buffer={buffer} setBuffer={setBuffer} />
 
-            {national && key === "all" ? <SoyNationalView nat={national} data={data} c={c} lang={lang} /> : null}
+            {national && key === "all" ? <SoyNationalView nat={national} data={data} c={c} nav={soyNavCopy[lang]} lang={lang} /> : null}
 
             {k ? (
               <CropCharts k={k} c={c} sc={sc} lang={lang} />
@@ -534,7 +535,7 @@ function csvCell(v: unknown) {
 
 /** ADM's ask: compliant vs non-compliant polygons for the whole supply chain
  * and per facility (each crushing plant and every elevator). */
-function FacilityTable({
+export function FacilityTable({
   data,
   catchments,
   c,
@@ -544,6 +545,9 @@ function FacilityTable({
   plant,
   buffer,
   setBuffer,
+  initialKind = "all",
+  hideChain = false,
+  tall = true,
 }: {
   data: SupplyData;
   catchments: Map<string, Catchment>;
@@ -555,8 +559,13 @@ function FacilityTable({
   plant?: Plant;
   buffer: PlantBuffer;
   setBuffer: (b: PlantBuffer) => void;
+  /** The facility pages open the table on one kind (ADM elevators, third parties). */
+  initialKind?: "all" | FacilityKind;
+  hideChain?: boolean;
+  /** Scroll inside the card (Downloads tab); the list pages show every row. */
+  tall?: boolean;
 }) {
-  const [kind, setKind] = useState<"all" | FacilityKind>("all");
+  const [kind, setKind] = useState<"all" | FacilityKind>(initialKind);
   const [query, setQuery] = useState("");
   const countF = (n: number) => formatCount(n, lang);
   const acF = (n: number) => formatAcres(n, lang);
@@ -570,7 +579,7 @@ function FacilityTable({
   }));
   // Elevators and third parties are listed with any plant: which plant they deliver to isn't known.
   const rows: { id: string; kind: FacilityKind; name: string; place: string; sub?: boolean }[] = [
-    ...(plant ? [] : [{ id: "all", kind: "chain" as const, name: c.scopeAll, place: fill(c.chainSub, { p: data.plants.length, a: data.admElevators.filter((e) => e.radiusM).length, t: data.thirdParty.length }) }]),
+    ...(plant || hideChain ? [] : [{ id: "all", kind: "chain" as const, name: c.scopeAll, place: fill(c.chainSub, { p: data.plants.length, a: data.admElevators.filter((e) => e.radiusM).length, t: data.thirdParty.length }) }]),
     ...plantRows,
     ...data.admElevators
       .filter((e) => e.radiusM)
@@ -627,7 +636,7 @@ function FacilityTable({
         </label>
         <BufferSeg value={buffer} onChange={setBuffer} c={c} label={c.bufferLabel} />
       </div>
-      <div className="soy-table-wrap tall">
+      <div className={`soy-table-wrap ${tall ? "tall" : ""}`}>
         <table className="data-table soy-table soy-fac-table">
           <thead>
             <tr>
@@ -679,7 +688,7 @@ function FacilityTable({
 
 type ComboRowProps = { label: string; t: ComboTotals | null; cls?: string; onOpen?: () => void; expanded?: boolean; lang: Lang };
 
-function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps) {
+export function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps) {
   if (!t) return null;
   const p = pct(t.ncAcres, t.acres + t.ncAcres);
   return (
@@ -707,7 +716,7 @@ function ComboRow({ label, t, cls = "", onOpen, expanded, lang }: ComboRowProps)
   );
 }
 
-function ComboHead({ c }: { c: SoySupplyCopy }) {
+export function ComboHead({ c }: { c: SoySupplyCopy }) {
   return (
     <thead>
       <tr>
@@ -768,7 +777,7 @@ function ComboParts({ data, c, lang, parts }: { data: SupplyData; c: SoySupplyCo
 
 /** Below the per-catchment rows: the non-compliant fields in the row's scope
  * (2025 land use, states) and the way to the map. */
-function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; ids: string[]; onMap: () => void }) {
+export function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; ids: string[]; onMap: () => void }) {
   const [nc, setNc] = useState<SoyFeature[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -843,10 +852,30 @@ function ComboDetail({ c, lang, ids, onMap }: { c: SoySupplyCopy; lang: Lang; id
   );
 }
 
+/** The scope rows as bars (compliant acres), plain HTML so every label keeps its line on a phone too. */
+function ComboChart({ rows, lang }: { rows: { key: string; label: string; t: ComboTotals | null }[]; lang: Lang }) {
+  const dataRows = rows.filter((r) => r.t).map((r) => ({ key: r.key, label: r.label, acres: r.t!.acres }));
+  if (!dataRows.length) return null;
+  const max = Math.max(...dataRows.map((r) => r.acres), 1);
+  return (
+    <ul className="soy-hbars soy-combo-chart" aria-hidden="true">
+      {dataRows.map((r) => (
+        <li key={r.key}>
+          <span className="soy-hbar-label">{r.label}</span>
+          <span className="soy-hbar-track">
+            <i style={{ width: `${Math.max(1.5, (r.acres / max) * 100)}%`, background: FIELD_COLOR }} />
+          </span>
+          <span className="soy-hbar-value tabular-nums">{formatAcres(r.acres, lang)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The user's ask: statistics for the plants' 0–40 / 0–80 NM catchments, all
  * ADM elevators, their combinations and third parties; a row opens it on the
  * map. With one plant chosen: that plant's rings only. */
-function ComboTable({
+export function ComboTable({
   data,
   c,
   lang,
@@ -901,6 +930,7 @@ function ComboTable({
         </div>
         <BufferSeg value={buffer} onChange={setBuffer} c={c} label={c.bufferLabel} />
       </div>
+      <ComboChart rows={presets.map(([key, label, ids]) => ({ key, label, t: comboTotals(data, ids) }))} lang={lang} />
       <div className="soy-table-wrap">
         <table className="data-table soy-table soy-combo-table">
           <ComboHead c={c} />
@@ -938,15 +968,17 @@ function ComboTable({
 /** Data & method: where the figures come from and how they are built. */
 const CHANGES = ["P0-2", "P0-3", "P0-4", "P1-1", "P1-2", "P1-3", "P1-4", "P1-5", "P1-6", "P1-7", "P1-8", "P2-2", "P2-3", "P2-4", "TRACT"] as const;
 
-export function SoyDocsView({ data, c, lang, present, onOpenArchive }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; present: boolean; onOpenArchive?: () => void }) {
+export function SoyDocsView({ data, c, lang, present, onOpenArchive, headless = false }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; present: boolean; onOpenArchive?: () => void; headless?: boolean }) {
   return (
     <>
-      <div className="summary-head">
-        <div>
-          <h1>{c.docsTitle}</h1>
-          <p className="summary-sub">{c.docsIntro}</p>
+      {headless ? null : (
+        <div className="summary-head">
+          <div>
+            <h1>{c.docsTitle}</h1>
+            <p className="summary-sub">{c.docsIntro}</p>
+          </div>
         </div>
-      </div>
+      )}
       <section className="chart-card supply-notes supply-wide">
         <h3>{c.docsSources}</h3>
         <ul>
@@ -955,6 +987,7 @@ export function SoyDocsView({ data, c, lang, present, onOpenArchive }: { data: S
           <li>{c.docsSource3}</li>
           <li>{c.docsSource4}</li>
           <li>{c.docsSource5}</li>
+          <li>{c.docsSource6}</li>
         </ul>
       </section>
       <section className="chart-card supply-notes supply-wide">
@@ -973,9 +1006,7 @@ export function SoyDocsView({ data, c, lang, present, onOpenArchive }: { data: S
         <h3>{c.changesTitle}</h3>
         <ul className="soy-changes">
           {CHANGES.map((id) => (
-            <li key={id}>
-              <b>{id}</b> {c[`chg_${id.replace("-", "_")}` as keyof SoySupplyCopy] as string}
-            </li>
+            <li key={id}>{c[`chg_${id.replace("-", "_")}` as keyof SoySupplyCopy] as string}</li>
           ))}
         </ul>
       </section>
@@ -1006,7 +1037,7 @@ function tractIds(sel: string[], data: SupplyData): string[] {
  * GeoJSON for TRACT / TRACES: one file (or a few parts) per ticked facility
  * with its EUDR-compliant soybean fields, downloaded straight from storage.
  */
-function TractDialog({ data, c, lang, sel, onClose }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; sel: string[]; onClose: () => void }) {
+export function TractDialog({ data, c, lang, sel, onClose }: { data: SupplyData; c: SoySupplyCopy; lang: Lang; sel: string[]; onClose: () => void }) {
   const ids = tractIds(sel, data);
   const files = data.tract!.files;
   const all = ids.flatMap((id) => files[id]!.parts.map(([p]) => [id, p] as const));

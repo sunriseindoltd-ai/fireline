@@ -44,7 +44,7 @@ const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice(7) ?? null
 const KEEP_STALE = process.argv.includes("--keep-stale") || !!ONLY;
 const V2 = process.argv.includes("--v2");
 // Mirrors SOY_V2 in src/lib/kanopi-data.server.ts.
-const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/counties\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/)/;
+const SOY_V2 = /^(fields\/units\/|fields\/tract\/|fields\/counties\/|fields\/places\/|fields\/noncomply\.geojson$|layers\/(rail|rivers|corridors|national-grid)\.geojson$|layers\/grid\.json$|layers\/national\/|layers\/nlcd\/|layers\/cousub\/)/;
 
 const {
   R2_ADM_SOY_ACCOUNT_ID: account,

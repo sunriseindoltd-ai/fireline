@@ -6168,3 +6168,1098 @@ html.soy-report-open body {
     grid-column: 1 / -1;
   }
 }
+
+/* ---------- SoyTrace drill-down layout (9 Oct 2026): Overview, facility page, NC page, Data ---------- */
+.kpi-row.soy-kpis4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .kpi-row.soy-kpis4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .kpi-row.soy-kpis4 {
+    grid-template-columns: 1fr;
+  }
+}
+.soy-ov-section {
+  margin-top: 26px;
+}
+.soy-ov-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.soy-ov-head h2 {
+  margin: 0;
+  font: 600 16px var(--font-display);
+  letter-spacing: -0.01em;
+}
+.soy-ov-head p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.soy-plant-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.soy-plant-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.soy-plant-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-line);
+}
+.soy-plant-card:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+.soy-plant-card.pending {
+  cursor: default;
+  color: var(--color-muted);
+}
+.soy-plant-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.soy-plant-top b {
+  font: 600 15px var(--font-display);
+}
+.soy-plant-loc {
+  color: var(--color-muted);
+  font-size: 12.5px;
+  margin-top: -4px;
+}
+.soy-plant-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.soy-plant-row b {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.soy-plant-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: rgb(201 105 94 / 0.25);
+  overflow: hidden;
+}
+.soy-plant-bar i {
+  display: block;
+  height: 100%;
+  background: #1f8a4c;
+}
+.soy-nc-pill {
+  display: inline-block;
+  font: 600 11px var(--font-sans);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(201 105 94 / 0.14);
+  color: #8f3a31;
+  white-space: nowrap;
+  font-style: normal;
+}
+.soy-nc-pill.none,
+.soy-nc-pill.soft {
+  background: var(--color-bg-2);
+  color: var(--color-muted);
+}
+.soy-nc-pill.warn {
+  background: #fff3d1;
+  color: #7a5200;
+  margin-left: 6px;
+}
+.soy-ov-two,
+.soy-fac-two {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 14px;
+  margin-top: 26px;
+}
+.soy-fac-two {
+  margin-top: 0;
+  margin-bottom: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .soy-ov-two,
+  .soy-fac-two {
+    grid-template-columns: 1fr;
+  }
+}
+.soy-ov-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.soy-ov-list li + li {
+  border-top: 1px solid var(--color-line-soft);
+}
+.soy-ov-list button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.soy-ov-list button:hover {
+  color: var(--color-brand);
+}
+.soy-ov-list button small {
+  color: var(--color-muted);
+}
+.soy-ov-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.soy-ov-nc {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 18px;
+  align-items: center;
+}
+.soy-ov-nc h2 {
+  margin: 0 0 4px;
+  font: 600 16px var(--font-display);
+}
+.soy-ov-nc-n {
+  font: 600 32px var(--font-display);
+  letter-spacing: -0.02em;
+  color: #b3261e;
+}
+.soy-ov-nc-parts {
+  margin: 0;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.soy-ov-nc-parts b {
+  color: var(--color-fg);
+}
+@media (max-width: 640px) {
+  .soy-ov-nc {
+    grid-template-columns: 1fr;
+  }
+}
+.soy-ov-map .soy-map.compact,
+.soy-fac-map .soy-map.compact {
+  height: clamp(340px, 48vh, 520px);
+}
+.soy-page-crumbs {
+  margin-bottom: 10px;
+}
+.soy-page-crumbs em {
+  font-style: normal;
+  color: var(--color-muted);
+}
+.soy-fac-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.soy-fac-nc-list button b.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.soy-fac-nc-sub {
+  display: block;
+  color: var(--color-muted);
+}
+.soy-fac-nc-list .soy-ov-right {
+  white-space: normal;
+  text-align: right;
+}
+.soy-fac-dl {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.soy-fac-dl .chart-note {
+  margin: 0;
+}
+.soy-fac-combine > summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font: 600 15px var(--font-display);
+  list-style: none;
+}
+.soy-fac-combine > summary::-webkit-details-marker {
+  display: none;
+}
+.soy-fac-combine > summary::before {
+  content: "\25B8";
+  margin-right: 8px;
+  color: var(--color-muted);
+}
+.soy-fac-combine[open] > summary::before {
+  content: "\25BE";
+}
+.soy-fac-combine > summary b {
+  font: 500 13px var(--font-sans);
+  color: var(--color-brand);
+}
+.soy-fac-combine .soy-related {
+  position: static;
+  max-height: none;
+  margin-top: 10px;
+}
+.soy-fac-combo-kpis {
+  margin: 12px 0;
+}
+.soy-fac-combine .btn-primary {
+  margin-top: 10px;
+}
+.soy-fac-page .soy-charts {
+  margin-bottom: 16px;
+}
+
+/* Data page */
+.soy-data-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.soy-data-cards .chart-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.soy-data-cards .chart-card h3 {
+  margin: 0;
+}
+.soy-data-cards .chart-note {
+  margin: 0;
+}
+.soy-data-cards .soy-fac-dl {
+  margin-top: 4px;
+}
+.soy-anchor {
+  position: relative;
+  top: calc(-1 * var(--header-h) - 12px);
+  height: 0;
+}
+.soy-data-page .supply-wide {
+  margin-bottom: 16px;
+}
+.acct-item-rich {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.acct-item-rich small {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+/* Map modes (9 Oct 2026): one theme at a time above the layer list */
+.soy-modes {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+}
+.soy-modes button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: 500 12.5px var(--font-sans);
+  padding: 0 11px;
+  min-height: 26px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.soy-modes button.on {
+  background: var(--color-fg);
+  color: #fff;
+}
+.soy-key-fac {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.soy-key-fac span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.soy-key-fac i.dot {
+  width: 8px;
+  height: 8px;
+}
+
+/* Phone: the in-view card has no room beside the layers panel */
+@media (max-width: 700px) {
+  .soy-inview {
+    display: none;
+  }
+  .soy-modes {
+    max-width: calc(100vw - 48px);
+    flex-wrap: wrap;
+  }
+}
+
+/* Map tab: folded tools under the figures */
+.soy-map-fold > summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font: 600 13px var(--font-sans);
+  list-style: none;
+  padding: 8px 0;
+}
+.soy-map-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.soy-map-fold > summary::after {
+  content: "+";
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.soy-map-fold[open] > summary::after {
+  content: "\2212";
+}
+.soy-map-fold > summary b {
+  font-weight: 500;
+  color: var(--color-brand);
+  text-align: right;
+}
+.soy-area.soy-map-fold {
+  border-top: 1px solid var(--color-line-soft);
+  padding-top: 4px;
+}
+.soy-area-clear {
+  margin-bottom: 6px;
+}
+
+/* Map tab: the assistant launcher sits over the map, not over the side panel's downloads */
+@media (min-width: 901px) {
+  .app[data-product="soy"]:has(.soy-mapview) .assistant-launch {
+    right: 400px;
+    bottom: 40px;
+  }
+}
+
+/* TRACT picker (Data tab inline, facility page dialog) */
+.tract-card-wide {
+  width: min(960px, calc(100vw - 32px));
+}
+.tract-picker .tract-tools {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.tract-picker .search-field {
+  flex: 1;
+  min-width: 200px;
+}
+.tract-quick {
+  display: flex;
+  gap: 12px;
+}
+.tract-picker .tract-table {
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--color-line-soft);
+  border-radius: 10px;
+}
+.tract-picker .tract-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 1;
+}
+.tract-tick {
+  width: 34px;
+}
+.tract-tick input {
+  accent-color: var(--color-brand);
+  margin: 0;
+}
+.tract-name {
+  border: 0;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.tract-picker tr.on td {
+  background: var(--color-brand-soft);
+}
+.tract-picker .tract-parts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.tract-picker .tract-parts a {
+  font-size: 12px;
+  padding: 3px 9px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-fg);
+  text-decoration: none;
+  background: var(--color-surface);
+}
+.tract-files .btn-text {
+  white-space: nowrap;
+}
+.tract-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tract-foot > div {
+  min-width: 0;
+  flex: 1;
+}
+.tract-sum {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+.soy-tract-section {
+  margin-bottom: 16px;
+}
+.soy-data-kpis {
+  margin-bottom: 18px;
+}
+.soy-combo-chart {
+  margin: 4px 0 10px;
+}
+/* The map panel's combination fold: the summary wraps instead of overflowing */
+.soy-map-combine > summary b {
+  overflow-wrap: anywhere;
+}
+
+/* Non-compliant page, restyled after PalmTrace's group summary (10 Oct 2026) */
+.soy-nc-charts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+@media (max-width: 1100px) {
+  .soy-nc-charts {
+    grid-template-columns: 1fr;
+  }
+}
+.soy-nc-list {
+  padding: 0;
+}
+.soy-nc-list > .soy-fac-head {
+  padding: 18px 20px 6px;
+}
+.soy-nc-count {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+.soy-nc-tools {
+  padding: 8px 20px 12px;
+  flex-wrap: wrap;
+}
+.soy-nc-tools .seg button small {
+  margin-left: 4px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.soy-nc-tools .search-field {
+  flex: 1;
+  min-width: 200px;
+}
+.soy-select {
+  font: 500 13px var(--font-sans);
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  max-width: 260px;
+}
+.soy-nc-list .table-wrap {
+  overflow-x: auto;
+}
+.soy-nc-table th:first-child,
+.soy-nc-table td:first-child {
+  padding-left: 20px;
+}
+.soy-nc-table td.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  max-width: 170px;
+}
+.soy-nc-table td.truncate {
+  max-width: 220px;
+}
+.soy-nc-table td.soy-nc-catch {
+  max-width: 300px;
+  color: var(--color-fg-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.soy-nc-table td.soy-nc-catch small {
+  color: var(--color-muted);
+}
+.soy-nc-table .soy-nc-go {
+  width: 64px;
+  text-align: right;
+  padding-right: 20px;
+  color: var(--color-brand);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.soy-nc-table tbody tr {
+  cursor: pointer;
+}
+.soy-nc-list .table-pager {
+  padding: 10px 20px 14px;
+}
+
+/* Horizontal bars in plain HTML (Non-compliant page: land cover before) */
+.soy-hbars {
+  list-style: none;
+  margin: 8px 0 4px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.soy-hbars li {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.4fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 12.5px;
+}
+.soy-hbar-label {
+  color: var(--color-fg-2);
+  text-align: right;
+  line-height: 1.25;
+}
+.soy-hbar-track {
+  display: block;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--color-bg-2);
+  overflow: hidden;
+}
+.soy-hbar-track i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.soy-hbar-value {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* Data tab: the US crop section and the compact downloads row (10 Oct 2026) */
+.soy-national {
+  margin-bottom: 16px;
+}
+.soy-national .soy-fac-head h3 {
+  font: 600 20px var(--font-display);
+  letter-spacing: -0.02em;
+  margin: 2px 0 6px;
+}
+.soy-nat-kpis {
+  margin: 14px 0 18px;
+}
+.soy-nat-chart h4 {
+  margin: 0;
+  font: 600 14px var(--font-sans);
+}
+.soy-nat-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 14px;
+}
+.soy-nat-key i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.soy-nat-key i.rest,
+.soy-hbar-track i.rest {
+  background: #dfe3e8;
+}
+.soy-nat-bars {
+  gap: 8px;
+}
+.soy-nat-bars li {
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+}
+.soy-hbar-track.stacked {
+  position: relative;
+  background: transparent;
+}
+.soy-hbar-track.stacked i {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.soy-hbar-value small {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+.soy-nat-more {
+  margin-top: 16px;
+  border-top: 1px solid var(--color-line-soft);
+  padding-top: 10px;
+}
+.soy-nat-more > summary {
+  cursor: pointer;
+  font: 500 13px var(--font-sans);
+  color: var(--color-brand);
+  list-style: none;
+}
+.soy-nat-more > summary::-webkit-details-marker {
+  display: none;
+}
+.soy-nat-more > summary::before {
+  content: "\25B8";
+  margin-right: 6px;
+}
+.soy-nat-more[open] > summary::before {
+  content: "\25BE";
+}
+.soy-nat-more .soy-charts {
+  margin-top: 12px;
+}
+.soy-dl-row {
+  margin-bottom: 16px;
+}
+.soy-dl-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.soy-dl-item {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--color-line-soft);
+  border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+}
+.soy-dl-item:hover {
+  border-color: var(--color-line);
+  background: var(--color-bg-2);
+}
+.soy-dl-item b {
+  font-weight: 600;
+}
+.soy-dl-item span {
+  font-size: 12.5px;
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+.soy-dl-item em {
+  font-style: normal;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-brand);
+  margin-top: 4px;
+}
+
+/* Facility page: the combination picker sits between the figures and the map */
+.soy-fac-combine {
+  margin-bottom: 14px;
+}
+.soy-fac-combine > summary b.muted {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.soy-fac-one {
+  margin-bottom: 16px;
+}
+/* Facility page picker: a scrolling list, not a page-long one; the title stays left */
+.soy-fac-combine > summary > span {
+  flex: 1;
+}
+.soy-fac-combine .soy-related {
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 0 4px 0 0;
+}
+.soy-fac-combine .soy-side-toggle,
+.soy-fac-combine .side-summary {
+  display: none;
+}
+.soy-fac-combine .soy-side-body {
+  display: block;
+  margin-top: 0;
+}
+
+/* Map tab: the way back to the Overview */
+.soy-back-overview {
+  margin: 14px 16px 0;
+  width: calc(100% - 32px);
+  justify-content: center;
+  font-weight: 600;
+}
+/* Facility page: the combination's figures */
+.soy-fac-combo-stats {
+  margin: 12px 0 6px;
+}
+.soy-fac-combo-stats h4 {
+  margin: 0 0 8px;
+  font: 600 14px var(--font-sans);
+}
+/* Places page */
+.soy-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-fg-2);
+}
+.soy-check input {
+  accent-color: var(--color-brand);
+  margin: 0;
+}
+.soy-places-table th:first-child,
+.soy-places-table td:first-child {
+  padding-left: 20px;
+}
+.soy-places-table td b {
+  font-weight: 600;
+}
+.soy-places-table td .soy-cell-sub {
+  font-size: 11.5px;
+}
+.soy-pl-type {
+  color: var(--color-muted);
+  font-size: 12.5px;
+  text-transform: capitalize;
+}
+.soy-pl-share {
+  min-width: 150px;
+}
+td.soy-pl-share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.soy-pl-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-bg-2);
+  overflow: hidden;
+  min-width: 70px;
+}
+.soy-pl-bar i {
+  display: block;
+  height: 100%;
+}
+.soy-places-table tbody tr {
+  cursor: pointer;
+}
+.soy-places-note {
+  padding: 0 20px 16px;
+}
+
+/* Places tab at the US level: the national section leads, the state table follows */
+.soy-places .soy-national {
+  margin-bottom: 16px;
+}
+
+/* ---------- QA round 1 (10 Oct 2026): phone layouts ---------- */
+@media (max-width: 700px) {
+  /* nothing may push the page wider than the phone */
+  .soy-page {
+    overflow-x: clip;
+  }
+  /* KPI tiles: no empty space below the figure */
+  .soy-kpis4 .kpi,
+  .soy-nat-kpis .kpi {
+    min-height: 0;
+  }
+  /* Overview lists: the figures drop under the label instead of squeezing it */
+  .soy-ov-list button {
+    flex-wrap: wrap;
+    padding: 10px 2px;
+  }
+  .soy-ov-list button > span:first-child {
+    flex: 1 1 100%;
+  }
+  .soy-ov-right {
+    white-space: normal;
+    margin-left: auto;
+  }
+  /* national bars: label above the bar, value beside it */
+  .soy-nat-bars li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "label label" "bar value";
+    row-gap: 3px;
+  }
+  .soy-nat-bars .soy-hbar-label {
+    grid-area: label;
+    text-align: left;
+  }
+  .soy-nat-bars .soy-hbar-track {
+    grid-area: bar;
+  }
+  .soy-nat-bars .soy-hbar-value {
+    grid-area: value;
+    font-size: 12px;
+  }
+  .soy-nat-bars .soy-hbar-value small {
+    display: block;
+  }
+  .soy-hbars li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "label label" "bar value";
+  }
+  .soy-hbars .soy-hbar-label {
+    grid-area: label;
+    text-align: left;
+  }
+  .soy-hbars .soy-hbar-track {
+    grid-area: bar;
+  }
+  .soy-hbars .soy-hbar-value {
+    grid-area: value;
+  }
+  /* TRACT picker: the summary above the button, not beside it */
+  .tract-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tract-foot .btn-primary {
+    width: 100%;
+  }
+  .tract-picker .tract-tools .seg {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  /* places page: the share bar needs less room */
+  .soy-pl-share {
+    min-width: 110px;
+  }
+  .soy-pl-bar {
+    min-width: 40px;
+  }
+  /* the combination's figures and other wide tables scroll inside their card */
+  .soy-fac-combo-stats .soy-table-wrap,
+  .soy-combo-chart {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+/* The floating "Ask the data" button must not cover a page's last row */
+.app[data-product="soy"] .page.soy-page {
+  padding-bottom: 96px;
+}
+
+/* Statistics by scope: bars above the table */
+.soy-combo-chart li {
+  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.6fr) auto;
+}
+@media (max-width: 700px) {
+  .soy-combo-chart li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+/* ---------- QA round 5: keyboard focus on every clickable SoyTrace element ---------- */
+.app[data-product="soy"] button:focus-visible,
+.app[data-product="soy"] a:focus-visible,
+.app[data-product="soy"] [tabindex="0"]:focus-visible,
+.app[data-product="soy"] summary:focus-visible,
+.app[data-product="soy"] select:focus-visible,
+.app[data-product="soy"] input:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+.app[data-product="soy"] .data-table tbody tr[tabindex]:focus-visible td {
+  background: var(--color-brand-soft);
+}
+.app[data-product="soy"] .data-table tbody tr[tabindex]:focus-visible {
+  outline: none;
+}
+/* The combo and places summaries read as buttons */
+.soy-fac-combine > summary:hover,
+.soy-nat-more > summary:hover,
+.soy-map-fold > summary:hover {
+  color: var(--color-brand);
+}
+
+/* ---------- QA round 10: phone map ---------- */
+@media (max-width: 700px) {
+  /* the status toast sits under the tool cards, not on top of the mode switcher */
+  .supply-map .soy-map-status {
+    top: auto;
+    bottom: 64px;
+    max-width: calc(100% - 24px);
+    font-size: 12px;
+  }
+  /* the basemap chip leaves the attribution line free */
+  .soy-basemap-chip {
+    bottom: 44px;
+  }
+  .soy-modes {
+    max-width: calc(100vw - 110px);
+  }
+}
+@media (max-width: 700px) {
+  /* the toast sits to the right of the basemap chip, above the attribution */
+  .supply-map .soy-map-status {
+    left: auto;
+    right: 12px;
+    transform: none;
+    bottom: 58px;
+    max-width: calc(100% - 190px);
+  }
+}
+
+/* Places layer (11 Oct 2026): popup actions, choropleth legend */
+.soy-pop-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.soy-pop-acts .soy-pop-btn {
+  margin-top: 8px;
+}
+.soy-pop-place .soy-pop-v {
+  font-variant-numeric: tabular-nums;
+}
+.soy-chor {
+  margin-bottom: 4px;
+}
+.soy-chor-legend {
+  margin: 2px 0 2px 22px;
+}
+.soy-chor-ramp {
+  display: flex;
+  margin: 4px 0 2px;
+  height: 8px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.soy-chor-ramp i {
+  flex: 1;
+}
+.soy-chor-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 4px;
+  font-size: 10px;
+  color: var(--color-muted);
+}
+.soy-chor-none {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 2px;
+  vertical-align: -1px;
+  border: 1px dashed #8e8e93;
+  border-radius: 2px;
+}
+/* The Layers panel never outgrows the map (townships + choropleth legend made it tall): the tools column
+   is a flex column capped to the map's height, and the panel is the one child allowed to shrink and scroll. */
+.soy-map-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-height: calc(100% - 24px);
+}
+.soy-map-tools > * {
+  flex: 0 0 auto;
+}
+.soy-map-tools > .soy-layers {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* A map popup sits above the tools column (on a phone the two overlap). */
+.soy-map .maplibregl-popup {
+  z-index: 3;
+}
+/* Hover tip on the Places layer: the place's name under the pointer. */
+.soy-map .maplibregl-popup.soy-tip {
+  z-index: 2;
+  pointer-events: none;
+}
+.soy-map .soy-tip .maplibregl-popup-content {
+  padding: 6px 9px;
+  border-radius: 8px;
+  font: 500 12px/1.3 var(--font-sans);
+  color: var(--color-fg);
+}
+.soy-map .soy-tip .maplibregl-popup-content span {
+  display: block;
+  font-weight: 400;
+  color: var(--color-muted);
+}
+.soy-map .soy-tip .maplibregl-popup-tip {
+  display: none;
+}
+/* Field table: compliant field outside every catchment (a place's file). */
+.soy-status.out {
+  background: #e4ecf7;
+  color: #2f5790;
+}

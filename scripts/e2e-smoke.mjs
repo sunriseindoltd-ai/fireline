@@ -349,6 +349,37 @@ async function main() {
   check("Admin can switch back to ADM", back.body?.length === admMills.body.length, `n=${back.body?.length}`);
 
   await page.close();
+  // SoyTrace (9 Oct 2026 layout): the client lands on the Overview with one card per crushing
+  // plant; a card opens that plant's page; the Map tab carries the mode switcher.
+  try {
+    const soyCsv = readFileSync(path.join(process.cwd(), "artifacts", "akun-adm-soy.csv"), "utf8");
+    const soyRow = soyCsv.split(/\r?\n/).find((l) => l.includes(",adm-soy-1,"));
+    const [, , soyUser, soyPass] = soyRow.split(",");
+    const sp = await browser.newPage();
+    await loginAs(sp, { user: soyUser, pass: soyPass });
+    await sp.evaluate(() => {
+      localStorage.setItem("soytrace.tab4", JSON.stringify("overview"));
+      localStorage.setItem("soytrace.page", JSON.stringify("home"));
+    });
+    await sp.reload({ waitUntil: "networkidle" });
+    await sp.waitForSelector(".soy-plant-card", { timeout: 60000 });
+    const cards = await sp.$$eval(".soy-plant-card:not(.pending)", (c) => c.length);
+    check("SoyTrace Overview lists the four crushing plants", cards === 4, `cards=${cards}`);
+    const tabs = await sp.$$eval(".app-tabs button", (b) => b.map((x) => x.textContent.trim()));
+    check("SoyTrace header has six tabs", tabs.length === 6, tabs.join(" · "));
+    await sp.click(".soy-plant-card:has-text('Quincy')");
+    await sp.waitForSelector(".soy-fac-page h1", { timeout: 30000 });
+    const h1 = await sp.textContent(".soy-fac-page h1");
+    check("A plant card opens the plant's page", /Quincy/.test(h1 ?? ""), h1 ?? "");
+    await sp.click(".app-tabs button:nth-child(2)");
+    await sp.waitForSelector(".soy-modes", { timeout: 60000 });
+    const modes = await sp.$$eval(".soy-modes button", (b) => b.length);
+    check("Map tab shows the four map modes", modes === 4, `modes=${modes}`);
+    await sp.close();
+  } catch (err) {
+    check("SoyTrace Overview checks ran", false, String(err).slice(0, 160));
+  }
+
   await browser.close();
 
   const failed = results.filter((r) => !r.pass);

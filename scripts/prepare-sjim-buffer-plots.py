@@ -34,7 +34,11 @@ are rebuilt on every run. NOTE: rebuild-sjim-mills.mjs resets the mills.json
 rows from the SJIM workbook — re-run this script after it.
 Afterwards: prepare-eudr-stats.mjs, then upload the 6 mill ids to R2.
 
-Usage: python scripts/prepare-sjim-buffer-plots.py
+Mill baru: tambahkan ke TARGETS (+ COORDS kalau tidak ada di UML.xlsx) lalu jalankan
+dengan --only <uml>[,<uml>] — tanpa --only SEMUA mill dibangun ulang dan PlotID 6 mill
+yang sudah di TRACT bisa bergeser.
+
+Usage: python scripts/prepare-sjim-buffer-plots.py [--only 800000000078]
 Needs shapely + pyproj + openpyxl (system Python).
 """
 import glob
@@ -69,7 +73,13 @@ TARGETS = [
     "PO1000006188",  # BUMI JAYA
     "PO1000017677",  # JAMERAS
     "PO1000004107",  # MUARATOYU SUBUR LESTARI
+    "800000000078",  # SINAR RANDU INDAH (9 Okt; non-UML, koordinat dari user)
 ]
+# Koordinat dari user untuk mill yang tidak ada di UML.xlsx — ditulis ke
+# mills.json di akhir (rebuild-sjim-mills.mjs tidak tahu koordinat ini).
+COORDS = {
+    "800000000078": (-4.331106, 105.213407),  # PT SINAR RANDU INDAH, Lampung (user, 9 Okt 2026)
+}
 
 geod = Geod(ellps="WGS84")
 
@@ -134,8 +144,11 @@ def main():
     with open(MILLS, encoding="utf-8") as fh:
         mills = json.load(fh)
     targets = {}
-    for uml in TARGETS:
+    only = sys.argv[sys.argv.index("--only") + 1].split(",") if "--only" in sys.argv else TARGETS
+    for uml in only:
         rows = [m for m in mills if m["group"] == "SJIM" and m["umlId"] == uml]
+        if len(rows) == 1 and uml in COORDS:
+            rows[0]["lat"], rows[0]["lon"] = COORDS[uml]
         if len(rows) != 1 or not rows[0].get("lat") or not rows[0].get("lon"):
             sys.exit(f"{uml}: expected one SJIM row with coordinates in mills.json")
         m = rows[0]
@@ -153,7 +166,11 @@ def main():
 
     # Scan every other plot file once.
     t = time.time()
-    files = [f for f in sorted(glob.glob(os.path.join(PLOTS, "*.geojson"))) if "__AGROJAYA__" not in f]
+    # Plot mill buffer lain = salinan re-ID, bukan sumber.
+    buffer_ids = {m["id"] for m in mills if m["group"] == "SJIM" and m["umlId"] in TARGETS}
+    # KTN (sejak 6 Okt) = analisis milik KTN, skema lain -> tidak dipakai.
+    files = [f for f in sorted(glob.glob(os.path.join(PLOTS, "*.geojson")))
+             if "__AGROJAYA__" not in f and "__KTN__" not in f and not any(os.path.basename(f).startswith(t + ".") for t in buffer_ids)]
     refinery_codes = {}  # SJIM crusher name -> plot `Refinery` code (e.g. "SBIM")
     for f in files:
         with open(f, encoding="utf-8") as fh:
@@ -274,7 +291,8 @@ def main():
         summary.append([m["millName"], m["umlId"], m["lat"], m["lon"],
                         sum(len(h["src"]) for h in t_["hits"].values()), len(t_["full"]),
                         len(t_["full"]) - len(kept), len(kept)])
-    wb.save(os.path.join(OUT, "Mapping PlotID SJIM Buffer 20 km.xlsx"))
+    suffix = "" if only == TARGETS else f" ({'+'.join(only)})"
+    wb.save(os.path.join(OUT, f"Mapping PlotID SJIM Buffer 20 km{suffix}.xlsx"))
 
     # mills.json traceability.
     for m in mills:

@@ -45,8 +45,24 @@ def rounded(geom):
     return json.loads(json.dumps(mapping(geom)), parse_float=lambda x: round(float(x), 5))
 
 
+def place_stats():
+    """places.json (scripts/prepare-soy-places.py): the supply-chain figures per state and county,
+    embedded in the outlines so a click on the map reads them (11 Oct 2026)."""
+    path = os.path.join(ROOT, "private-data", "tenants", "adm-soy", "places.json")
+    if not os.path.exists(path):
+        return {}, {}
+    places = json.load(open(path, encoding="utf-8"))
+    st = {s["s"]: {k: s[k] for k in FIELDS} for s in places["states"]}
+    co = {(s["s"], c["n"]): {k: c[k] for k in FIELDS} for s in places["states"] for c in s["counties"]}
+    return st, co
+
+
+FIELDS = ("cf", "ca", "cif", "cia", "nf", "na", "nif", "nia")
+
+
 def build(kind, name, label_of, state_of):
     zp = fetch(name)
+    st_stats, co_stats = place_stats()
     feats = []
     with fiona.open(f"zip://{zp}") as src:
         for f in src:
@@ -57,7 +73,8 @@ def build(kind, name, label_of, state_of):
             g = shape(f["geometry"])
             g = shapely.simplify(g, TOLERANCE[kind], preserve_topology=True)
             props = {"n": label_of(p), "s": st}
-            feats.append({"type": "Feature", "properties": props, "geometry": rounded(g)})
+            stats = st_stats.get(st) if kind == "state" else co_stats.get((st, props["n"]))
+            feats.append({"type": "Feature", "properties": {**props, **(stats or dict.fromkeys(FIELDS, 0))}, "geometry": rounded(g)})
             pt = g.representative_point()
             feats.append({"type": "Feature", "properties": {**props, "label": True}, "geometry": {"type": "Point", "coordinates": [round(pt.x, 4), round(pt.y, 4)]}})
     out = os.path.join(OUT_DIR, {"state": "states.geojson", "county": "counties.geojson"}[kind])

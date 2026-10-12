@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BASEMAPS, BASEMAP_ORDER, DEFAULT_BASEMAP, basemapStyle, setBasemap, type BasemapId } from "@/components/chain-map";
+import { BASEMAPS, BASEMAP_ORDER, basemapStyle, setBasemap, type BasemapId } from "@/components/chain-map";
+import { soyNavCopy } from "@/lib/soy-nav-copy";
 import type { Lang } from "@/lib/copy";
 import { fill, formatAcres, formatCount, formatHa } from "@/lib/format";
 import { SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyGroupOf } from "@/lib/soy-copy";
@@ -29,6 +30,8 @@ import {
   levelOf,
   ringRadius,
   scopeBounds,
+  stateName,
+  countyOf,
   unitParts,
   type Band,
   type Basis,
@@ -65,14 +68,46 @@ export type ScopeFields = {
   areas?: Record<string, Record<string, number>>;
 };
 /** A state (and optionally one of its counties) the selection is narrowed to. */
-export type SoyArea = { s?: string; n?: string };
+export type SoyArea = { s?: string; n?: string; sub?: string; bbox?: [number, number, number, number] };
 const inArea = (area: SoyArea | undefined, f: SoyFeature) =>
-  !area?.s || (f.properties.s === area.s && (!area.n || f.properties.n === area.n));
+  !area?.s ||
+  (f.properties.s === area.s && (!area.n || f.properties.n === area.n) && (!area.sub || f.properties.sub === undefined || f.properties.sub === area.sub));
+/** A compliant field outside every catchment (a place's file, prepare-soy-place-fields.py): blue, apart from the chain's green. */
+export const OUT_CATCH_COLOR = "#7f9bbf";
+const OUT_EDGE = "#3f6396";
+const outsideCatch = ["==", ["coalesce", ["get", "k"], "x"], ""];
 /** Another crushing plant shown as a point while its catchments are prepared. */
 export type OtherPlant = { id: string; name: string; address?: string | null; lat: number; lon: number };
 export type MapFocus = { bbox?: [[number, number], [number, number]]; center?: [number, number]; zoom?: number; nonce: number };
 
-type LayerKey = "fields" | "outside" | "us" | "nc" | "rings" | "plants" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "nlcd";
+type LayerKey = "fields" | "outside" | "us" | "nc" | "rings" | "plants" | "adm" | "tp" | "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "cousub" | "chor" | "nlcd";
+/** A county or county subdivision of the Places layer: the outline's properties carry the supply-chain
+ * figures of places.json (scripts/prepare-soy-boundaries.py, prepare-soy-cousub.py). */
+export type PlaceProps = { s: string; co?: string; n: string; t?: string; cf: number; ca: number; cif: number; cia: number; nf: number; na: number; nif: number; nia: number };
+export type PlacePick = { s: string; n?: string; sub?: string };
+/** Share of a place's soybean acres inside a catchment, as a green ramp (choropleth, off by default). */
+// Blue, so it reads apart from the green fields / density cells and the red non-compliant marks.
+const CHOR_STEPS: [number, string][] = [[0, "#eaf2fb"], [0.2, "#c6dcf2"], [0.4, "#93bde6"], [0.6, "#5b97d3"], [0.8, "#2a6fbf"]];
+const chorColor = ["case", ["<=", ["coalesce", ["get", "ca"], 0], 0], "rgba(0,0,0,0)", ["step", ["/", ["get", "cia"], ["get", "ca"]], CHOR_STEPS[0]![1], ...CHOR_STEPS.slice(1).flat()]] as never;
+const cousubCache = new Map<string, FC>();
+const cousubInflight = new Map<string, Promise<FC>>();
+/** One state's subdivisions, fetched once (a 404 = a state without soybean fields → empty). */
+function loadCousub(st: string): Promise<FC> {
+  const hit = cousubCache.get(st);
+  if (hit) return Promise.resolve(hit);
+  let pr = cousubInflight.get(st);
+  if (!pr) {
+    pr = fetch(`/data/layers/cousub/${st}.geojson`)
+      .then((res) => (res.ok ? (res.json() as Promise<FC>) : res.status === 404 ? EMPTY : Promise.reject(new Error(String(res.status)))))
+      .then((fc) => {
+        cousubCache.set(st, fc);
+        return fc;
+      })
+      .finally(() => cousubInflight.delete(st));
+    cousubInflight.set(st, pr);
+  }
+  return pr;
+}
 type Remote = "rail" | "rivers" | "corridors" | "roads" | "states" | "counties" | "national-grid";
 const REMOTE: Remote[] = ["rail", "rivers", "corridors", "roads", "states", "counties", "national-grid"];
 // All US soybean fields (USDA CSB 2025, scripts/prepare-soy-national-tiles.py): vector tiles from zoom 10,
@@ -88,9 +123,27 @@ const outsideOpacity = (v: number) => ["case", ["boolean", ["feature-state", "ow
 const US_GRID_ACRES = [220, 1100, 2200, 4400, 7700];
 let pmtilesProtocol = false;
 const DEFAULTS: Record<SupplyMapMode, Record<LayerKey, boolean>> = {
-  supply: { fields: true, outside: true, us: false, nc: true, rings: true, plants: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, states: true, counties: false, nlcd: false },
-  corridor: { fields: true, outside: true, us: false, nc: false, rings: true, plants: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, states: true, counties: false, nlcd: false },
+  supply: { fields: true, outside: true, us: false, nc: true, rings: true, plants: true, adm: true, tp: true, rail: false, rivers: false, corridors: false, roads: false, states: true, counties: false, cousub: false, chor: false, nlcd: false },
+  corridor: { fields: true, outside: true, us: false, nc: false, rings: true, plants: true, adm: true, tp: true, rail: true, rivers: true, corridors: true, roads: false, states: true, counties: false, cousub: false, chor: false, nlcd: false },
 };
+/** Map modes (9 Oct 2026 layout): one theme at a time instead of fifteen layer rows. Facilities,
+ * catchments and state lines are always on; each mode offers a few toggles of its own. */
+export type MapTheme = "comp" | "log" | "land" | "ctx";
+export const MAP_THEMES: MapTheme[] = ["comp", "log", "land", "ctx"];
+const ALWAYS: LayerKey[] = ["rings", "adm", "tp", "plants", "states"];
+const THEMES: Record<MapTheme, { on: LayerKey[]; offer: LayerKey[] }> = {
+  comp: { on: ["fields", "outside", "nc"], offer: ["fields", "nc", "outside", "counties", "cousub"] },
+  log: { on: ["fields", "outside", "rail", "rivers", "corridors"], offer: ["fields", "rail", "rivers", "corridors", "outside"] },
+  land: { on: ["nlcd", "fields"], offer: ["nlcd", "fields", "counties", "cousub"] },
+  ctx: { on: ["fields", "counties"], offer: ["fields", "us", "counties", "cousub", "roads", "nc"] },
+};
+function themeOn(theme: MapTheme): Record<LayerKey, boolean> {
+  const keys = Object.keys(DEFAULTS.supply) as LayerKey[];
+  const set = new Set<LayerKey>([...ALWAYS, ...THEMES[theme].on]);
+  return Object.fromEntries(keys.map((k) => [k, set.has(k)])) as Record<LayerKey, boolean>;
+}
+/** Esri imagery by default (user, 10 Oct 2026); the light map stays a choice. */
+const SOY_DEFAULT_BASEMAP: BasemapId = "esri";
 const DATA_FLOOR = ["nlcd", "direct-area", "grid", "corridors", "rivers", "fields"];
 // Soybean density: coarse cells in supply.json, finer ones (layers/grid.json)
 // take over as the map zooms in.
@@ -131,6 +184,25 @@ export function loadCounty(file: string): Promise<SoyFeature[]> {
       for (const f of fc.features) addCenter(f);
       countyCache.set(file, fc.features);
       return fc.features;
+    });
+}
+
+const placeCache = new Map<string, { ok: SoyFeature[]; nc: SoyFeature[] }>();
+/** Every 2025 soybean field of one county (fields/places/<ST>/<county>.geojson, scripts/prepare-soy-place-fields.py):
+ * compliant ones with k = catchments ("" = outside every catchment), and ADM's listed ones (nc = 1). */
+export function loadPlace(file: string): Promise<{ ok: SoyFeature[]; nc: SoyFeature[] }> {
+  const hit = placeCache.get(file);
+  if (hit) return Promise.resolve(hit);
+  return fetch(`/data/fields/places/${file.split("/").map(encodeURIComponent).join("/")}.geojson`)
+    .then((res) => (res.ok ? (res.json() as Promise<FC>) : Promise.reject(new Error(String(res.status)))))
+    .then((fc) => {
+      const out = { ok: [] as SoyFeature[], nc: [] as SoyFeature[] };
+      for (const f of fc.features) {
+        addCenter(f);
+        (f.properties.nc ? out.nc : out.ok).push(f);
+      }
+      placeCache.set(file, out);
+      return out;
     });
 }
 
@@ -220,7 +292,55 @@ function bandColorExpr(basis: Basis) {
  * fields by distance.
  */
 /** Fit padding: the Layers card covers the map's left edge on a wide screen (Feedback 5, P1-7). */
-function fitPadding() {
+/** Room for the side panel, the layer card and the in-view card; a compact map (inside a page) has none of them. */
+
+/** The Places layer's popup: the place's figures (places.json) and ways on. */
+function placeHtml(p: PlaceProps, kind: "county" | "sub", cc: SoySupplyCopy, l: Lang, opt: { canFilter: boolean; filtered: boolean; canPlaces: boolean; level: number }) {
+  const st = stateName(p.s);
+  const kicker = kind === "sub" ? [p.t || cc.popPlace, [countyOf(p.co, p.s), st].filter(Boolean).join(", ")].join(" · ") : `${cc.popCounty} · ${st}`;
+  const title = kind === "sub" ? p.n : (countyOf(p.n, p.s) ?? p.n);
+  const empty = p.cf + p.nf === 0;
+  const fieldsN = (n: number) => fill(cc.fieldsN, { n: formatCount(n, l) });
+  const body = empty
+    ? `<p class="soy-pop-note">${esc(cc.popNoFields)}</p>`
+    : `${row(cc.popAllSoy, `${formatAcres(p.ca, l)} · ${fieldsN(p.cf)}`)}
+       ${row(cc.popInChain, p.cif ? `${formatAcres(p.cia, l)} · ${fieldsN(p.cif)} · ${formatSharePct(pct(p.cia, p.ca), l)} ${cc.popOfPlace}` : "—")}
+       ${row(cc.popNcPlace, `${formatCount(p.nif, l)} / ${formatCount(p.nf, l)}`)}`;
+  const acts = [
+    `<button type="button" class="soy-pop-btn" data-act="zoom">${esc(cc.popZoom)}</button>`,
+    opt.canPlaces ? `<button type="button" class="soy-pop-btn" data-act="places">${esc(cc.popPlaces)}</button>` : "",
+    // Whole supply chain (level 1): every field of the place, in and outside catchments. One catchment (level 3): narrow it to the county.
+    opt.canFilter && (opt.level === 1 || kind === "county") && !opt.filtered && !empty ? `<button type="button" class="soy-pop-btn" data-act="filter">${esc(opt.level === 1 ? cc.popShowFields : cc.popFilterCounty)}</button>` : "",
+    opt.canFilter && opt.filtered ? `<button type="button" class="soy-pop-btn" data-act="clear">${esc(cc.popClearFilter)}</button>` : "",
+  ].join("");
+  return `<div class="soy-pop soy-pop-place"><p class="soy-pop-kicker">${esc(kicker)}</p><p class="soy-pop-title">${esc(title)}</p>${body}<div class="soy-pop-acts">${acts}</div></div>`;
+}
+/** The states whose outline box meets the view (the states layer is always loaded; boxes cached once). */
+let stateBoxes: [string, number, number, number, number][] | null = null;
+function statesInView(map: import("maplibre-gl").Map): string[] {
+  if (!stateBoxes) {
+    const fc = remoteCache.get("states");
+    if (!fc) return [];
+    stateBoxes = [];
+    for (const f of fc.features) {
+      if (f.geometry.type === "Point") continue;
+      const b = bboxOf(f.geometry as SoyFeature["geometry"]);
+      if (b) stateBoxes.push([String(f.properties.s), b[0][0], b[0][1], b[1][0], b[1][1]]);
+    }
+  }
+  const v = map.getBounds();
+  const W = v.getWest(), S = v.getSouth(), E = v.getEast(), N = v.getNorth(); // prettier-ignore
+  return stateBoxes.filter(([, w, s, e, n]) => w <= E && e >= W && s <= N && n >= S).map(([st]) => st);
+}
+/** The whole outline of a place (a rendered hit is clipped to its tile). */
+function findPlace(map: import("maplibre-gl").Map | null, kind: "county" | "sub", p: PlaceProps): SoyFeature | null {
+  if (!map) return null;
+  const fc = kind === "sub" ? cousubCache.get(p.s) : remoteCache.get("counties");
+  const f = fc?.features.find((x) => x.geometry.type !== "Point" && x.properties.s === p.s && x.properties.n === p.n && (kind === "county" || x.properties.co === p.co));
+  return (f as SoyFeature | undefined) ?? null;
+}
+function fitPadding(compact = false) {
+  if (compact) return 24;
   const wide = typeof window !== "undefined" && window.innerWidth > 900;
   return wide ? { top: 40, bottom: 160, right: 40, left: 300 } : 30;
 }
@@ -240,6 +360,7 @@ export function SoySupplyMap({
   onScopeFields,
   area,
   countyFile = null,
+  placeFile = null,
   selectedField,
   onSelectField,
   focus,
@@ -248,6 +369,11 @@ export function SoySupplyMap({
   otherPlants = [],
   ncReview = false,
   setNcReview = () => {},
+  compact = false,
+  theme = "comp",
+  setTheme,
+  onOpenPlace,
+  onPickArea,
 }: {
   data: SupplyData;
   mode: SupplyMapMode;
@@ -265,6 +391,8 @@ export function SoySupplyMap({
   area?: SoyArea;
   /** Whole supply chain + one county: that county's field file (fields are drawn as for one catchment). */
   countyFile?: string | null;
+  /** Whole supply chain + one county / township: every 2025 field of the county (fields/places/), in and outside catchments. */
+  placeFile?: string | null;
   selectedField?: string | null;
   onSelectField?: (f: SoyFeature | null) => void;
   focus?: MapFocus | null;
@@ -276,6 +404,15 @@ export function SoySupplyMap({
   /** Feedback 5 (P0-2): show only ADM-listed fields that were already cropland in 2018–2020. */
   ncReview?: boolean;
   setNcReview?: (on: boolean) => void;
+  /** A small map inside a page (Overview, facility page): no layers panel, basemap chip or in-view card. */
+  compact?: boolean;
+  /** The map mode (Compliance / Logistics / Land cover / Context); the view holds it. */
+  theme?: MapTheme;
+  setTheme?: (t: MapTheme) => void;
+  /** Places layer: open a clicked county / subdivision in the Places tab. */
+  onOpenPlace?: (p: PlacePick) => void;
+  /** Places layer: narrow the map to a clicked county (the area filter), or clear it. */
+  onPickArea?: (a: SoyArea) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Feedback 5 (P0-3): ADM-listed fields outside every catchment are hidden unless asked for.
@@ -286,10 +423,17 @@ export function SoySupplyMap({
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
   const popupRef = useRef<import("maplibre-gl").Popup | null>(null);
   const [ready, setReady] = useState(false);
-  const [bmStored, setBm] = usePersistentState<BasemapId>("soytrace.basemap", DEFAULT_BASEMAP);
-  const basemap: BasemapId = bmStored in BASEMAPS ? bmStored : DEFAULT_BASEMAP;
+  const [bmStored, setBm] = usePersistentState<BasemapId>("soytrace.basemap", SOY_DEFAULT_BASEMAP);
+  const basemap: BasemapId = bmStored in BASEMAPS ? bmStored : SOY_DEFAULT_BASEMAP;
   const [bmOpen, setBmOpen] = useState(false);
-  const [on, setOn] = useState<Record<LayerKey, boolean>>(DEFAULTS[mode]);
+  const [on, setOn] = useState<Record<LayerKey, boolean>>(() => themeOn(theme));
+  // A new mode starts from its own preset.
+  const themeSeen = useRef(theme);
+  if (themeSeen.current !== theme) {
+    themeSeen.current = theme;
+    setOn(themeOn(theme));
+  }
+  const navc = soyNavCopy[lang];
   const [remote, setRemote] = useState<Record<Remote, "idle" | "loading" | "ready" | "error">>({
     rail: "idle",
     rivers: "idle",
@@ -301,19 +445,25 @@ export function SoySupplyMap({
   });
   // ADM's ask: in the area zoomed in, the soybean acreage and the
   // compliant / non-compliant shares of it.
-  const [inView, setInView] = useState<{ total: number; ncAcres: number; ncFields: number; approx: boolean; one: boolean } | null>(null);
+  const [inView, setInView] = useState<{ total: number; outAcres: number; ncAcres: number; ncFields: number; approx: boolean; one: boolean } | null>(null);
   const [unitState, setUnitState] = useState<{ level: number; loading: boolean; failed: boolean }>({ level: 1, loading: false, failed: false });
-  const [layersOpen, setLayersOpen] = useState(true);
+  const [layersOpen, setLayersOpen] = useState(false);
   const [nlcdStored, setNlcdYear] = usePersistentState<NlcdYear>("soytrace.nlcdYear", NLCD_YEARS[0]);
   const nlcdYear: NlcdYear = (NLCD_YEARS as readonly string[]).includes(nlcdStored) ? nlcdStored : NLCD_YEARS[0];
   useEffect(() => {
     if (window.matchMedia("(max-width: 640px)").matches) setLayersOpen(false);
   }, []);
   const [ncLoaded, setNcLoaded] = useState<FC | null>(ncCache);
-  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area, countyFile });
-  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area, countyFile };
+  const live = useRef({ data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area, countyFile, placeFile, compact, onOpenPlace, onPickArea });
+  live.current = { data, onSelect, cdlNames, catchments, c, lang, on, selected, onScopeFields, onSelectField, ncLoaded, area, countyFile, placeFile, compact, onOpenPlace, onPickArea };
+  // The Places layer (11 Oct 2026): county subdivisions come one file per state, for the states in view.
+  const [cousubState, setCousubState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const cousubHave = useRef(new Set<string>());
+  const [viewTick, setViewTick] = useState(0);
+  const openRef = useRef<(lngLat: [number, number], html: string, onAct?: (act: string) => void) => void>(() => undefined);
+  const autoPop = useRef("");
   // Fields are drawn for one catchment / combination, or for one county of the whole chain.
-  const fieldsShown = levelOf(selected) === 3 || !!countyFile;
+  const fieldsShown = levelOf(selected) === 3 || !!countyFile || !!placeFile;
   const refreshRef = useRef<() => void>(() => undefined);
 
   // ------------------------------------------------------------------ build
@@ -332,7 +482,7 @@ export function SoySupplyMap({
         container: containerRef.current,
         style: basemapStyle(basemap) as never,
         bounds: scopeBounds("direct", data) ?? circleBounds(data.plant.lon, data.plant.lat, 300000),
-        fitBoundsOptions: { padding: fitPadding() },
+        fitBoundsOptions: { padding: fitPadding(compact) },
         attributionControl: { compact: true },
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -356,6 +506,7 @@ export function SoySupplyMap({
         map.addSource("nc", { type: "geojson", data: EMPTY as never });
         map.addSource("nc-pts", { type: "geojson", data: EMPTY as never });
         for (const r of REMOTE) map.addSource(r, { type: "geojson", data: EMPTY as never });
+        map.addSource("cousub", { type: "geojson", data: EMPTY as never });
         map.addSource("rings", {
           type: "geojson",
           data: { type: "FeatureCollection", features: data.plants.flatMap((p) => p.rings.map((r) => ring(p.lon, p.lat, r.radiusM, { id: r.id }))) } as never,
@@ -571,6 +722,26 @@ export function SoySupplyMap({
         // State and county outlines (US Census, scripts/prepare-soy-boundaries.py); names from zoom 4 / 8.
         const outline = ["!=", ["geometry-type"], "Point"];
         const labelPt = ["==", ["geometry-type"], "Point"];
+        // Places layer (11 Oct 2026): a click on a county / subdivision reads the figures embedded in its
+        // outline (places.json). The fills carry the hit test and, when asked, the share-in-chain colour.
+        map.addLayer({
+          id: "counties-fill",
+          type: "fill",
+          source: "counties",
+          minzoom: 5,
+          filter: outline as never,
+          layout: { visibility: "none" },
+          paint: { "fill-color": chorColor, "fill-opacity": 0 },
+        });
+        map.addLayer({
+          id: "cousub-fill",
+          type: "fill",
+          source: "cousub",
+          minzoom: 7,
+          filter: outline as never,
+          layout: { visibility: "none" },
+          paint: { "fill-color": chorColor, "fill-opacity": 0 },
+        });
         map.addLayer({
           id: "counties-line",
           type: "line",
@@ -589,6 +760,34 @@ export function SoySupplyMap({
           layout: { visibility: "none", "line-join": "round" },
           paint: { "line-color": "#ffffff", "line-width": 3, "line-opacity": 0.95 },
         });
+        map.addLayer({
+          id: "cousub-line",
+          type: "line",
+          source: "cousub",
+          minzoom: 7,
+          filter: outline as never,
+          layout: { visibility: "none" },
+          paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.5, 11, 1.2] as never, "line-opacity": 0.6, "line-dasharray": [3, 2] },
+        });
+        // The subdivision picked in the Places tab, outlined.
+        map.addLayer({
+          id: "cousub-sel",
+          type: "line",
+          source: "cousub",
+          filter: ["==", ["get", "n"], "__none__"],
+          layout: { visibility: "none", "line-join": "round" },
+          paint: { "line-color": "#ffffff", "line-width": 3, "line-opacity": 0.95 },
+        });
+        // Hover: the place under the pointer gets a firm outline (the fills are the hit test).
+        for (const [id, source] of [["counties-hover", "counties"], ["cousub-hover", "cousub"]] as const)
+          map.addLayer({
+            id,
+            type: "line",
+            source,
+            filter: ["==", ["get", "n"], "__none__"],
+            layout: { visibility: "none", "line-join": "round" },
+            paint: { "line-color": "#ffffff", "line-width": 2, "line-opacity": 0.9 },
+          });
         map.addLayer({
           id: "states-line",
           type: "line",
@@ -772,6 +971,7 @@ export function SoySupplyMap({
         for (const [id, source, minzoom, size] of [
           ["states-label", "states", 4, 12],
           ["counties-label", "counties", 8, 10.5],
+          ["cousub-label", "cousub", 9.5, 10],
         ] as const) {
           map.addLayer({
             id,
@@ -814,12 +1014,42 @@ export function SoySupplyMap({
         label("terminal-label", "terminal", 0, 12.5);
         label("plants-other-label", "plants-other", 0, 13);
 
-        for (const layer of ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill", "outside-fill"]) {
+        for (const layer of ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill", "outside-fill", "cousub-fill", "counties-fill"]) {
           map.on("mouseenter", layer, () => map && (map.getCanvas().style.cursor = "pointer"));
           map.on("mouseleave", layer, () => map && (map.getCanvas().style.cursor = ""));
         }
+        const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: "soy-tip", offset: 14, maxWidth: "260px" });
+        for (const [fillId, hoverId, sub] of [["cousub-fill", "cousub-hover", true], ["counties-fill", "counties-hover", false]] as const) {
+          let last = "";
+          map.on("mousemove", fillId, (e) => {
+            if (!map) return;
+            // The township layer sits above the county layer: a hover there belongs to the township.
+            if (!sub && map.getLayer("cousub-fill") && map.getLayoutProperty("cousub-fill", "visibility") === "visible" && map.queryRenderedFeatures(e.point, { layers: ["cousub-fill"] }).length) return;
+            const p = e.features?.[0]?.properties as PlaceProps | undefined;
+            if (!p) return;
+            const key = `${p.s}|${p.co ?? ""}|${p.n}`;
+            if (key !== last) {
+              last = key;
+              const match: unknown[] = ["all", ["!=", ["geometry-type"], "Point"], ["==", ["get", "s"], p.s], ["==", ["get", "n"], p.n]];
+              if (sub) match.push(["==", ["get", "co"], p.co ?? ""]);
+              map.setFilter(hoverId, match as never);
+              map.setLayoutProperty(hoverId, "visibility", "visible");
+              const name = sub ? p.n : (countyOf(p.n, p.s) ?? p.n);
+              const where = sub ? (countyOf(p.co, p.s) ?? "") : stateName(p.s);
+              tip.setHTML(`<b>${esc(name)}</b>${where ? `<span>${esc(where)}</span>` : ""}`);
+            }
+            if (!popupRef.current?.isOpen()) tip.setLngLat(e.lngLat).addTo(map);
+          });
+          map.on("mouseleave", fillId, () => {
+            if (!map) return;
+            last = "";
+            map.setLayoutProperty(hoverId, "visibility", "none");
+            tip.remove();
+          });
+        }
+        map.on("click", () => tip.remove());
 
-        const open = (lngLat: import("maplibre-gl").LngLatLike, html: string, selectId?: string) => {
+        const open = (lngLat: import("maplibre-gl").LngLatLike, html: string, selectId?: string, onAct?: (act: string) => void) => {
           if (!map) return;
           popupRef.current?.remove();
           const popup = new maplibregl.Popup({ maxWidth: "320px", closeButton: true }).setLngLat(lngLat).setHTML(html).addTo(map);
@@ -830,14 +1060,49 @@ export function SoySupplyMap({
               popup.remove();
             });
           }
+          if (onAct) {
+            popup.getElement()?.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((b) =>
+              b.addEventListener("click", () => {
+                onAct(b.dataset.act ?? "");
+                if (b.dataset.act !== "zoom") popup.remove();
+              }),
+            );
+          }
+        };
+        openRef.current = (lngLat, html, onAct) => open(lngLat, html, undefined, onAct);
+        // A county / subdivision of the Places layer: its figures, and ways on (zoom, Places tab, area filter).
+        const openPlace = (lngLat: [number, number], p: PlaceProps, kind: "county" | "sub") => {
+          const { c: cc, lang: l, area: ar } = live.current;
+          const full = findPlace(map, kind, p);
+          const b = full ? bboxOf(full.geometry) : null;
+          const bbox = b ? ([b[0][0], b[0][1], b[1][0], b[1][1]] as [number, number, number, number]) : undefined;
+          const filtered = kind === "county" ? ar?.s === p.s && ar?.n === p.n && !ar.sub : ar?.s === p.s && ar?.n === p.co && ar?.sub === p.n;
+          const level = levelOf(live.current.selected);
+          open(
+            lngLat,
+            placeHtml(p, kind, cc, l, { canFilter: !!live.current.onPickArea && !live.current.compact, filtered, canPlaces: !!live.current.onOpenPlace, level }),
+            undefined,
+            (act) => {
+              if (!map) return;
+              if (act === "zoom") {
+                if (b) map.fitBounds(b, { padding: fitPadding(live.current.compact), maxZoom: 13, duration: 700 });
+              } else if (act === "places") live.current.onOpenPlace?.(kind === "sub" ? { s: p.s, n: p.co, sub: p.n } : { s: p.s, n: p.n });
+              else if (act === "filter") live.current.onPickArea?.(kind === "sub" ? { s: p.s, n: p.co, sub: p.n, bbox } : { s: p.s, n: p.n, bbox });
+              else if (act === "clear") live.current.onPickArea?.({});
+            },
+          );
         };
         map.on("click", (e) => {
           if (!map) return;
-          const layers = ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill", "outside-fill"].filter((l) => map!.getLayer(l));
+          const layers = ["plant", "terminal", "plants-other", "adm", "tp", "nc-dot", "nc-fill", "fields", "us-soy-fill", "outside-fill", "cousub-fill", "counties-fill"].filter((l) => map!.getLayer(l));
           const hit = map.queryRenderedFeatures(e.point, { layers })[0];
           const { data: dt, c: cc, lang: l, catchments: cm, cdlNames: names, onSelectField: pick } = live.current;
           if (!hit) {
             pick?.(null);
+            return;
+          }
+          if (hit.layer.id === "cousub-fill" || hit.layer.id === "counties-fill") {
+            openPlace([e.lngLat.lng, e.lngLat.lat], hit.properties as unknown as PlaceProps, hit.layer.id === "cousub-fill" ? "sub" : "county");
             return;
           }
           const loc = l === "id" ? "id-ID" : "en-US";
@@ -852,6 +1117,18 @@ export function SoySupplyMap({
           const btn = (id: string) => (cm.has(id) ? `<button type="button" class="soy-pop-btn" data-select="${esc(id)}">${esc(cc.selectCatchment)}</button>` : "");
           const lid = hit.layer.id;
           const pid = String(hit.properties?.id ?? "");
+          // A small map inside a page (Overview, facility page): a facility opens at once, no popup first.
+          if (live.current.compact) {
+            if (lid === "plant") {
+              const p = dt.plants.find((x) => x.id === pid);
+              if (p) return live.current.onSelect(`${p.key}80`);
+            }
+            if (lid === "adm") {
+              const el = dt.admElevators.find((x) => x.id === pid);
+              if (el) return live.current.onSelect(el.radiusM ? el.id : (el.site ?? el.id));
+            }
+            if (lid === "tp" && dt.thirdParty.some((x) => x.id === pid)) return live.current.onSelect(pid);
+          }
           if (lid === "plant") {
             const p = dt.plants.find((x) => x.id === pid) ?? dt.plant;
             open(
@@ -974,12 +1251,14 @@ export function SoySupplyMap({
           return shown.find((f) => String(f.properties.id) === id) ?? null;
         }
 
-        const push = (allFeats: SoyFeature[], state: { loading: boolean; failed: boolean }) => {
+        // placeNc: a place's file brings its own non-compliant fields (every listed one in the county, in a catchment or not).
+        const push = (allFeats: SoyFeature[], state: { loading: boolean; failed: boolean }, placeNc?: SoyFeature[]) => {
           if (!map) return;
-          const { selected: scope, ncLoaded: ncFc, area, countyFile: cf } = live.current;
+          const { selected: scope, ncLoaded: ncFc, area } = live.current;
+          const cf = live.current.placeFile ?? live.current.countyFile;
           const level = levelOf(scope);
           const withFields = level === 3 || !!cf;
-          const ncAll = (ncFc?.features ?? []).filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
+          const ncAll = placeNc ?? (ncFc?.features ?? []).filter((f) => inScope(scope, { flags: Number(f.properties.f), k: String(f.properties.k ?? "") }));
           // State → county → fields of the whole selection, for the area filter's choices.
           const areas: Record<string, Record<string, number>> = {};
           for (const f of [...allFeats, ...ncAll]) {
@@ -991,6 +1270,8 @@ export function SoySupplyMap({
           // The area filter narrows the selection; the rest of it joins the grey context.
           const feats = area?.s ? allFeats.filter((f) => inArea(area, f)) : allFeats;
           shown = feats;
+          // A township: its fields in full, the rest of the county faded for context (figures count the township only).
+          const drawn = area?.sub && placeNc ? allFeats.map((f) => (inArea(area, f) ? f : { ...f, properties: { ...f.properties, dim: 1 } })) : feats;
           const aKey = `${scope}|${area?.s ?? ""}|${area?.n ?? ""}`;
           // (A county of the whole chain is fitted by Map & data, to the county's own outline.)
           if (area?.s && !cf && aKey !== areaKey && feats.length) {
@@ -1002,7 +1283,7 @@ export function SoySupplyMap({
               if (y < S) S = y;
               if (y > N) N = y;
             }
-            map.fitBounds([W, S, E, N], { padding: fitPadding(), duration: 700, maxZoom: 12 });
+            map.fitBounds([W, S, E, N], { padding: fitPadding(compact), duration: 700, maxZoom: 12 });
           }
           if (!state.loading) areaKey = aKey;
           // Mark the selection's own fields on the national tiles so the grey context layer skips them.
@@ -1014,7 +1295,26 @@ export function SoySupplyMap({
             map.removeFeatureState({ source: "us-soy", sourceLayer: "fields" });
             for (const f of feats) map.setFeatureState({ source: "us-soy", sourceLayer: "fields", id: String(f.properties.id) }, { own: true });
           }
-          (map.getSource("fields") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats } as never);
+          const fieldsSrc = map.getSource("fields") as import("maplibre-gl").GeoJSONSource | undefined;
+          const applyFields = () => {
+            fieldsSrc?.setData({ type: "FeatureCollection", features: drawn } as never);
+            if (!feats.length) return;
+            // Tiles cut for this view before the data landed stay empty (seen after navigating in the
+            // list; a reload was fine): once the source has finished loading, a hair of zoom makes the
+            // map cut fresh tiles. Checked every half second for a minute (a 0–80 NM catchment parses slowly), then left alone.
+            let tries = 0;
+            const tick = window.setInterval(() => {
+              if (!map || shown !== feats || ++tries > 120) return window.clearInterval(tick);
+              try {
+                if (!map.isSourceLoaded("fields")) return;
+                if (map.querySourceFeatures("fields").length === 0) map.jumpTo({ zoom: map.getZoom() + 0.001 });
+                window.clearInterval(tick);
+              } catch {
+                window.clearInterval(tick);
+              }
+            }, 500);
+          };
+          applyFields();
           // The map always shows every non-compliant field ADM listed; the
           // table and figures count only those in the chosen scope.
           const all = ncFc?.features ?? [];
@@ -1036,12 +1336,38 @@ export function SoySupplyMap({
 
         const refresh = () => {
           if (!map) return;
-          const { selected: scope, data: dt, on: onNow, countyFile: cf } = live.current;
+          const { selected: scope, data: dt, on: onNow, countyFile: cf, placeFile: pf } = live.current;
           const level = levelOf(scope);
           const parts = level === 3 ? unitParts(scope, dt) : null;
           // Grid (soybean density) only on the overview; fields only for one catchment (or one county of the chain).
-          for (const id of GRID_LAYERS) map.setLayoutProperty(id, "visibility", level === 1 && !cf && onNow.fields ? "visible" : "none");
+          for (const id of GRID_LAYERS) map.setLayoutProperty(id, "visibility", level === 1 && !cf && !pf && onNow.fields ? "visible" : "none");
           const my = ++token;
+          // A county / township of the whole chain: every 2025 field of the county (in and outside catchments);
+          // the chain-only county file is the fallback while the place files are not there.
+          if (level === 1 && pf && onNow.fields) {
+            const hit = placeCache.get(pf);
+            if (hit) {
+              push(hit.ok, { loading: false, failed: false }, hit.nc);
+              return;
+            }
+            push([], { loading: true, failed: false });
+            loadPlace(pf)
+              .then((r) => {
+                if (my === token) push(r.ok, { loading: false, failed: false }, r.nc);
+              })
+              .catch(() => {
+                if (my !== token) return;
+                if (!cf) return push([], { loading: false, failed: false });
+                loadCounty(cf)
+                  .then((feats) => {
+                    if (my === token) push(feats, { loading: false, failed: false });
+                  })
+                  .catch(() => {
+                    if (my === token) push([], { loading: false, failed: true });
+                  });
+              });
+            return;
+          }
           if (level === 1 && cf && onNow.fields) {
             const hit = countyCache.get(cf);
             if (hit) {
@@ -1099,7 +1425,7 @@ export function SoySupplyMap({
         function measure(loading = false) {
           if (!map) return;
           const { selected: scope, ncLoaded: ncFc, data: dt } = live.current;
-          const one = levelOf(scope) === 3 || !!live.current.countyFile;
+          const one = levelOf(scope) === 3 || !!live.current.countyFile || !!live.current.placeFile;
           if (one && loading) {
             setInView(null);
             return;
@@ -1108,8 +1434,14 @@ export function SoySupplyMap({
           const W = bb.getWest(), E = bb.getEast(), S = bb.getSouth(), N = bb.getNorth(); // prettier-ignore
           const inB = (x: number, y: number) => x >= W && x <= E && y >= S && y <= N;
           let comp = 0;
+          let out = 0;
           if (one) {
-            for (const f of shown) if (inB(Number(f.properties._x), Number(f.properties._y))) comp += Number(f.properties.a) || 0;
+            for (const f of shown)
+              if (inB(Number(f.properties._x), Number(f.properties._y))) {
+                const a = Number(f.properties.a) || 0;
+                comp += a;
+                if (!String(f.properties.k ?? "")) out += a;
+              }
           } else {
             let rows = dt.grid;
             let d = dt.gridDeg;
@@ -1125,9 +1457,12 @@ export function SoySupplyMap({
             ncFields++;
             ncAcres += Number(f.properties.a) || 0;
           }
-          setInView({ total: comp + ncAcres, ncAcres, ncFields, approx: !one, one });
+          setInView({ total: comp + ncAcres, outAcres: out, ncAcres, ncFields, approx: !one, one });
         }
-        map.on("moveend", () => measure());
+        map.on("moveend", () => {
+          measure();
+          setViewTick((t) => t + 1);
+        });
 
         mapRef.current = map;
         if (import.meta.env.DEV && containerRef.current) {
@@ -1166,7 +1501,7 @@ export function SoySupplyMap({
   // Scope or loaded data changed → reload / refilter.
   useEffect(() => {
     if (ready) refreshRef.current();
-  }, [ready, selected, ncLoaded, on.fields, area?.s, area?.n, countyFile]);
+  }, [ready, selected, ncLoaded, on.fields, area?.s, area?.n, area?.sub, countyFile, placeFile]);
 
   // Layer switches; remote layers load the first time they're switched on.
   useEffect(() => {
@@ -1179,11 +1514,29 @@ export function SoySupplyMap({
     set(["nc-fill", "nc-line", "nc-halo", "nc-dot", "sel-nc-line"], on.nc);
     // Which ADM-listed fields show: inside a catchment unless "outside" is on; "to review" only when asked.
     const keep: unknown[] = ["all"];
-    if (!ncOutside) keep.push(["!=", ["get", "k"], ""]);
+    // A place in view shows every listed field in it, in a catchment or not.
+    if (!ncOutside && !placeFile) keep.push(["!=", ["get", "k"], ""]);
     if (ncReview) keep.push(["==", ["get", "rf"], "cropped_pre_2021"]);
     for (const id of ["nc-fill", "nc-line"]) if (map.getLayer(id)) map.setFilter(id, ["all", ["!=", ["geometry-type"], "Point"], keep] as never);
     for (const id of ["nc-halo", "nc-dot"]) if (map.getLayer(id)) map.setFilter(id, keep as never);
     set(["rings", "plant", "plant-label", "terminal", "terminal-label"], on.rings);
+    // One catchment chosen (a facility page, the map's level 3): the others of its kind fade (user, 10 Oct 2026).
+    // The members of the selection (one catchment or a combination); everything else of each kind fades.
+    const members = isCombo(selected) ? comboMembers(selected!) : selected ? [selected] : [];
+    const ownRings: string[] = [];
+    const ownAdm: string[] = [];
+    const ownTp: string[] = [];
+    for (const m of members) {
+      const pu = plantUnit(m);
+      if (pu) ownRings.push(`${pu.key}40`, `${pu.key}80`);
+      else if (/^adm\d+$/.test(m)) ownAdm.push(m);
+      else if (/^tp\d+$/.test(m)) ownTp.push(m);
+    }
+    const focused = levelOf(selected) === 3;
+    map.setPaintProperty("rings", "line-opacity", (focused ? ["match", ["get", "id"], ownRings.length ? ownRings : ["__none__"], 0.95, 0.18] : 0.95) as never);
+    map.setPaintProperty("rings", "line-width", (focused ? ["match", ["get", "id"], ownRings.length ? ownRings : ["__none__"], 2.6, 1] : 2.2) as never);
+    map.setPaintProperty("adm-catch", "line-opacity", (focused ? ["match", ["get", "id"], ownAdm.length ? ownAdm : ["__none__"], 0.95, 0.2] : 0.9) as never);
+    map.setPaintProperty("tp-catch", "line-opacity", (focused ? ["match", ["get", "id"], ownTp.length ? ownTp : ["__none__"], 0.95, 0.15] : ["case", ["get", "core"], 0.85, 0.5]) as never);
     set(["plants-other", "plants-other-label"], on.plants);
     const combo = isCombo(selected) ? comboMembers(selected!) : null;
     set(["direct-area", "ring-label"], on.rings && (group === "direct" || !!combo?.some((m) => isPlantUnit(m))));
@@ -1194,19 +1547,29 @@ export function SoySupplyMap({
     set(["corridors"], on.corridors);
     set(["roads"], on.roads);
     set(["states-line", "states-label"], on.states);
-    set(["counties-line", "counties-label"], on.counties);
+    set(["counties-line", "counties-label", "counties-fill"], on.counties);
     set(["county-sel"], !!area?.n);
     if (area?.n && map.getLayer("county-sel"))
       map.setFilter("county-sel", ["all", ["!=", ["geometry-type"], "Point"], ["==", ["get", "s"], area.s ?? ""], ["==", ["get", "n"], area.n]] as never);
+    // Places layer: subdivisions (lines, labels, hit-test fill) and the choropleth on whichever level is on.
+    set(["cousub-fill", "cousub-line", "cousub-label"], on.cousub);
+    set(["cousub-sel"], !!area?.sub);
+    if (area?.sub && map.getLayer("cousub-sel"))
+      map.setFilter("cousub-sel", ["all", ["!=", ["geometry-type"], "Point"], ["==", ["get", "s"], area.s ?? ""], ["==", ["get", "co"], area.n ?? ""], ["==", ["get", "n"], area.sub]] as never);
+    if (map.getLayer("cousub-fill")) map.setPaintProperty("cousub-fill", "fill-opacity", on.chor ? 0.5 : 0);
+    if (map.getLayer("counties-fill")) map.setPaintProperty("counties-fill", "fill-opacity", (on.chor ? (on.cousub ? ["step", ["zoom"], 0.5, 7, 0] : 0.5) : 0) as never);
     set(["nlcd"], on.nlcd);
     set(["us-grid", "us-soy-fill", "us-soy-line"], on.us);
     // Only around a selection whose own fields are drawn (one catchment or a combination).
     set(["outside-fill", "outside-line"], on.outside && !on.us && fieldsShown);
     // With land cover on, the fields and density cells thin out so it shows through.
-    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", on.nlcd ? 0.22 : 0.72);
+    const fieldOpacity = on.nlcd ? 0.22 : on.chor ? 0.35 : 0.72;
+    const dimmed = ["==", ["coalesce", ["get", "dim"], 0], 1];
+    if (map.getLayer("fields")) map.setPaintProperty("fields", "fill-opacity", ["case", dimmed, fieldOpacity * 0.22, fieldOpacity] as never);
+    if (map.getLayer("fields-line")) map.setPaintProperty("fields-line", "line-opacity", ["case", dimmed, 0.25, 0.95] as never);
     if (map.getLayer("outside-fill")) map.setPaintProperty("outside-fill", "fill-opacity", outsideOpacity(on.nlcd ? 0.2 : 0.55) as never);
     // With all US fields on, the catchment density cells give way to the fields themselves from zoom 10.
-    const gridOpacity = on.nlcd ? 0.25 : 0.72;
+    const gridOpacity = on.nlcd || on.chor ? 0.25 : 0.72;
     for (const id of GRID_LAYERS)
       if (map.getLayer(id)) map.setPaintProperty(id, "fill-opacity", (on.us ? ["step", ["zoom"], gridOpacity, US_MIN_ZOOM, 0] : gridOpacity) as never);
     for (const r of REMOTE) {
@@ -1228,7 +1591,73 @@ export function SoySupplyMap({
         })
         .catch(() => setRemote((s) => ({ ...s, [r]: "error" })));
     }
-  }, [on, ready, remote, selected, ncOutside, ncReview, fieldsShown, area?.s, area?.n]);
+  }, [on, ready, remote, selected, ncOutside, ncReview, fieldsShown, area?.s, area?.n, area?.sub, placeFile]);
+
+  // Places layer: a subdivision asked for from the Places tab switches the layer on (once; it can be switched off again).
+  const subSeen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (area?.sub && area.sub !== subSeen.current) setOn((s) => (s.cousub ? s : { ...s, cousub: true }));
+    subSeen.current = area?.sub;
+  }, [area?.sub]);
+  // Subdivisions load per state: the states in view (from zoom 6.5) and the filtered state; merged into one source.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const want = new Set<string>();
+    if (area?.s && area.sub) want.add(area.s);
+    if (on.cousub) {
+      if (area?.s) want.add(area.s);
+      if (map.getZoom() >= 6.5) for (const st of statesInView(map)) want.add(st);
+    }
+    const missing = [...want].filter((st) => !cousubHave.current.has(st));
+    const push = () => {
+      const feats = [...cousubHave.current].flatMap((st) => cousubCache.get(st)?.features ?? []);
+      (map.getSource("cousub") as import("maplibre-gl").GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats } as never);
+    };
+    if (!missing.length) {
+      if (want.size && cousubState !== "ready") setCousubState("ready");
+      if (!want.size && cousubState === "loading") setCousubState("idle");
+      return;
+    }
+    setCousubState("loading");
+    let cancelled = false;
+    void Promise.all(
+      missing.map((st) =>
+        loadCousub(st).then(() => {
+          if (!cancelled) {
+            cousubHave.current.add(st);
+            push();
+          }
+        }),
+      ),
+    )
+      .then(() => !cancelled && setCousubState("ready"))
+      .catch(() => !cancelled && setCousubState("error"));
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, on.cousub, area?.s, area?.sub, viewTick, cousubState]);
+  // A subdivision opened from the Places tab: its figures pop up once its outline is here (no click needed).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !area?.s || !area.sub) return;
+    const key = `${area.s}|${area.n ?? ""}|${area.sub}`;
+    if (autoPop.current === key) return;
+    const fc = cousubCache.get(area.s);
+    if (!fc || !cousubHave.current.has(area.s)) return;
+    const poly = fc.features.find((x) => x.geometry.type !== "Point" && x.properties.co === area.n && x.properties.n === area.sub);
+    const pt = fc.features.find((x) => x.geometry.type === "Point" && x.properties.co === area.n && x.properties.n === area.sub);
+    if (!poly || !pt) return;
+    autoPop.current = key;
+    const at = (pt.geometry as { coordinates: [number, number] }).coordinates;
+    const p = poly.properties as unknown as PlaceProps;
+    openRef.current(at, placeHtml(p, "sub", live.current.c, live.current.lang, { canFilter: false, filtered: true, canPlaces: !!live.current.onOpenPlace, level: 1 }), (act) => {
+      if (act === "zoom") {
+        const b = bboxOf(poly.geometry as SoyFeature["geometry"]);
+        if (b) map.fitBounds(b, { padding: fitPadding(live.current.compact), maxZoom: 13, duration: 700 });
+      } else if (act === "places") live.current.onOpenPlace?.({ s: p.s, n: p.co, sub: p.n });
+    });
+  }, [ready, area?.s, area?.n, area?.sub, cousubState]);
 
   // The NLCD year: swap the tile URL in place.
   useEffect(() => {
@@ -1245,8 +1674,9 @@ export function SoySupplyMap({
     if (mode === "corridor") fieldColor = bandColorExpr(basis);
     else if (colorBy === "years")
       fieldColor = ["step", ["get", "y"], SOY_YEARS_COLORS[0], ...SOY_YEARS_COLORS.slice(1).flatMap((col, i) => [i + 2, col])];
-    else fieldColor = FIELD_COLOR;
+    else fieldColor = ["case", outsideCatch, OUT_CATCH_COLOR, FIELD_COLOR];
     map.setPaintProperty("fields", "fill-color", fieldColor as never);
+    if (map.getLayer("fields-line")) map.setPaintProperty("fields-line", "line-color", (mode === "corridor" || colorBy === "years" ? FIELD_EDGE : ["case", outsideCatch, OUT_EDGE, FIELD_EDGE]) as never);
     const gridColor =
       mode === "corridor"
         ? [
@@ -1299,7 +1729,7 @@ export function SoySupplyMap({
     );
     popupRef.current?.remove();
     const b = scopeBounds(id, data);
-    if (b) map.fitBounds(b, { padding: fitPadding(), duration: 700 });
+    if (b) map.fitBounds(b, { padding: fitPadding(compact), duration: 700 });
   }, [selected, ready, data]);
 
   // Selected field highlight.
@@ -1315,7 +1745,7 @@ export function SoySupplyMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !focus) return;
-    if (focus.bbox) map.fitBounds(focus.bbox, { padding: fitPadding(), maxZoom: 14, duration: 700 });
+    if (focus.bbox) map.fitBounds(focus.bbox, { padding: fitPadding(compact), maxZoom: 14, duration: 700 });
     else if (focus.center) map.flyTo({ center: focus.center, zoom: focus.zoom ?? 14, duration: 700 });
   }, [focus?.nonce, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1326,7 +1756,7 @@ export function SoySupplyMap({
     setBasemap(map, basemap, DATA_FLOOR);
     const light = basemap === "osm";
     const ink = light ? "#1d1d1f" : "#ffffff";
-    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line", "states-line", "counties-line", "county-sel"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
+    for (const id of ["rings", "adm-catch", "sel-line", "sel-nc-line", "states-line", "counties-line", "county-sel", "cousub-line", "cousub-sel", "cousub-hover", "counties-hover"]) if (map.getLayer(id)) map.setPaintProperty(id, "line-color", ink);
     if (map.getLayer("direct-area")) {
       map.setPaintProperty("direct-area", "fill-color", ink);
       map.setPaintProperty("direct-area", "fill-opacity", light ? 0.07 : 0.14);
@@ -1347,6 +1777,28 @@ export function SoySupplyMap({
 
   // One card: each row switches a layer and shows its map symbol.
   const level = unitState.level;
+  // The choropleth switch sits under the county and subdivision rows (whichever is on gets the colour).
+  const chorRow = (
+    <div className="soy-nc-filters soy-chor">
+      <label className="soy-nc-filter">
+        <input type="checkbox" checked={on.chor} onChange={() => setOn((s) => ({ ...s, chor: !s.chor }))} />
+        <i className="sq" style={{ background: CHOR_STEPS[3]![1] }} />
+        <span>{c.chorLabel}</span>
+      </label>
+      {on.chor ? (
+        <div className="soy-chor-legend">
+          <p className="soy-key-note">{c.chorLegend}</p>
+          <p className="soy-chor-ramp" aria-hidden="true">
+            {CHOR_STEPS.map(([v, col]) => (
+              <i key={v} style={{ background: col }} />
+            ))}
+          </p>
+          <p className="soy-chor-ticks tabular-nums"><span>0%</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100%</span></p>
+          <p className="soy-key-note"><i className="soy-chor-none" aria-hidden="true" /> {c.chorNone}</p>
+        </div>
+      ) : null}
+    </div>
+  );
   const KEY: Record<LayerKey, { label: string; symbol: ReactNode; detail?: ReactNode }> = {
     fields:
       mode === "corridor"
@@ -1390,7 +1842,16 @@ export function SoySupplyMap({
                 </div>
               ),
             }
-          : { label: c.legendCompliant, symbol: <i className="sq" style={{ background: FIELD_COLOR }} /> },
+          : {
+              label: c.legendCompliant,
+              symbol: <i className="sq" style={{ background: FIELD_COLOR }} />,
+              detail: placeFile ? (
+                <p className="soy-key-note soy-key-fac">
+                  <span><i className="sq" style={{ background: FIELD_COLOR }} /> {c.legendInCatch}</span>
+                  <span><i className="sq" style={{ background: OUT_CATCH_COLOR }} /> {c.legendOutCatch}</span>
+                </p>
+              ) : undefined,
+            },
     nc: {
       label: c.legendNc,
       symbol: <i className="nc-ring" />,
@@ -1406,7 +1867,6 @@ export function SoySupplyMap({
             <i className="sq faded" style={{ background: NC_COLOR }} />
             <span>{fill(c.ncShowOutside, { n: formatCount(ncCounts?.outside ?? 0, lang) })}</span>
           </label>
-          <p className="soy-key-note">{c.legendNcDot}</p>
         </div>
       ),
     },
@@ -1420,7 +1880,6 @@ export function SoySupplyMap({
     outside: {
       label: c.layerOutside,
       symbol: <i className="sq" style={{ background: OUTSIDE_COLOR, boxShadow: "inset 0 0 0 1px #c9cdd3" }} />,
-      detail: <p className="soy-key-note">{c.outsideNote}</p>,
     },
     us: {
       label: c.layerUs,
@@ -1442,7 +1901,23 @@ export function SoySupplyMap({
     },
     plants: { label: c.layerPlants, symbol: <i className="dot plant-pending" />, detail: <p className="soy-key-note">{c.plantPending}</p> },
     states: { label: c.layerStates, symbol: <i className="ln bound" /> },
-    counties: { label: c.layerCounties, symbol: <i className="ln bound thin" />, detail: <p className="soy-key-note">{c.countiesNote}</p> },
+    counties: { label: c.layerCounties, symbol: <i className="ln bound thin" />, detail: <div className="soy-key-detail">{chorRow}<p className="soy-key-note">{c.countiesNote}</p></div> },
+    cousub: {
+      label: c.layerCousub,
+      symbol: <i className="ln bound thin dash" />,
+      detail: (
+        <div className="soy-key-detail">
+          {chorRow}
+          <p className="soy-key-note">
+            {c.cousubNote}
+            {cousubState === "loading" ? <em> {c.loading}</em> : null}
+            {cousubState === "error" ? <em className="err"> {c.failed}</em> : null}
+            {cousubState === "idle" ? <em> {c.cousubZoomIn}</em> : null}
+          </p>
+        </div>
+      ),
+    },
+    chor: { label: c.chorLabel, symbol: <i className="sq" style={{ background: CHOR_STEPS[3]![1] }} /> },
     nlcd: {
       label: c.layerNlcd,
       symbol: <i className="sq nlcd-sw" />,
@@ -1472,20 +1947,29 @@ export function SoySupplyMap({
       ),
     },
   };
-  const order: LayerKey[] = (
-    mode === "corridor"
-      ? (["fields", "outside", "us", "rail", "rivers", "corridors", "rings", "plants", "adm", "tp", "nc", "roads", "states", "counties", "nlcd"] as LayerKey[])
-      : (["fields", "outside", "us", "nc", "rings", "plants", "adm", "tp", "rail", "rivers", "roads", "states", "counties", "nlcd"] as LayerKey[])
-  ).filter((k) => k !== "plants" || otherPlants.length > 0); // announced plants only while some have no catchments yet
+  const order: LayerKey[] = THEMES[theme].offer;
+  const facilitiesOn = on.rings && on.adm && on.tp;
+  const themeLabel: Record<MapTheme, string> = { comp: navc.modeComp, log: navc.modeLog, land: navc.modeLand, ctx: navc.modeCtx };
 
   return (
-    <div className="soy-map supply-map">
+    <div className={`soy-map supply-map${compact ? " compact" : ""}`}>
       <div ref={containerRef} className="soy-map-canvas" />
       <div className="soy-map-tools">
         {toolsSlot}
         {backSlot}
+        {compact ? null : (
+        <>
+        {setTheme ? (
+          <div className="soy-modes map-card" role="radiogroup" aria-label={navc.modeLabel}>
+            {MAP_THEMES.map((tk) => (
+              <button key={tk} type="button" role="radio" aria-checked={theme === tk} className={theme === tk ? "on" : ""} onClick={() => setTheme(tk)}>
+                {themeLabel[tk]}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <details className="soy-layers soy-key map-card" open={layersOpen} onToggle={(e) => setLayersOpen((e.currentTarget as HTMLDetailsElement).open)}>
-          <summary>{c.layers}</summary>
+          <summary>{themeLabel[theme]} · {c.layers}</summary>
           <ul>
             {order.map((k) => {
               const st = (REMOTE as string[]).includes(k) ? remote[k as Remote] : null;
@@ -1512,11 +1996,28 @@ export function SoySupplyMap({
                 </li>
               );
             })}
+            <li className={facilitiesOn ? "" : "off"}>
+              <label>
+                <input type="checkbox" checked={facilitiesOn} onChange={() => setOn((st) => ({ ...st, rings: !facilitiesOn, adm: !facilitiesOn, tp: !facilitiesOn, plants: !facilitiesOn }))} />
+                <span className="soy-key-symbol"><i className="dot" style={{ background: PLANT_COLOR }} /><i className="ln" /></span>
+                <span>{navc.keyFacilities}</span>
+              </label>
+              {facilitiesOn ? (
+                <p className="soy-key-note soy-key-fac">
+                  <span><i className="dot" style={{ background: PLANT_COLOR }} /> {c.legendPlant}</span>
+                  <span><i className="dot adm" /> {c.legendAdm}</span>
+                  <span><i className="dot" style={{ background: TP_COLOR }} /> {c.legendTp}</span>
+                </p>
+              ) : null}
+            </li>
           </ul>
           <p className="soy-key-foot">{c.legendMiles}</p>
         </details>
+        </>
+        )}
       </div>
 
+      {compact ? null : (
       <div className="basemap-chip soy-basemap-chip">
         {bmOpen ? (
           <div className="basemap-menu" role="menu">
@@ -1547,13 +2048,14 @@ export function SoySupplyMap({
           </span>
         </button>
       </div>
+      )}
 
       {/* Feedback 5 (P1-1): only exact figures here (fields loaded); the grid estimate would sit next to
           the right panel's exact totals with a slightly different number. */}
-      {mode === "supply" && inView && !inView.approx ? (
+      {mode === "supply" && !compact && inView && !inView.approx ? (
         <div className="soy-inview map-card" aria-live="polite">
           <p className="soy-inview-title">
-            {c.inViewTitle} · {inView.one ? c.inViewCatchment : c.inViewChain}
+            {c.inViewTitle} · {inView.one ? (placeFile ? c.inViewPlace : c.inViewCatchment) : c.inViewChain}
           </p>
           <div className="soy-inview-row">
             <div>
@@ -1567,6 +2069,12 @@ export function SoySupplyMap({
               <b className="ok">{inView.total > 0 ? formatSharePct(pct(inView.total - inView.ncAcres, inView.total), lang) : "—"}</b>
               <span>{c.inViewCompliant}</span>
             </div>
+            {inView.outAcres > 0 ? (
+              <div>
+                <b style={{ color: OUT_EDGE }}>{formatAcres(inView.outAcres, lang)}</b>
+                <span>{c.inViewOutside}</span>
+              </div>
+            ) : null}
             <div>
               <b className="bad">{formatAcres(inView.ncAcres, lang)}</b>
               <span>{c.inViewNcArea}</span>
@@ -1582,7 +2090,7 @@ export function SoySupplyMap({
           </p>
         </div>
       ) : null}
-      {on.fields && unitState.level < 3 && !countyFile ? <p className="soy-map-status">{c.pickForFields}</p> : null}
+      {on.fields && !compact && unitState.level < 3 && !countyFile && !placeFile ? <p className="soy-map-status">{c.pickForFields}</p> : null}
       {on.fields && unitState.loading ? (
         <p className="soy-map-status">
           <span className="spinner" aria-hidden="true" /> {c.loadingFields}

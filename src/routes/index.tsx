@@ -74,7 +74,7 @@ function UmbrellaHome() {
       ...PRODUCTS.soy,
       tag: b.soyTag,
       body: b.soyBody,
-      img: "/img/soy/elevator-900.jpg",
+      img: "/img/soy/context-map-900.jpg",
       alt: b.soyCardAlt,
       shotAlt: b.soyShotAlt,
     },

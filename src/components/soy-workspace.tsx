@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AccountMenu } from "@/components/account-menu";
 import { BrandMark } from "@/components/brand-mark";
 import { DataAssistant } from "@/components/data-assistant";
 import { SoyReport } from "@/components/soy-report";
@@ -8,7 +9,6 @@ import type { SoyNational } from "@/components/soy-national";
 import { soyReportCopy } from "@/lib/soy-report-copy";
 import { PRODUCTS } from "@/lib/brand";
 import { KpiTile } from "@/components/kpi-tile";
-import { LangToggle } from "@/components/lang-toggle";
 import {
   SoyMap,
   type SoyBuffers,
@@ -18,17 +18,23 @@ import {
   type SoyPlant,
 } from "@/components/soy-map";
 import { fetchWithRetry } from "@/lib/fetch-retry";
-import { fill, formatCount, formatHa, formatLarge } from "@/lib/format";
+import { fill, formatCount, formatDate, formatHa, formatLarge } from "@/lib/format";
 import type { GateRole } from "@/lib/gate";
 import { gateLogout, gateSwitchTenant } from "@/lib/gate-actions";
 import { useI18n } from "@/lib/i18n";
 import { SOY_GROUPS, SOY_GROUP_COLORS, SOY_YEARS_COLORS, soyCopy } from "@/lib/soy-copy";
-import { SoyDocsView, SoySupplyView } from "@/components/soy-supply";
+import { SoyDataPage, SoyMethodPage } from "@/components/soy-data-page";
+import { SoyFacilityList, SoyFacilityPage } from "@/components/soy-facility";
+import { SoyNcPage, type NcFilter } from "@/components/soy-nc-page";
+import { SoyOverview } from "@/components/soy-overview";
+import { SoyPlacesPage, type PlaceTarget, type SoyPlaces } from "@/components/soy-places";
 import { scopeSummary } from "@/components/soy-side";
 import type { SoyArea as SoyPlace } from "@/components/soy-supply-map";
 import { SoyMapView } from "@/components/soy-mapview";
 import { SoyTour, markTourDone, tourPending } from "@/components/soy-tour";
-import { idsFromScope, plantById, scopeForSel, type PlantBuffer, type SupplyData, type SoyAreas } from "@/lib/soy-supply";
+import { SOY_DATA_AS_OF } from "@/lib/data-meta";
+import { idsFromScope, scopeForSel, type PlantBuffer, type SupplyData, type SoyAreas } from "@/lib/soy-supply";
+import { soyNavCopy } from "@/lib/soy-nav-copy";
 import { soySupplyCopy } from "@/lib/soy-supply-copy";
 import { usePersistentState } from "@/lib/use-persistent";
 import { TENANTS, type Tenant } from "@/lib/tenants";
@@ -69,23 +75,25 @@ type FieldsState = {
   fc: SoyFieldCollection | null;
 };
 
-type SoyTab = "summary" | "map" | "corridor" | "docs" | "areas";
-const TABS: SoyTab[] = ["summary", "map", "corridor", "docs", "areas"];
-// Feedback 5 (P2-3): the earlier delivery (40-mile areas) is no tab of its own — it opens from Data & method.
-const NAV_TABS: SoyTab[] = ["summary", "map", "corridor", "docs"];
+/** Tabs since the 9 Oct 2026 layout; "areas" is the archived 40-mile view, reached from the Data tab. */
+type SoyTab = "overview" | "map" | "places" | "nc" | "downloads" | "method" | "areas";
+const TABS: SoyTab[] = ["overview", "map", "places", "nc", "downloads", "method", "areas"];
+const NAV_TABS: SoyTab[] = ["overview", "map", "places", "nc", "downloads", "method"];
+/** Where the Overview tab stands: its home, one facility's page, or the list of ADM / third-party facilities. */
+type SoyPage = "home" | `fac:${string}` | "list:adm" | "list:tp";
 
 /**
- * The ADM Soy workspace (tenant `adm-soy`), built like PalmTrace's: a header
- * with tabs, presentation mode and one catchment selection shared by every
- * tab (the Quincy supply chain from the client's ADM_SOY.gdb):
- *  - Summary: figures for the selected catchment, true-scale comparison,
- *    non-compliant fields, elevators, crop history (soy-supply.tsx);
- *  - Map & data: map + catchment list/detail, field table, field card and
- *    downloads — only the selected catchment's fields (soy-mapview.tsx);
- *  - Rail & river: soybean area near rail and the major river systems;
- *  - Data & method: sources and definitions;
- *  - 40-mile areas: the earlier view — ADM's crushing plants, their 40-mile
- *    sourcing areas and the 2025 soybean fields inside.
+ * The ADM Soy workspace (tenant `adm-soy`), laid out like PalmTrace's since
+ * 9 Oct 2026 — one header with four tabs and a drill-down instead of a
+ * sidebar of every facility:
+ *  - Overview: the whole chain in four figures and one card per crushing
+ *    plant (soy-overview.tsx); a plant, elevator or third party opens its own
+ *    page with its catchment, figures and downloads (soy-facility.tsx);
+ *  - Map: the map with the catchment list / detail, field table and
+ *    downloads (soy-mapview.tsx);
+ *  - Non-compliant: ADM's list on a page of its own (soy-nc-page.tsx);
+ *  - Data: downloads, sources, definitions and the changelog (soy-data-page.tsx).
+ * One selection (`scope`, derived from `sel`) is shared by every tab.
  * Data: /data/supply.json and /data/soy.json (bundled), fields and layers
  * from the soy R2 bucket (scripts/prepare-adm-soy-supply.py and
  * prepare-adm-soy.py).
@@ -98,8 +106,10 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const { t, lang } = useI18n();
   const sc = soyCopy[lang];
   const ssc = soySupplyCopy[lang];
-  const [tabStored, setTab] = usePersistentState<SoyTab>("soytrace.tab", "summary");
-  const tab: SoyTab = TABS.includes(tabStored) ? tabStored : "summary";
+  const nav = soyNavCopy[lang];
+  const [tabStored, setTab] = usePersistentState<SoyTab>("soytrace.tab4", "overview");
+  const tab: SoyTab = TABS.includes(tabStored) ? tabStored : "overview";
+  const [pageStored, setPage] = usePersistentState<SoyPage>("soytrace.page", "home");
   const [scopeStored, setScope] = usePersistentState<string>("soytrace.scope2", "all");
   const canPresent = role === "admin" || role === "client";
   const [presentStored, setPresent] = usePersistentState("soytrace.present", false);
@@ -110,19 +120,31 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   const supplyCatchments = useMemo(() => (supply ? new Map(supply.catchments.map((k) => [k.id, k])) : null), [supply]);
   // A scope remembered from an earlier data version may no longer exist.
   const scope = !supplyCatchments || supplyCatchments.has(scopeStored) || scopeStored.startsWith("combo:") ? scopeStored : "all";
-  // The Summary's sidebar selection (ticked catchment ids, none = the whole chain). The map's scope
+  // A facility page remembered from an earlier data version may be gone too.
+  const page: SoyPage = pageStored.startsWith("fac:") && supplyCatchments && !supplyCatchments.has(pageStored.slice(4)) ? "home" : pageStored;
+  // The combination picker's selection (ticked catchment ids, none = the whole chain). The map's scope
   // is derived from it; when the map changes the scope on its own, the ticks follow the scope.
   // "…2": the 7 Oct data renumbered the elevators, so selections stored before it are dropped.
   const [selStored, setSelStored] = usePersistentState<string[]>("soytrace.sel2", []);
-  const [plantSel, setPlantSel] = usePersistentState<string>("soytrace.plant", "");
   const [areas, setAreas] = useState<SoyAreas | null>(null);
-  // State / county filter, shared by the Summary's area card and Map & data.
+  // The supply chain per state / county / subdivision (scripts/prepare-soy-places.py), ~2 MB, fetched once.
+  const [placesData, setPlacesData] = useState<SoyPlaces | null>(null);
+  // A county / subdivision clicked on the map (Places layer): the Places tab opens drilled down to it.
+  const [placesInit, setPlacesInit] = useState<(PlaceTarget & { nonce: number }) | null>(null);
+  // State / county filter on Map & data.
   const [place, setPlace] = useState<SoyPlace>({});
   // One buffer for the crushing plants, 0–40 or 0–80 NM (one row per plant everywhere, not one per ring).
   const [bufferStored, setBuffer] = usePersistentState<PlantBuffer>("soytrace.buffer", "80");
   const buffer: PlantBuffer = bufferStored === "40" ? "40" : "80";
-  // Feedback 5 (P0-2): the map shows only "to review" fields when the Summary card asks for it.
+  // Feedback 5 (P0-2): the map shows only "to review" fields when asked for it.
   const [ncReview, setNcReview] = useState(false);
+  const [ncFilter, setNcFilter] = useState<NcFilter>({ set: "inside", scope: "", state: "" });
+  // A field to open on the map (from the Non-compliant page or a facility page).
+  const [mapFind, setMapFind] = useState<{ id: string; nonce: number } | null>(null);
+  const findOnMap = (id: string) => {
+    setMapFind({ id, nonce: Date.now() });
+    setTab("map");
+  };
   const sel = useMemo(() => {
     if (!supply) return [];
     return scopeForSel(selStored, supply) === scope ? selStored : idsFromScope(scope, supply);
@@ -131,11 +153,29 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     setSelStored(ids);
     if (supply) setScope(scopeForSel(ids, supply));
   };
-  // Picking a plant ticks its catchment at the current buffer; "all plants" clears the ticks.
-  const choosePlant = (id: string) => {
-    setPlantSel(id);
-    const p = id && supply ? plantById(supply, id) : undefined;
-    setSel(p ? [`${p.key}${buffer}`] : []);
+  // ----------------------------------------------------------- navigation
+  const goHome = () => {
+    setPage("home");
+    setSel([]);
+    setTab("overview");
+  };
+  const openFacility = (id: string) => {
+    setPage(`fac:${id}`);
+    setSel([id]);
+    setTab("overview");
+  };
+  const openList = (kind: "adm" | "tp" | "places") => {
+    if (kind === "places") return setTab("places");
+    setPage(`list:${kind}`);
+    setTab("overview");
+  };
+  const openNcSet = (set: NcFilter["set"]) => {
+    setNcFilter({ set, scope: "", state: "" });
+    setTab("nc");
+  };
+  const openNcScope = (id: string) => {
+    setNcFilter({ set: "inside", scope: id, state: "" });
+    setTab("nc");
   };
   const navigate = useNavigate();
   const [data, setData] = useState<SoyData | null>(null);
@@ -163,14 +203,30 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
       .then((res) => (res.ok ? (res.json() as Promise<SoyAreas>) : null))
       .then(setAreas)
       .catch(() => setAreas(null));
-    // All US soybean fields: a context block on the Summary tab, optional.
+    // All US soybean fields: context on the Data tab, optional.
     void fetchWithRetry("/data/national.json")
       .then((res) => (res.ok ? (res.json() as Promise<SoyNational>) : null))
       .then(setNational)
       .catch(() => setNational(null));
   }, []);
 
-  // The reading guide: once per sign-in (login clears the flag), on the map tab.
+  // A new tab or page starts at the top (the workspace's main pane is the scroller, not the window).
+  useEffect(() => {
+    document.querySelector(".app-main")?.scrollTo({ top: 0 });
+  }, [tab, page]);
+
+  // places.json (~4 MB) only once the Places tab is opened, not on every sign-in.
+  const placesAsked = useRef(false);
+  useEffect(() => {
+    if (tab !== "places" || placesAsked.current) return;
+    placesAsked.current = true;
+    void fetchWithRetry("/data/places.json")
+      .then((res) => (res.ok ? (res.json() as Promise<SoyPlaces>) : null))
+      .then(setPlacesData)
+      .catch(() => setPlacesData(null));
+  }, [tab]);
+
+  // The reading guide: once per sign-in (login clears the flag), from the Overview.
   const [tourOpen, setTourOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const tourChecked = useRef(false);
@@ -178,7 +234,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
     if (tourChecked.current || !supply || !data) return;
     tourChecked.current = true;
     if (present || !tourPending()) return;
-    setTab("summary");
+    setTab("overview");
     setTourOpen(true);
   }, [supply, data, present, setTab]);
 
@@ -218,10 +274,12 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
   }
 
   const tabLabel: Record<SoyTab, string> = {
-    summary: ssc.tabSummary,
-    map: ssc.tabMap,
-    corridor: ssc.tabCorridor,
-    docs: ssc.tabDocs,
+    overview: nav.tabOverview,
+    map: nav.tabMap,
+    places: nav.tabPlaces,
+    nc: nav.tabNc,
+    downloads: nav.tabDownloads,
+    method: nav.tabMethod,
     areas: ssc.tabAreas,
   };
   // The client's other crushing plants (soy.json), shown on the supply map until their catchments arrive.
@@ -232,6 +290,8 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
         .map((p) => ({ id: p.id, name: `ADM ${p.name}`, address: p.address ?? null, lat: p.lat, lon: p.lon })),
     [data, supply],
   );
+  const dataDate = formatDate(SOY_DATA_AS_OF, lang);
+  const canDownload = role !== "auditor" && role !== "viewer";
   // The printable report (soy-report.tsx) for the selected catchment; a portal, so it can live with the header.
   const canReport = role !== "auditor" && !!supply && !present;
   const report =
@@ -246,67 +306,46 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
         <BrandMark size={22} product="soy" />
         <span className="word">{PRODUCTS.soy.name}</span>
       </span>
-      <span className="app-sep" aria-hidden="true">
-        /
-      </span>
-      <span className="soy-scope">{ssc.scopeHeader}</span>
       <nav className="app-tabs" aria-label={ssc.scopeHeader}>
         {NAV_TABS.map((k) => (
           <button
             key={k}
             type="button"
-            className={tab === k || (k === "docs" && tab === "areas") ? "on" : ""}
+            className={tab === k || (k === "method" && tab === "areas") ? "on" : ""}
             aria-current={tab === k ? "page" : undefined}
-            onClick={() => setTab(k)}
+            onClick={() => (k === "overview" ? goHome() : setTab(k))}
           >
             {tabLabel[k]}
           </button>
         ))}
       </nav>
       <div className="app-actions">
-        {role === "admin" && !present ? (
-          <label className="tenant-switch">
-            <span>{t.clientLabel}</span>
-            <select value={tenant} onChange={(e) => void switchTenant(e.target.value as Tenant)}>
-              {TENANTS.map((tn) => (
-                <option key={tn.id} value={tn.id}>
-                  {tn.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {canReport ? (
-          <button type="button" className="present-btn" title={soyReportCopy[lang].openHint} onClick={() => setReportOpen(true)}>
-            {soyReportCopy[lang].open}
-          </button>
-        ) : null}
-        {canPresent ? (
-          <button
-            type="button"
-            className={`present-btn ${present ? "on" : ""}`}
-            aria-pressed={present}
-            onClick={() => setPresent(!presentStored)}
-          >
+        {present ? (
+          <button type="button" className="present-btn on" aria-pressed onClick={() => setPresent(false)}>
             <span className="dot" aria-hidden="true" />
-            {present ? t.presentOn : t.present}
+            {t.presentOn}
           </button>
-        ) : null}
-        {present ? null : (
-          <button
-            type="button"
-            className="tour-help"
-            aria-label={ssc.tourReplay}
-            title={ssc.tourReplay}
-            onClick={() => setTourOpen(true)}
-          >
+        ) : (
+          <>
+          <button type="button" className="tour-help" aria-label={ssc.tourReplay} title={ssc.tourReplay} onClick={() => { setPage("home"); setTab("overview"); setTourOpen(true); }}>
             ?
           </button>
+          <AccountMenu
+            tenant={tenant}
+            tenants={role === "admin" ? TENANTS : []}
+            onSwitchTenant={(next) => void switchTenant(next)}
+            showRequests={role === "admin"}
+            canPresent={canPresent}
+            present={present}
+            onPresent={setPresent}
+            onSignOut={() => void logout()}
+            presentHint={nav.menuPresentHint}
+            extra={[
+              ...(canReport ? [{ label: nav.menuReport, hint: soyReportCopy[lang].openHint, onClick: () => setReportOpen(true) }] : []),
+            ]}
+          />
+          </>
         )}
-        {present ? null : <LangToggle />}
-        <button type="button" className="btn-text" onClick={() => void logout()}>
-          {t.signOut}
-        </button>
       </div>
     </header>
     </>
@@ -321,27 +360,34 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
         setTourOpen(false);
       }}
       onStep={(st) => {
-        if (st.tab === "map" || st.tab === "summary") setTab(st.tab);
+        if (st.tab === "map") setTab("map");
+        else if (st.tab === "summary") {
+          setPage("home");
+          setTab("overview");
+        }
       }}
     />
   ) : null;
 
   if (tab !== "areas") {
     const ready = supply && data;
+    const common = ready
+      ? { data: supply, catchments: supplyCatchments!, c: ssc, nav, lang, buffer, setBuffer, cdlNames: data.cdlNames, otherPlants }
+      : null;
     return (
       <div className={appClass} data-product="soy">
         {header}
         {tour}
         <main className="app-main">
-          {!ready ? (
+          {!ready || !common ? (
             <div className="boot">
               <BrandMark size={32} product="soy" />
               <span>{supplyError || loadError ? ssc.loadError : t.loading}</span>
             </div>
-          ) : tab === "map" || tab === "corridor" ? (
+          ) : tab === "map" ? (
             <SoyMapView
               key={tab}
-              mode={tab === "corridor" ? "corridor" : "supply"}
+              mode="supply"
               data={supply}
               cdlNames={data.cdlNames}
               catchments={supplyCatchments!}
@@ -361,42 +407,87 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
               areas={areas}
               area={place}
               setArea={setPlace}
+              findField={mapFind}
+              onOverview={goHome}
+              nav={{ backOverview: nav.backOverview }}
+              onOpenPlace={(p) => {
+                setPlacesInit({ ...p, nonce: Date.now() });
+                setTab("places");
+              }}
             />
           ) : (
-            <div className={`page soy-page ${tab === "summary" ? "soy-page-wide" : ""}`}>
-              {tab === "summary" ? (
-                <SoySupplyView
-                  data={supply}
-                  cdlNames={data.cdlNames}
-                  c={ssc}
-                  sc={sc}
-                  lang={lang}
-                  scope={scope}
-                  setScope={setScope}
-                  present={present}
-                  onOpenMap={() => setTab("map")}
-                  national={national}
-                  otherPlants={otherPlants}
-                  sel={sel}
-                  setSel={setSel}
-                  plantSel={plantSel}
-                  setPlantSel={choosePlant}
-                  buffer={buffer}
-                  setBuffer={setBuffer}
-                  canDownload={role !== "auditor" && role !== "viewer"}
+            <div className="page soy-page soy-page-wide">
+              {tab === "overview" && page === "home" ? (
+                <SoyOverview
+                  {...common}
                   areas={areas}
-                  onOpenArea={(a) => {
+                  dataDate={dataDate}
+                  onOpenFacility={openFacility}
+                  onOpenList={openList}
+                  onOpenMap={() => {
                     setSel([]);
-                    setPlace(a);
                     setTab("map");
                   }}
-                  onOpenReview={() => {
-                    setNcReview(true);
+                  onOpenNc={openNcSet}
+                />
+              ) : tab === "overview" && page.startsWith("list:") ? (
+                <SoyFacilityList {...common} kind={page === "list:adm" ? "adm" : "tp"} onHome={goHome} onOpenFacility={openFacility} />
+              ) : tab === "overview" ? (
+                <SoyFacilityPage
+                  {...common}
+                  sc={sc}
+                  id={page.slice(4)}
+                  canDownload={canDownload}
+                  present={present}
+                  sel={sel}
+                  setSel={setSel}
+                  onHome={goHome}
+                  onOpenList={openList}
+                  onOpenFacility={openFacility}
+                  onOpenMap={() => setTab("map")}
+                  onOpenNc={openNcScope}
+                  onOpenField={findOnMap}
+                  onReport={() => setReportOpen(true)}
+                />
+              ) : tab === "places" ? (
+                <SoyPlacesPage
+                  places={placesData}
+                  national={national}
+                  data={supply}
+                  c={ssc}
+                  nav={nav}
+                  lang={lang}
+                  canDownload={canDownload}
+                  initial={placesInit}
+                  onHome={goHome}
+                  onOpenMap={(t: PlaceTarget) => {
+                    setSel([]);
+                    setPlace(t.s ? { s: t.s, n: t.n, sub: t.sub, bbox: t.bbox } : {});
                     setTab("map");
                   }}
                 />
+              ) : tab === "nc" ? (
+                <SoyNcPage
+                  {...common}
+                  filter={ncFilter}
+                  setFilter={setNcFilter}
+                  canDownload={canDownload}
+                  onOpenOnMap={(s, f) => {
+                    setSel(idsFromScope(s, supply));
+                    findOnMap(String(f.properties.id));
+                  }}
+                />
+              ) : tab === "method" ? (
+                <SoyMethodPage {...common} present={present} dataDate={dataDate} onOpenArchive={() => setTab("areas")} />
               ) : (
-                <SoyDocsView data={supply} c={ssc} lang={lang} present={present} onOpenArchive={() => setTab("areas")} />
+                <SoyDataPage
+                  {...common}
+                  canDownload={canDownload}
+                  present={present}
+                  dataDate={dataDate}
+                  onReport={() => setReportOpen(true)}
+                  onOpenFacility={openFacility}
+                />
               )}
             </div>
           )}
@@ -476,7 +567,7 @@ export function SoyWorkspace({ role, tenant }: { role: GateRole; tenant: Tenant 
             <p>
               <b>{sc.oldBannerTitle}</b> {sc.oldBannerBody}
             </p>
-            <button type="button" className="btn-secondary" onClick={() => setTab("docs")}>
+            <button type="button" className="btn-secondary" onClick={() => setTab("method")}>
               {sc.oldBannerCta}
             </button>
           </div>

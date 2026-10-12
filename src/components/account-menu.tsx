@@ -20,6 +20,8 @@ export function AccountMenu({
   present,
   onPresent,
   onSignOut,
+  extra = [],
+  presentHint,
 }: {
   tenant: Tenant;
   /** Clients this account may switch between; fewer than two = no picker. */
@@ -30,6 +32,10 @@ export function AccountMenu({
   present: boolean;
   onPresent: (on: boolean) => void;
   onSignOut: () => void;
+  /** Product-specific entries (SoyTrace: the report, the tour), above sign out. */
+  extra?: { label: string; hint?: string; onClick: () => void }[];
+  /** What presentation mode hides in this product (PalmTrace's wording otherwise). */
+  presentHint?: string;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -121,7 +127,7 @@ export function AccountMenu({
               <label className="acct-switch">
                 <span>
                   <b>{t.menuPresent}</b>
-                  <small>{t.menuPresentHint}</small>
+                  <small>{presentHint ?? t.menuPresentHint}</small>
                 </span>
                 <input
                   type="checkbox"
@@ -133,6 +139,25 @@ export function AccountMenu({
                   }}
                 />
               </label>
+            </section>
+          ) : null}
+          {extra.length ? (
+            <section>
+              {extra.map((x) => (
+                <button
+                  key={x.label}
+                  type="button"
+                  className="acct-item acct-item-rich"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    x.onClick();
+                  }}
+                >
+                  <b>{x.label}</b>
+                  {x.hint ? <small>{x.hint}</small> : null}
+                </button>
+              ))}
             </section>
           ) : null}
           <section>

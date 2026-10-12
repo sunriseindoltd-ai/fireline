@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { KpiTile } from "@/components/kpi-tile";
 import { BufferSeg, SoyRelated, scopeSummary } from "@/components/soy-side";
 import {
   SoySupplyMap,
   bboxOf,
+  type MapTheme,
   type MapFocus,
   type ScopeFields,
   type SoyFeature,
@@ -11,6 +12,7 @@ import {
 } from "@/components/soy-supply-map";
 import type { OtherPlant, SoyArea } from "@/components/soy-supply-map";
 import type { Lang } from "@/lib/copy";
+import { usePersistentState } from "@/lib/use-persistent";
 import { fill, formatAcres, formatCount, formatHa } from "@/lib/format";
 import { SOY_GROUP_COLORS, soyGroupOf } from "@/lib/soy-copy";
 import { formatSharePct, type SoySupplyCopy } from "@/lib/soy-supply-copy";
@@ -33,26 +35,12 @@ import {
   type SupplyData, countyOf, stateName, areaStats, type SoyAreas, type SoyAreaStats
 } from "@/lib/soy-supply";
 
-type StatusFilter = "all" | "ok" | "nc";
-const PAGE = 100;
+import { csv, downloadBlob, downloadFieldsCsv, downloadFieldsGeo } from "@/lib/soy-downloads";
 
-function downloadBlob(filename: string, content: string, mime: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: mime }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-function csv(rows: (string | number | null | undefined)[][]) {
-  const cell = (v: string | number | null | undefined) => {
-    const s = v == null ? "" : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return rows.map((r) => r.map(cell).join(",")).join("\n");
-}
-// Downloads carry neither the map centre nor the owner's name and address: fieldRow below lists
-// every column that goes out.
+type StatusFilter = "all" | "ok" | "in" | "out" | "nc";
+/** fields/places/<ST>/<county>.geojson, named like scripts/prepare-soy-place-fields.py. */
+const placeSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
+const PAGE = 100;
 
 export type CatchmentInfo = {
   id: string;
@@ -136,6 +124,10 @@ export function SoyMapView({
   areas = null,
   area: areaProp,
   setArea: setAreaProp,
+  findField = null,
+  onOverview,
+  nav,
+  onOpenPlace,
 }: {
   data: SupplyData;
   cdlNames: Record<string, string>;
@@ -165,16 +157,26 @@ export function SoyMapView({
   /** The area filter, shared with the Summary (state / county). */
   area?: SoyArea;
   setArea?: (a: SoyArea) => void;
+  /** A field to open on arrival (Non-compliant page, facility page): picked and flown to once it is loaded. */
+  findField?: { id: string; nonce: number } | null;
+  /** The way back to the Overview, as one plain button at the top of the panel (user, 10 Oct 2026). */
+  onOverview?: () => void;
+  nav?: { backOverview: string };
+  /** Places layer: a county / subdivision clicked on the map opens in the Places tab. */
+  onOpenPlace?: (p: { s: string; n?: string; sub?: string }) => void;
 }) {
-  const corridor = mode === "corridor";
+  // The map mode (Compliance / Logistics / Land cover / Context): Logistics is the old Rail & river view.
+  const [themeStored, setTheme] = usePersistentState<string>("soytrace.mapTheme", mode === "corridor" ? "log" : "comp");
+  const theme: MapTheme = (["comp", "log", "land", "ctx"] as string[]).includes(themeStored) ? (themeStored as MapTheme) : "comp";
+  const corridor = theme === "log";
   const [band, setBand] = useState<Band>(10);
   const [basis, setBasis] = useState<Basis>("either");
   const [colorBy, setColorBy] = useState<SupplyColorBy>("status");
   const [scopeFieldsRaw, setScopeFields] = useState<ScopeFields>({ fields: [], nc: [], complete: false, loading: false, scope: null });
   // Until the map reports on the newly chosen scope, show it as loading rather than the previous scope's fields.
   // A county of the whole chain is asked for: its fields are on their way (not "0 fields").
-  const countyWanted =
-    levelOf(scope) === 1 && !!areaProp?.s && !!areaProp?.n && !!(areaStats(areas, areaProp.s, areaProp.n) as { file?: string | null } | null)?.file;
+  // A county / township of the whole chain is asked for: every field of the county is on its way (not "0 fields").
+  const countyWanted = levelOf(scope) === 1 && !!areaProp?.s && !!areaProp?.n;
   const scopeFields = useMemo<ScopeFields>(
     () =>
       scopeFieldsRaw.scope === scope && !(countyWanted && !scopeFieldsRaw.complete && !scopeFieldsRaw.failed && scopeFieldsRaw.fields.length === 0)
@@ -204,7 +206,9 @@ export function SoyMapView({
   }
   // Whole supply chain + one county: that county's own field file.
   const countyFile = levelOf(scope) === 1 && area.s && area.n ? (areaStats(areas, area.s, area.n) as { file?: string | null } | null)?.file ?? null : null;
-  const areaName = area.s ? [area.n ? countyOf(area.n, area.s) : null, stateName(area.s)].filter(Boolean).join(", ") : "";
+  // Every 2025 field of the county (in and outside catchments), for a county or township of the whole chain.
+  const placeFile = levelOf(scope) === 1 && area.s && area.n ? `${area.s}/${placeSlug(area.n)}` : null;
+  const areaName = area.s ? [area.sub ?? null, area.n ? countyOf(area.n, area.s) : null, stateName(area.s)].filter(Boolean).join(", ") : "";
   const sidePlants = useMemo(() => data.plants.map((p) => ({ id: p.id, name: p.city ?? p.name, hasData: true })), [data]);
   const nonce = useRef(0);
   const infos = useMemo(() => catchmentInfos(data, catchments, c), [data, catchments, c]);
@@ -228,9 +232,21 @@ export function SoyMapView({
   }
   // Whole supply chain + a state or a county: fit the map to it (a county to its own outline, not just its fields).
   const fitArea = levelOf(scope) === 1 && area.s ? (areaStats(areas, area.s, area.n) as (SoyAreaStats & { cbox?: [number, number, number, number] }) | null) : null;
-  const stateFit = fitArea ? (fitArea.cbox ?? fitArea.bbox) : null;
+  const stateFit = fitArea ? (area.bbox ?? fitArea.cbox ?? fitArea.bbox) : null;
   const fitKey = stateFit ? stateFit.join(",") : "";
   const [fitDone, setFitDone] = useState("");
+  // The field another page asked for: looked up among the loaded fields until found (non-compliant
+  // fields arrive first, a catchment's compliant fields a few seconds later).
+  const foundFor = useRef(0);
+  useEffect(() => {
+    if (!findField || foundFor.current === findField.nonce) return;
+    const all = [...scopeFields.nc, ...scopeFields.fields];
+    const f = all.find((x) => String(x.properties.id) === findField.id);
+    if (!f) return;
+    foundFor.current = findField.nonce;
+    pick(f, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findField, scopeFields]);
   if (stateFit && fitKey !== fitDone) {
     setFitDone(fitKey);
     nonce.current++;
@@ -246,8 +262,13 @@ export function SoyMapView({
   const rows = useMemo(() => {
     const q = tableQuery.trim().toLowerCase();
     const out: { f: SoyFeature; nc: boolean }[] = [];
-    if (status !== "ok") for (const f of scopeFields.nc) out.push({ f, nc: true });
-    if (status !== "nc") for (const f of scopeFields.fields) out.push({ f, nc: false });
+    if (status === "all" || status === "nc") for (const f of scopeFields.nc) out.push({ f, nc: true });
+    if (status !== "nc")
+      for (const f of scopeFields.fields) {
+        const inCatch = !!String(f.properties.k ?? "");
+        if ((status === "in" && !inCatch) || (status === "out" && inCatch)) continue;
+        out.push({ f, nc: false });
+      }
     const hit = (r: { f: SoyFeature }) =>
       !q || String(r.f.properties.id).toLowerCase().includes(q) || String(r.f.properties.n ?? "").toLowerCase().includes(q);
     return out.filter(hit).sort((a, b) => Number(b.nc) - Number(a.nc) || Number(b.f.properties.a) - Number(a.f.properties.a));
@@ -280,30 +301,7 @@ export function SoyMapView({
   const scopeName = [infos.find((x) => x.id === scope)?.name ?? c.scopeAll, areaName].filter(Boolean).join(" · ");
   const slug = [scope || "all", area.s, area.n].filter(Boolean).join("-").replace(/[^\w-]+/g, "-");
   // Fields of the current selection (one catchment or a combination): compliant, non-compliant or both,
-  // as CSV or GeoJSON (user, 8 Oct 2026). One set of columns for both kinds, blank where one doesn't apply.
-  // review_flag: already cropland in 2018–2020 (a note, ADM's status unchanged); in_any_catchment: counted in the figures.
-  const fieldRow = (f: SoyFeature, nc: boolean) => {
-    const p = f.properties;
-    return {
-      status: nc ? "non-compliant" : "compliant",
-      field_id: p.id,
-      state: p.s,
-      county: p.n,
-      field_acres: p.a,
-      soy_seasons_2018_2025: nc ? (p.sy ?? null) : p.y,
-      rail_mi: p.r ?? null,
-      river_mi: p.v ?? null,
-      cdl_2018_2025: nc ? null : String(p.c ?? "").replace(/,/g, " "),
-      cover_2018_2020: nc ? p.b : null,
-      first_cropped: nc ? p.y : null,
-      crop_2024: nc ? p.c24 : null,
-      crop_2025: nc ? p.c25 : null,
-      F2026_Soy: nc ? p.s26 : null,
-      review_flag: nc ? (p.rf ?? "") : "",
-      in_any_catchment: nc ? (String(p.k ?? "") ? "true" : "false") : "true",
-      point_only: nc && p.po ? "yes" : "no",
-    } as unknown as Record<string, string | number | null | undefined>;
-  };
+  // as CSV or GeoJSON (user, 8 Oct 2026); the columns are in lib/soy-downloads.ts.
   const [dlSet, setDlSet] = useState<"both" | "ok" | "nc">("both");
   // Compliant fields are loaded once one catchment or a combination is picked.
   const okReady = scopeFields.complete;
@@ -313,28 +311,8 @@ export function SoyMapView({
     ...(set !== "nc" ? scopeFields.fields.map((f) => ({ f, nc: false })) : []),
   ];
   const dlName = (ext: string) => `soytrace-${slug}-${set === "ok" ? "compliant" : set === "nc" ? "noncompliant" : "fields"}.${ext}`;
-  function downloadCsv() {
-    const rowsOut = dlRows.map(({ f, nc }) => {
-      const r = fieldRow(f, nc);
-      return [...Object.values(r), Number(f.properties._x).toFixed(5), Number(f.properties._y).toFixed(5)];
-    });
-    const head = [...Object.keys(fieldRow(dlRows[0]!.f, dlRows[0]!.nc)), "lon", "lat"];
-    downloadBlob(dlName("csv"), csv([head, ...rowsOut]), "text/csv");
-  }
-  function downloadGeo() {
-    // Built in pieces: a whole 0–80 NM catchment is over 100,000 outlines.
-    const parts: string[] = ['{"type":"FeatureCollection","features":['];
-    dlRows.forEach(({ f, nc }, i) => {
-      parts.push((i ? "," : "") + JSON.stringify({ type: "Feature", properties: fieldRow(f, nc), geometry: f.geometry }));
-    });
-    parts.push("]}");
-    const url = URL.createObjectURL(new Blob(parts, { type: "application/geo+json" }));
-    const el = document.createElement("a");
-    el.href = url;
-    el.download = dlName("geojson");
-    el.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  }
+  const downloadCsv = () => downloadFieldsCsv(dlRows, dlName("csv"));
+  const downloadGeo = () => downloadFieldsGeo(dlRows, dlName("geojson"));
   function downloadSummary() {
     downloadBlob(
       "soytrace-catchments.csv",
@@ -399,7 +377,7 @@ export function SoyMapView({
         ? Object.fromEntries(areas.states.map((st) => [st.s, Object.fromEntries(st.counties.map((co) => [co.n, co.f + co.nf]))]))
         : null;
   // A state of the whole chain: fit the map to it (its fields are too many to draw; a county's are drawn).
-  const fieldsMode = level === 3 || !!countyFile;
+  const fieldsMode = level === 3 || !!countyFile || !!placeFile;
   const facts: [string, string][] = [];
   {
     const adm = data.admElevators.find((e) => e.id === node.id);
@@ -452,7 +430,9 @@ export function SoyMapView({
       <div className="mapview-map">
         <SoySupplyMap
           data={data}
-          mode={mode}
+          mode={corridor ? "corridor" : "supply"}
+          theme={theme}
+          setTheme={setTheme}
           selected={scope}
           onSelect={(id) => choose(id ?? "all")}
           colorBy={colorBy}
@@ -465,12 +445,15 @@ export function SoyMapView({
           onScopeFields={setScopeFields}
           area={area}
           countyFile={countyFile}
+          placeFile={placeFile}
           selectedField={p ? String(p.id) : null}
           onSelectField={(f) => pick(f)}
           focus={focus}
           otherPlants={otherPlants}
           ncReview={ncReview}
           setNcReview={setNcReview}
+          onOpenPlace={onOpenPlace}
+          onPickArea={(a) => setArea(a)}
           toolsSlot={
             <form className="map-card soy-find" onSubmit={find}>
               <label className="sr-only" htmlFor="soy-find">
@@ -607,7 +590,7 @@ export function SoyMapView({
             </div>
             <div className="table-tools">
               <div className="seg" role="group" aria-label={c.colStatus}>
-                {(["all", "ok", "nc"] as const).map((s) => (
+                {((placeFile ? ["all", "in", "out", "nc"] : ["all", "ok", "nc"]) as StatusFilter[]).map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -618,7 +601,7 @@ export function SoyMapView({
                       setPage(0);
                     }}
                   >
-                    {s === "all" ? c.statusAll : s === "nc" ? c.statusNc : c.statusCompliant}
+                    {s === "all" ? c.statusAll : s === "nc" ? c.statusNc : s === "in" ? c.statusIn : s === "out" ? c.statusOut : c.statusCompliant}
                   </button>
                 ))}
               </div>
@@ -659,11 +642,17 @@ export function SoyMapView({
                           key={`${nc ? "n" : "c"}${String(q.id)}`}
                           className={p && String(p.id) === String(q.id) ? "on" : ""}
                           tabIndex={0}
-                          onClick={() => pick(f, true)}
-                          onKeyDown={(e) => e.key === "Enter" && pick(f, true)}
+                          onClick={() => (p && String(p.id) === String(q.id) ? setPicked(null) : pick(f, true))}
+                          onKeyDown={(e) => e.key === "Enter" && (p && String(p.id) === String(q.id) ? setPicked(null) : pick(f, true))}
                         >
                           <td>
-                            <span className={`soy-status ${nc ? "nc" : "ok"}`}>{nc ? c.statusNc : c.statusCompliant}</span>
+                            {nc ? (
+                              <span className="soy-status nc">{c.statusNc}</span>
+                            ) : placeFile && !String(q.k ?? "") ? (
+                              <span className="soy-status out">{c.statusOut}</span>
+                            ) : (
+                              <span className="soy-status ok">{c.statusCompliant}</span>
+                            )}
                           </td>
                           <td className="mono">{String(q.id)}</td>
                           <td className="truncate">{[q.n, q.s].filter(Boolean).join(", ")}</td>
@@ -705,6 +694,11 @@ export function SoyMapView({
       </div>
 
       <aside className="side-panel" aria-label={node.name}>
+        {onOverview && nav ? (
+          <button type="button" className="btn-secondary block soy-back-overview" onClick={onOverview}>
+            ← {nav.backOverview}
+          </button>
+        ) : null}
         <div className="panel-head">
           {trail.length ? (
             // Where this catchment sits: every level above is a step back.
@@ -727,86 +721,6 @@ export function SoyMapView({
           {level < 3 ? <p className="soy-panel-sub">{node.sub}</p> : null}
         </div>
         <div className="panel-body">
-          {sel && setSel ? (
-            // The same picker as the Summary's sidebar (user, 8 Oct 2026): combine without leaving the map.
-            <details className="soy-map-combine" open={combineOpen} onToggle={(e) => setCombineOpen((e.currentTarget as HTMLDetailsElement).open)}>
-              <summary>
-                <span>{c.combineTitle}</span>
-                <b>{scopeSummary(sel, data, c, lang)}</b>
-              </summary>
-              <p className="side-note soy-combine-hint">{c.combineHint}</p>
-              <SoyRelated
-                data={data}
-                c={c}
-                lang={lang}
-                plants={sidePlants}
-                plantSel=""
-                sel={sel}
-                setSel={(ids) => {
-                  setSel(ids);
-                  setPicked(null);
-                  setPage(0);
-                }}
-                catchments={catchments}
-                buffer={buffer}
-                setBuffer={setBuffer}
-              />
-            </details>
-          ) : null}
-          {areaOpts && Object.keys(areaOpts).length ? (
-            <div className="soy-area">
-              <p className="soy-area-head">
-                <span>{c.areaTitle}</span>
-                {area.s ? (
-                  <button type="button" className="btn-text" onClick={() => setArea({})}>
-                    {c.sideClear}
-                  </button>
-                ) : null}
-              </p>
-              <div className="soy-area-row">
-                <select
-                  aria-label={c.areaState}
-                  value={area.s ?? ""}
-                  onChange={(e) => {
-                    setArea(e.target.value ? { s: e.target.value } : {});
-                    setPage(0);
-                  }}
-                >
-                  <option value="">{c.areaAllStates}</option>
-                  {Object.entries(areaOpts)
-                    .map(([st, cos]) => [st, Object.values(cos).reduce((a, b) => a + b, 0)] as const)
-                    .sort((a, b) => stateName(a[0]).localeCompare(stateName(b[0])))
-                    .map(([st, n]) => (
-                      <option key={st} value={st}>
-                        {stateName(st)} · {countF(n)}
-                      </option>
-                    ))}
-                </select>
-                <select
-                  aria-label={c.areaCounty}
-                  value={area.n ?? ""}
-                  disabled={!area.s}
-                  onChange={(e) => {
-                    setArea({ s: area.s, n: e.target.value || undefined });
-                    setPage(0);
-                  }}
-                >
-                  <option value="">{c.areaAllCounties}</option>
-                  {area.s
-                    ? Object.entries(areaOpts[area.s] ?? {})
-                        .filter(([co]) => co)
-                        .sort((a, b) => a[0].localeCompare(b[0]))
-                        .map(([co, n]) => (
-                          <option key={co} value={co}>
-                            {countyOf(co, area.s)} · {countF(n)}
-                          </option>
-                        ))
-                    : null}
-                </select>
-              </div>
-              {area.s ? <p className="soy-area-note">{fill(level === 1 ? (area.n ? c.areaNoteCounty : c.areaNoteState) : c.areaNote, { area: areaName })}</p> : null}
-            </div>
-          ) : null}
           {corridor ? <p className="panel-note soy-corr-purpose">{c.corrPurpose}</p> : null}
           {corridor ? (
             <div className="soy-corr-controls">
@@ -847,6 +761,23 @@ export function SoyMapView({
                   </div>
                   {outside > 0 ? <p className="panel-note">{fill(c.outsideCoverage, { n: countF(outside), area: haF(k.compliant.acres - cov) })}</p> : null}
                 </>
+              );
+            })()
+          ) : placeFile && scopeFields.complete ? (
+            (() => {
+              // The four counts of the workbook / Places tab, from the loaded fields of this county or township.
+              const ac = (xs: SoyFeature[]) => xs.reduce((a, f) => a + (Number(f.properties.a) || 0), 0);
+              const inF = scopeFields.fields.filter((f) => !!String(f.properties.k ?? ""));
+              const outF = scopeFields.fields.filter((f) => !String(f.properties.k ?? ""));
+              const ncIn = scopeFields.nc.filter((f) => !!String(f.properties.k ?? ""));
+              const allAc = ac(scopeFields.fields);
+              return (
+                <div className="kpi-row compact soy-place-kpis">
+                  <KpiTile tone="comply" value={haF(ac(inF))} label={c.kpiInCatch} sub={`${fill(c.fieldsN, { n: countF(inF.length) })} · ${formatSharePct(pct(ac(inF), allAc), lang)}`} />
+                  <KpiTile value={haF(ac(outF))} label={c.kpiOutCatch} sub={`${fill(c.fieldsN, { n: countF(outF.length) })} · ${formatSharePct(pct(ac(outF), allAc), lang)}`} />
+                  <KpiTile tone="danger" value={countF(ncIn.length)} label={c.kpiNcIn} sub={haF(ac(ncIn))} />
+                  <KpiTile tone="danger" value={countF(scopeFields.nc.length)} label={c.kpiNcList} sub={haF(ac(scopeFields.nc))} />
+                </div>
               );
             })()
           ) : k ? (
@@ -901,12 +832,12 @@ export function SoyMapView({
               </button>
               <p className="panel-note soy-load-note">
                 {scopeFields.loading
-                  ? countyFile
+                  ? countyFile || placeFile
                     ? c.loadingCounty
                     : c.loadingScope
                   : scopeFields.failed
                     ? c.fieldsError
-                    : fill(countyFile ? c.loadedCounty : c.loadedAll, { n: countF(scopeFields.fields.length + scopeFields.nc.length) })}
+                    : fill(placeFile ? c.loadedPlace : countyFile ? c.loadedCounty : c.loadedAll, { n: countF(scopeFields.fields.length + scopeFields.nc.length) })}
               </p>
             </>
           ) : (
@@ -954,6 +885,89 @@ export function SoyMapView({
             </>
           )}
 
+          {sel && setSel ? (
+            // The same picker as the Summary's sidebar (user, 8 Oct 2026): combine without leaving the map.
+            <details className="soy-map-combine" open={combineOpen} onToggle={(e) => setCombineOpen((e.currentTarget as HTMLDetailsElement).open)}>
+              <summary>
+                <span>{c.combineTitle}</span>
+                <b>{scopeSummary(sel, data, c, lang)}</b>
+              </summary>
+              <p className="side-note soy-combine-hint">{c.combineHint}</p>
+              <SoyRelated
+                data={data}
+                c={c}
+                lang={lang}
+                plants={sidePlants}
+                plantSel=""
+                sel={sel}
+                setSel={(ids) => {
+                  setSel(ids);
+                  setPicked(null);
+                  setPage(0);
+                }}
+                catchments={catchments}
+                buffer={buffer}
+                setBuffer={setBuffer}
+              />
+            </details>
+          ) : null}
+          {areaOpts && Object.keys(areaOpts).length ? (
+            <details className="soy-area soy-map-fold" open={!!area.s || level === 1}>
+              <summary>
+                <span>{c.areaTitle}</span>
+                {area.s ? <b>{areaName}</b> : null}
+              </summary>
+              {area.s ? (
+                <button type="button" className="btn-text soy-area-clear" onClick={() => setArea({})}>
+                  {c.sideClear}
+                </button>
+              ) : null}
+              <div className="soy-area-row">
+                <select
+                  aria-label={c.areaState}
+                  value={area.s ?? ""}
+                  onChange={(e) => {
+                    setArea(e.target.value ? { s: e.target.value } : {});
+                    setPage(0);
+                  }}
+                >
+                  <option value="">{c.areaAllStates}</option>
+                  {Object.entries(areaOpts)
+                    .map(([st, cos]) => [st, Object.values(cos).reduce((a, b) => a + b, 0)] as const)
+                    .sort((a, b) => stateName(a[0]).localeCompare(stateName(b[0])))
+                    .map(([st, n]) => (
+                      <option key={st} value={st}>
+                        {stateName(st)} · {countF(n)}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  aria-label={c.areaCounty}
+                  value={area.n ?? ""}
+                  disabled={!area.s}
+                  onChange={(e) => {
+                    setArea({ s: area.s, n: e.target.value || undefined });
+                    setPage(0);
+                  }}
+                >
+                  <option value="">{c.areaAllCounties}</option>
+                  {area.s
+                    ? Object.entries(areaOpts[area.s] ?? {})
+                        .filter(([co]) => co)
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([co, n]) => (
+                          <option key={co} value={co}>
+                            {countyOf(co, area.s)} · {countF(n)}
+                          </option>
+                        ))
+                    : null}
+                  {/* A county outside every catchment (picked from the Places layer): still the current choice. */}
+                  {area.s && area.n && !(areaOpts[area.s] ?? {})[area.n] ? <option value={area.n}>{countyOf(area.n, area.s)}</option> : null}
+                </select>
+              </div>
+              {area.s ? <p className="soy-area-note">{fill(area.sub ? c.areaNoteSub : level === 1 ? (area.n ? c.areaNoteCounty : c.areaNoteState) : c.areaNote, { area: areaName })}</p> : null}
+            </details>
+          ) : null}
           {facts.length ? (
             <dl className="facts">
               {facts.map(([label, value], i) => (
