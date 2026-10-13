@@ -1,0 +1,9 @@
+node_modules/
+.env*
+.vercel/
+.output/
+.nitro/
+.tanstack/
+dist/
+.dev-inbox/
+private-data/
