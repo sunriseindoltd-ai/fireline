@@ -135,7 +135,7 @@ pres.addSection({ title: "Using FireLine" });
   eyebrow(s, "How to access");
   title(s, "Sign in once, then everything is one tab away");
   const steps = [
-    ["Open FireLine in a browser.", "The hosted link follows after review; the beta runs on the review machine today."],
+    ["Open fireline-swart.vercel.app", "in any browser, on a laptop or a phone."],
     ["Sign in.", "User ID earthlineadmin. The password is shared separately."],
     ["Start on Overview.", "Tabs: Overview, Map, Events, Method."],
     ["Press Refresh for the latest pass.", "The page never reloads on its own, so nothing moves while you work."],
@@ -148,7 +148,7 @@ pres.addSection({ title: "Using FireLine" });
   });
   s.addText("Field staff need no account: they open the link in the WhatsApp alert.", { x: 0.6, y: 5.9, w: 4.6, h: 0.6, fontSize: 13, italic: true, color: C.text2, margin: 0, isTextBox: true });
   gifFrame(s, GIF("login"), 5.6, 1.6, 7.1, 4.4375, "Sign-in and Overview recording");
-  s.addNotes("The beta is a standalone build, separate from PalmTrace and SoyTrace, with one admin login for now. The recording shows sign-in, the five headline numbers, events per day, the map and the table by supply chain.");
+  s.addNotes("The beta is live at fireline-swart.vercel.app as a standalone build, separate from PalmTrace and SoyTrace, with one admin login for now. The recording shows sign-in, the five headline numbers, events per day, the map and the table by supply chain.");
 }
 
 // ------------------------------------------------------------------ 4 events
@@ -270,7 +270,7 @@ pres.addSection({ title: "Data and next steps" });
   s.addText("NEXT STEPS", { x: 0.7, y: 0.6, w: 8, h: 0.35, fontSize: 13, bold: true, color: C.accent2, charSpacing: 3, margin: 0, isTextBox: true });
   s.addText("What it takes to go from beta to pilot", { x: 0.7, y: 1.0, w: 12, h: 0.8, fontSize: 34, bold: true, color: C.background1, margin: 0, isTextBox: true });
   const items = [
-    ["Host the beta", "Standalone build is ready (45 files, 3.9 MB). Share the link after review."],
+    ["Share the beta", "Live at fireline-swart.vercel.app (standalone build, 45 files, 3.9 MB). Decide who gets access."],
     ["Pick a pilot concession", "Decide who receives the WhatsApp alerts and who verifies."],
     ["Automatic alerts", "WhatsApp Business API and a scheduled check (Cloudflare cron), budget needed."],
     ["More satellites", "Himawari-9 every 10 minutes as early warning; FireSat when its data opens."],
