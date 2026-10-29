@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { BrandMark } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
 import { getFireVerifyContext } from "@/lib/fire-actions";
 import { useI18n } from "@/lib/i18n";
 import { fill } from "@/lib/format";
+import { fireCopy } from "@/lib/fire-copy";
+import type { Case } from "@/lib/fire-ui";
+import { bearingDeg, compass8, distanceM, formatDistance, gmapsRoute, wazeRoute } from "@/lib/fire-route";
 
 type Search = { e: string; x: string; s: string };
+
+const MAX_PHOTOS = 3;
+const FireMap = lazy(() => import("@/components/fire-map").then((m) => ({ default: m.FireMap })));
 
 /**
  * FireLine field verification — opened from the WhatsApp alert on a phone,
@@ -35,26 +41,77 @@ function VerifyPage() {
   const [status, setStatus] = useState<"active" | "extinguished" | "false_alarm" | "">("");
   const [by, setBy] = useState("");
   const [note, setNote] = useState("");
-  const [photo, setPhoto] = useState<Blob | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  // Up to MAX_PHOTOS photos: the blob sent, and a small data-URL preview (also the offline draft).
+  const [photos, setPhotos] = useState<{ blob: Blob; preview: string }[]>([]);
   const [pos, setPos] = useState<{ lat: number; lon: number } | null>(null);
   const [posState, setPosState] = useState<"idle" | "busy" | "ok" | "no">("idle");
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [fail, setFail] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const f = fireCopy[lang];
+  const [live, setLive] = useState<{ lat: number; lon: number; acc: number } | null>(null);
+  const [liveState, setLiveState] = useState<"idle" | "busy" | "fail">("idle");
+  const watchId = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
+  }, []);
+  // Live distance and direction while the page is open (GPS, updates as you move).
+  const watch = () => {
+    if (!("geolocation" in navigator)) return setLiveState("fail");
+    setLiveState("busy");
+    watchId.current = navigator.geolocation.watchPosition(
+      (p) => {
+        const v = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
+        setLive(v);
+        setLiveState("idle");
+        // The report's location comes along for free.
+        setPos({ lat: v.lat, lon: v.lon });
+        setPosState("ok");
+      },
+      () => setLiveState("fail"),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 },
+    );
+  };
 
+  const [draftNote, setDraftNote] = useState<"" | "saved" | "restored">("");
+  const draftKey = `fireline.draft.${search.e}`;
   useEffect(() => {
     try {
       setBy(localStorage.getItem("fireline.by") ?? "");
+      const d = JSON.parse(localStorage.getItem(draftKey) ?? "null") as { status?: typeof status; note?: string; photos?: string[]; pos?: { lat: number; lon: number } } | null;
+      if (d) {
+        if (d.status) setStatus(d.status);
+        if (d.note) setNote(d.note);
+        if (d.pos) {
+          setPos(d.pos);
+          setPosState("ok");
+        }
+        if (d.photos?.length) {
+          void Promise.all(d.photos.map((u) => fetch(u).then((r) => r.blob()).then((blob) => ({ blob, preview: u })))).then(setPhotos);
+        }
+        setDraftNote("restored");
+      }
     } catch {
       /* ignore */
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fmtWhen = (iso: string) =>
     new Date(iso).toLocaleString(lang === "id" ? "id-ID" : "en-GB", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const statusLabel: Record<string, string> = { active: t.fireStatusActive, extinguished: t.fireStatusOut, false_alarm: t.fireStatusFalse };
+  const inc = ctx.ok ? ctx.incident : null!;
+  // The case with its plots' shapes, as the map wants it.
+  const caseView = useMemo<Case | null>(() => {
+    if (!ctx.ok) return null;
+    const byId = new Map(ctx.shapes.map((p) => [p.id, p]));
+    return {
+      ...ctx.incident,
+      plot: { ...ctx.incident.plot, g: byId.get(ctx.incident.plot.id)?.g ?? [] },
+      aff: ctx.incident.plots.filter((cp) => byId.has(cp.id)).map((cp) => ({ ...cp, plot: byId.get(cp.id)! })),
+    };
+  }, [ctx]);
+  const villages = ctx.ok ? [...new Set(ctx.shapes.map((p) => p.village || p.district).filter(Boolean))] : [];
 
   const locate = () => {
     if (!("geolocation" in navigator)) return setPosState("no");
@@ -69,6 +126,12 @@ function VerifyPage() {
     );
   };
 
+  const [photoFail, setPhotoFail] = useState(false);
+  const onFiles = async (list: FileList | null) => {
+    setPhotoFail(false);
+    for (const file of Array.from(list ?? []).slice(0, MAX_PHOTOS - photos.length)) await onFile(file);
+    if (fileRef.current) fileRef.current.value = "";
+  };
   // Downsize on the phone so a 4–8 MB camera JPEG becomes ~300 kB.
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -87,13 +150,12 @@ function VerifyPage() {
       c.height = Math.round(img.height * k);
       c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
       const blob = await new Promise<Blob | null>((res) => c.toBlob(res, "image/jpeg", 0.82));
-      if (blob) {
-        setPhoto(blob);
-        setPreview(c.toDataURL("image/jpeg", 0.6));
-      }
+      if (blob) setPhotos((ps) => [...ps, { blob, preview: c.toDataURL("image/jpeg", 0.6) }].slice(0, MAX_PHOTOS));
     } catch {
-      setPhoto(f);
-      setPreview(url);
+      // A format this browser can't decode (e.g. HEIC): the server would refuse it too.
+      setPhotoFail(true);
+    } finally {
+      URL.revokeObjectURL(url);
     }
     if (posState === "idle") locate();
   };
@@ -119,13 +181,28 @@ function VerifyPage() {
       fd.set("lat", String(pos.lat));
       fd.set("lon", String(pos.lon));
     }
-    if (photo) fd.set("photo", photo, "photo.jpg");
+    photos.forEach((ph, k) => fd.append("photo", ph.blob, `photo${k + 1}.jpg`));
     try {
       const r = await fetch("/fire/submit", { method: "POST", body: fd });
       if (!r.ok) throw new Error(String(r.status));
       setDone(true);
+      setDraftNote("");
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        /* ignore */
+      }
     } catch {
       setFail(true);
+      // Keep the report on the phone (no signal in the field is normal).
+      try {
+        let budget = 1_500_000;
+        const keep = photos.map((ph) => ph.preview).filter((u) => (budget -= u.length) > 0);
+        localStorage.setItem(draftKey, JSON.stringify({ status, note, pos, photos: keep }));
+        setDraftNote("saved");
+      } catch {
+        /* storage full */
+      }
     } finally {
       setSending(false);
     }
@@ -149,30 +226,91 @@ function VerifyPage() {
           <p>{t.fvIntro}</p>
           <div className="fv-card">
             <dl>
-              <dt>{t.fireColMill}</dt>
+              <dt>{f.colCompany}</dt>
               <dd>
-                <b>{ctx.event.plot.mill || "—"}</b>
+                <b>{inc.name}</b>
               </dd>
+              <dt>{t.fireColMill}</dt>
+              <dd>{inc.mills.join(", ") || "—"}</dd>
               <dt>{t.fireEventPlot}</dt>
               <dd>
-                {ctx.event.plot.company || "—"}
-                <br />
-                {ctx.event.plot.type} · {ctx.event.plot.id}
-                <br />
-                {[ctx.event.plot.village, ctx.event.plot.district].filter(Boolean).join(", ")}
+                {fill(f.plotsN, { n: inc.plots.length })}
+                {villages.length ? (
+                  <>
+                    <br />
+                    {villages.slice(0, 4).join(", ")}
+                    {villages.length > 4 ? ` ${fill(f.moreN, { n: villages.length - 4 })}` : ""}
+                  </>
+                ) : null}
               </dd>
               <dt>{t.fvHotspot}</dt>
               <dd className="tabular-nums">
-                {ctx.event.lat}, {ctx.event.lon}
+                {inc.lat}, {inc.lon}
                 <br />
-                {ctx.event.d === 0 ? t.fireInside : fill(t.fireMetres, { d: ctx.event.d })}
+                {inc.d === 0 ? f.inside : fill(f.metres, { d: inc.d })} · {fill(f.dets, { n: inc.n })} · {fill(f.daysN, { n: inc.days.length })}
               </dd>
               <dt>{t.fvDetected}</dt>
-              <dd className="tabular-nums">{fmtWhen(ctx.event.last)} WIB</dd>
+              <dd className="tabular-nums">{fmtWhen(inc.last)} WIB</dd>
             </dl>
-            <a className="btn-primary block" href={`https://maps.google.com/?q=${ctx.event.lat},${ctx.event.lon}`} target="_blank" rel="noopener noreferrer">
-              {t.fvOpenMaps}
-            </a>
+          </div>
+
+          <div className="fv-map">
+            <Suspense fallback={null}>
+              <FireMap
+                mode="focus"
+                incidents={caseView ? [caseView] : []}
+                selected={caseView}
+                colorOf={() => "#e5322d"}
+                mill={ctx.mill ? { ...ctx.mill, name: inc.plot.mill } : null}
+                me={live ?? (pos ? { lat: pos.lat, lon: pos.lon } : null)}
+                tools={false}
+              />
+            </Suspense>
+          </div>
+
+          <div className="fv-card fv-route">
+            <b>{f.routeTitle}</b>
+            <div className="fv-route-btns">
+              <a className="btn-primary" href={gmapsRoute(inc.lat, inc.lon)} target="_blank" rel="noopener noreferrer">
+                {f.gmaps}
+              </a>
+              <a className="btn-secondary" href={wazeRoute(inc.lat, inc.lon)} target="_blank" rel="noopener noreferrer">
+                {f.waze}
+              </a>
+            </div>
+            {live ? (
+              <div className="fv-live" aria-live="polite">
+                <span className="fv-arrow" style={{ transform: `rotate(${bearingDeg(live, inc)}deg)` }} aria-hidden="true">
+                  ↑
+                </span>
+                <div>
+                  <b className="tabular-nums">{formatDistance(distanceM(live, inc), lang)}</b>
+                  <span>
+                    {f.dirs[compass8(bearingDeg(live, inc))]} ({bearingDeg(live, inc)}°) · {fill(f.fvAccuracy, { m: Math.round(live.acc) })}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn-secondary" onClick={watch} disabled={liveState === "busy"}>
+                {liveState === "busy" ? f.locating : f.fvStart}
+              </button>
+            )}
+            {live && distanceM(live, inc) <= 150 ? <p className="fv-arrived">{f.fvArrived}</p> : null}
+            {liveState === "fail" ? <p className="fv-muted">{f.locFail}</p> : null}
+            {ctx.mill ? (
+              <p className="fv-muted">
+                {fill(f.fvFromMill, {
+                  mill: inc.plot.mill,
+                  km: formatDistance(distanceM(ctx.mill, inc), lang),
+                  dir: f.dirs[compass8(bearingDeg(ctx.mill, inc))],
+                })}{" "}
+                ·{" "}
+                <a href={gmapsRoute(inc.lat, inc.lon, ctx.mill)} target="_blank" rel="noopener noreferrer">
+                  {f.millRoute}
+                </a>
+              </p>
+            ) : null}
+            <p className="fv-muted">{f.fvRouteNote}</p>
           </div>
 
           {done ? (
@@ -187,8 +325,7 @@ function VerifyPage() {
                   setDone(false);
                   setStatus("");
                   setNote("");
-                  setPhoto(null);
-                  setPreview(null);
+                  setPhotos([]);
                 }}
               >
                 {t.fvDoneAgain}
@@ -215,11 +352,25 @@ function VerifyPage() {
               </label>
               <div>
                 <b>{t.fvPhoto}</b>
-                <label className="fv-photo-btn" style={{ marginTop: 6 }}>
-                  <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={(e) => void onFile(e.target.files?.[0])} />
-                  📷 {t.fvPhotoTake}
-                </label>
-                {preview ? <img className="fv-preview" src={preview} alt="" style={{ marginTop: 8 }} /> : null}
+                {photos.length ? (
+                  <div className="fv-photos">
+                    {photos.map((ph, k) => (
+                      <div key={k} className="fv-thumb">
+                        <img src={ph.preview} alt={`${f.photo} ${k + 1}`} />
+                        <button type="button" aria-label={fill(f.fvRemovePhoto, { n: k + 1 })} onClick={() => setPhotos((ps) => ps.filter((_, j) => j !== k))}>
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {photos.length < MAX_PHOTOS ? (
+                  <label className="fv-photo-btn" style={{ marginTop: 6 }}>
+                    <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple onChange={(e) => void onFiles(e.target.files)} />
+                    📷 {photos.length ? fill(f.fvAddPhoto, { n: photos.length, max: MAX_PHOTOS }) : t.fvPhotoTake}
+                  </label>
+                ) : null}
+                {photoFail ? <p className="fv-muted">{f.fvPhotoFail}</p> : null}
               </div>
               <div className="fv-row">
                 <b>{t.fvLocation}:</b>
@@ -235,7 +386,9 @@ function VerifyPage() {
                   </button>
                 )}
               </div>
-              {fail ? <p className="eudr-notice danger">{t.fvFail}</p> : null}
+              {fail ? <p className="eudr-notice danger">{draftNote === "saved" ? f.fvDraftSaved : t.fvFail}</p> : null}
+              {draftNote === "restored" && !fail ? <p className="fv-muted">{f.fvDraftRestored}</p> : null}
+              {pos && distanceM(pos, inc) > 1000 ? <p className="fv-far">{fill(f.fvFar, { km: formatDistance(distanceM(pos, inc), lang) })}</p> : null}
               <button type="submit" className="btn-primary block" disabled={sending || !status || !by.trim()}>
                 {sending ? t.fvSending : t.fvSubmit}
               </button>

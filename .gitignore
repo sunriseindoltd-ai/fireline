@@ -7,3 +7,9 @@ node_modules/
 dist/
 .dev-inbox/
 private-data/
+# Credentials (passwords in clear) and the Earthline customer boundary shapefile: never in git
+artifacts/
+Customer_Boundary_*
+
+# Boss deck 20 Oct (1.5 GB of recordings; slides carry sales contacts = personal data): local only
+docs/deck-oct20/

@@ -1,82 +1,65 @@
 /**
- * Fire monitoring — extract Company + Scheme Smallholder plots from PalmTrace
- * (ADM tenant) into a compact, cell-partitioned index for hotspot attribution.
+ * FireLine — PalmTrace (ADM tenant) plots in a cell-partitioned index for
+ * hotspot attribution. Geometry is kept exactly as PalmTrace has it (every
+ * vertex, holes, every part of a multipart or geometry collection); only
+ * coordinates are rounded to 6 decimals (≈ 0.1 m).
  *
- * Output (private-data/fire/):
- *   cells/<cellId>.json   features in that 0.05° cell: {id, mill, uml, group,
+ * Output (<root>/private-data/fire/v2/, uploaded under fire/v2/):
+ *   cells/<cellId>.json   plots touching that 0.05° cell: {id, mill, uml, group,
  *                         company, type, village, district, province, ha, bbox,
- *                         g: [[lon,lat],…] outer ring, simplified ±10 m}
- *   cells-index.json      {cell: 0.05, cells: {<cellId>: {n, bbox}}, totals…}
- *   mills.json            per mill: plots, ha, bbox, group, company list
+ *                         g: [[outer, ...holes], …] (polygons, [lon,lat] rings)}
+ *   cells-index.json      {cell: 0.05, generated, types, plots, cells: {<id>: {n, bbox}}}
+ *   mills.json            per mill: plots, ha, bbox, group, companies
  *
- * Usage: node scripts/prepare-fire-plots.mjs [--types "Company,Scheme Smallholder"]
+ * Usage: node scripts/prepare-fire-plots.mjs [--root "../Kanopi 0.0.13"] [--exclude "Independent Smallholder"]
+ * Every plot type is kept except the excluded ones (user decision, 19 Oct 2026).
  */
 import { readdir, readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const HERE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const arg = (k, d) => {
+  const a = process.argv.find((x) => x.startsWith(`--${k}=`));
+  if (a) return a.slice(k.length + 3);
+  const i = process.argv.indexOf(`--${k}`);
+  return i > 0 ? process.argv[i + 1] : d;
+};
+const ROOT = path.resolve(HERE, arg("root", path.join("..", "Kanopi 0.0.13")));
 const PLOTS = path.join(ROOT, "private-data", "plots");
-const OUT = path.join(ROOT, "private-data", "fire");
+const OUT = path.join(ROOT, "private-data", "fire", "v2");
 const CELL = 0.05;
-const TOL = 0.0001; // ≈ 11 m
-const argTypes = process.argv.find((a) => a.startsWith("--types="));
-const TYPES = new Set((argTypes ? argTypes.slice(8) : "Company,Scheme Smallholder").split(",").map((s) => s.trim()));
+const EXCLUDE = new Set(arg("exclude", "Independent Smallholder").split(",").map((s) => s.trim().toLowerCase()));
 
-// --- Douglas–Peucker on [lon,lat] rings -------------------------------------
-function sqSegDist(p, a, b) {
-  let x = a[0], y = a[1], dx = b[0] - x, dy = b[1] - y;
-  if (dx !== 0 || dy !== 0) {
-    const t = ((p[0] - x) * dx + (p[1] - y) * dy) / (dx * dx + dy * dy);
-    if (t > 1) { x = b[0]; y = b[1]; } else if (t > 0) { x += dx * t; y += dy * t; }
-  }
-  dx = p[0] - x; dy = p[1] - y;
-  return dx * dx + dy * dy;
-}
-function dp(points, tol2) {
-  const n = points.length;
-  if (n <= 4) return points;
-  const keep = new Uint8Array(n); keep[0] = keep[n - 1] = 1;
-  const stack = [[0, n - 1]];
-  while (stack.length) {
-    const [s, e] = stack.pop();
-    let max = tol2, idx = -1;
-    for (let i = s + 1; i < e; i++) { const d = sqSegDist(points[i], points[s], points[e]); if (d > max) { max = d; idx = i; } }
-    if (idx > 0) { keep[idx] = 1; stack.push([s, idx], [idx, e]); }
-  }
-  const out = []; for (let i = 0; i < n; i++) if (keep[i]) out.push(points[i]);
-  return out.length >= 4 ? out : points;
-}
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 function ring(coords) {
-  const pts = coords.map((c) => [c[0], c[1]]);
-  if (pts[0][0] !== pts[pts.length - 1][0] || pts[0][1] !== pts[pts.length - 1][1]) pts.push(pts[0]);
-  return dp(pts, TOL * TOL).map((p) => [r6(p[0]), r6(p[1])]);
+  const pts = coords.map((c) => [r6(c[0]), r6(c[1])]);
+  if (pts.length && (pts[0][0] !== pts[pts.length - 1][0] || pts[0][1] !== pts[pts.length - 1][1])) pts.push(pts[0]);
+  return pts;
 }
-function outerRings(geom) {
+/** Every polygon of the geometry as [outer, ...holes]. */
+function polygons(geom) {
   if (!geom) return [];
-  if (geom.type === "Polygon") return [ring(geom.coordinates[0])];
-  if (geom.type === "MultiPolygon") return geom.coordinates.map((p) => ring(p[0]));
+  if (geom.type === "Polygon") return [geom.coordinates.map(ring)];
+  if (geom.type === "MultiPolygon") return geom.coordinates.map((p) => p.map(ring));
+  if (geom.type === "GeometryCollection") return (geom.geometries ?? []).flatMap(polygons);
   return [];
 }
-function bboxOf(rings) {
+function bboxOf(polys) {
   let w = 180, s = 90, e = -180, n = -90;
-  for (const r of rings) for (const [x, y] of r) { if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y; }
-  return [r6(w), r6(s), r6(e), r6(n)];
+  for (const p of polys) for (const [x, y] of p[0]) { if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y; }
+  return [w, s, e, n];
 }
-const cellId = (x, y) => `${Math.floor(y / CELL)}_${Math.floor(x / CELL)}`;
 const str = (v) => (v == null ? "" : String(v).trim());
 
 const cells = new Map();
 const mills = new Map();
 const typeCounts = {};
-let total = 0, kept = 0, files = 0;
+let total = 0, kept = 0, files = 0, noGeom = 0, vertices = 0;
 
 // Mill names: some plot files (SJIM buffer plots) carry an empty Mill_name,
 // so fall back to mills.json (the plot file is named after the mill id).
-const millsById = new Map(
-  JSON.parse(await readFile(path.join(ROOT, "private-data", "mills.json"), "utf8")).map((m) => [m.id, m]),
-);
+const millsById = new Map(JSON.parse(await readFile(path.join(ROOT, "private-data", "mills.json"), "utf8")).map((m) => [m.id, m]));
 const names = (await readdir(PLOTS)).filter((f) => f.endsWith(".geojson")).sort();
 const t0 = Date.now();
 for (const file of names) {
@@ -89,50 +72,69 @@ for (const file of names) {
     total++;
     const p = f.properties ?? {};
     const type = str(p.TYPE);
-    typeCounts[type] = (typeCounts[type] ?? 0) + 1;
-    if (!TYPES.has(type)) continue;
-    const rings = outerRings(f.geometry);
-    if (!rings.length) continue;
-    const bbox = bboxOf(rings);
+    typeCounts[type || "(blank)"] = (typeCounts[type || "(blank)"] ?? 0) + 1;
+    if (EXCLUDE.has(type.toLowerCase())) continue;
+    const g = polygons(f.geometry).filter((poly) => poly[0]?.length >= 4);
+    if (!g.length) {
+      noGeom++;
+      continue;
+    }
+    const bbox = bboxOf(g);
     const uml = str(p.UML_ID) || str(millRec?.umlId) || (m ? m[1] : "");
     const mill = str(p.Mill_name) || str(millRec?.millName);
+    const ha = Number(p.Hectarage ?? p.HECTARAGE) || 0;
     const rec = {
       id: str(p.PlotID), mill, uml, group, company: str(p.COMPANY), type,
       village: str(p.Village), district: str(p.District), province: str(p.Province),
-      ha: Math.round((Number(p.Hectarage) || 0) * 100) / 100, bbox, g: rings,
+      ha: Math.round(ha * 100) / 100, bbox, g,
     };
     kept++;
-    // register in every cell the bbox touches
+    for (const poly of g) for (const r of poly) vertices += r.length;
     const seen = new Set();
     for (let y = Math.floor(bbox[1] / CELL); y <= Math.floor(bbox[3] / CELL); y++)
       for (let x = Math.floor(bbox[0] / CELL); x <= Math.floor(bbox[2] / CELL); x++) {
         const id = `${y}_${x}`;
-        if (seen.has(id)) continue; seen.add(id);
-        let c = cells.get(id); if (!c) { c = []; cells.set(id, c); }
+        if (seen.has(id)) continue;
+        seen.add(id);
+        let c = cells.get(id);
+        if (!c) cells.set(id, (c = []));
         c.push(rec);
       }
     const mk = `${uml}|${mill}`;
     let mm = mills.get(mk);
-    if (!mm) { mm = { uml, mill, group, plots: 0, ha: 0, bbox: [180, 90, -180, -90], companies: new Set(), types: {} }; mills.set(mk, mm); }
-    mm.plots++; mm.ha += rec.ha; mm.companies.add(rec.company); mm.types[type] = (mm.types[type] ?? 0) + 1;
-    const b = mm.bbox; if (bbox[0] < b[0]) b[0] = bbox[0]; if (bbox[1] < b[1]) b[1] = bbox[1]; if (bbox[2] > b[2]) b[2] = bbox[2]; if (bbox[3] > b[3]) b[3] = bbox[3];
+    if (!mm) mills.set(mk, (mm = { uml, mill, group, plots: 0, ha: 0, bbox: [180, 90, -180, -90], companies: new Set(), types: {} }));
+    mm.plots++;
+    mm.ha += rec.ha;
+    mm.companies.add(rec.company);
+    mm.types[type] = (mm.types[type] ?? 0) + 1;
+    const b = mm.bbox;
+    if (bbox[0] < b[0]) b[0] = bbox[0];
+    if (bbox[1] < b[1]) b[1] = bbox[1];
+    if (bbox[2] > b[2]) b[2] = bbox[2];
+    if (bbox[3] > b[3]) b[3] = bbox[3];
   }
   if (files % 50 === 0) console.log(`${files}/${names.length} files, kept ${kept}/${total}, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 }
 
 await rm(path.join(OUT, "cells"), { recursive: true, force: true });
 await mkdir(path.join(OUT, "cells"), { recursive: true });
-const index = { cell: CELL, generated: new Date().toISOString(), types: [...TYPES], plots: kept, cells: {} };
-let bytes = 0;
+const index = { cell: CELL, generated: new Date().toISOString(), exclude: [...EXCLUDE], plots: kept, exact: true, cells: {} };
+let bytes = 0, biggest = 0;
 for (const [id, feats] of cells) {
   const [y, x] = id.split("_").map(Number);
   const body = JSON.stringify(feats);
   bytes += body.length;
+  biggest = Math.max(biggest, body.length);
   await writeFile(path.join(OUT, "cells", `${id}.json`), body);
   index.cells[id] = { n: feats.length, bbox: [r6(x * CELL), r6(y * CELL), r6((x + 1) * CELL), r6((y + 1) * CELL)] };
 }
 await writeFile(path.join(OUT, "cells-index.json"), JSON.stringify(index));
-const millsOut = [...mills.values()].map((m) => ({ ...m, ha: Math.round(m.ha * 100) / 100, companies: [...m.companies].sort() }))
-  .sort((a, b) => b.plots - a.plots);
+const millsOut = [...mills.values()].map((mm) => ({ ...mm, ha: Math.round(mm.ha * 100) / 100, companies: [...mm.companies].sort() })).sort((a, b) => b.plots - a.plots);
 await writeFile(path.join(OUT, "mills.json"), JSON.stringify(millsOut));
-console.log(JSON.stringify({ files, total, kept, typeCounts, cells: cells.size, mills: millsOut.length, cellBytesMB: +(bytes / 1e6).toFixed(1), seconds: +((Date.now() - t0) / 1000).toFixed(0) }, null, 1));
+console.log(
+  JSON.stringify(
+    { files, total, kept, noGeom, typeCounts, vertices, cells: cells.size, mills: millsOut.length, cellBytesMB: +(bytes / 1e6).toFixed(1), biggestCellMB: +(biggest / 1e6).toFixed(1), seconds: +((Date.now() - t0) / 1000).toFixed(0) },
+    null,
+    1,
+  ),
+);

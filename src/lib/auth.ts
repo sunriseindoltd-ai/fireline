@@ -3,14 +3,16 @@ import { SignJWT, jwtVerify } from "jose";
 import { getCookie, setCookie } from "@tanstack/react-start/server";
 
 /**
- * FireLine sign-in: one admin account (user decision, 13 Oct 2026). The
- * password is stored only as a scrypt hash. Sessions are a signed JWT in an
- * httpOnly cookie, valid 12 hours.
+ * FireLine sign-in. Passwords are stored only as scrypt hashes (credentials: artifacts/akun-fireline.csv,
+ * not in git). Sessions are a signed JWT in an httpOnly cookie, valid 12 hours.
+ *  - admin: Earthline staff — FireLine Indonesia plus the supply-chain cases, field reports and sales contacts;
+ *  - viewer: FireLine Indonesia only (every account holder; e.g. the GAPKI demo, user decision 27 Oct 2026).
  */
-const ACCOUNTS = [
-  { user: "earthlineadmin", salt: "5f34d7f6b8368f9c050c1aaf4186ec2a", hash: "95eff4b331d73b6e63ce3d15427b6696a58ab752f942d0b91f4c9fa17617264c", role: "admin" as const },
+export type Role = "admin" | "viewer";
+const ACCOUNTS: { user: string; salt: string; hash: string; role: Role }[] = [
+  { user: "earthlineadmin", salt: "5f34d7f6b8368f9c050c1aaf4186ec2a", hash: "95eff4b331d73b6e63ce3d15427b6696a58ab752f942d0b91f4c9fa17617264c", role: "admin" },
+  { user: "demo-indonesia", salt: "23c14e755ee32e359e332caf38c523ca", hash: "41ce28380113e160f4eea4d82084566caa7841f3b895d95b0e67e019102ef1ef", role: "viewer" },
 ];
-export type Role = (typeof ACCOUNTS)[number]["role"];
 export type Session = { user: string; role: Role };
 
 const COOKIE = "fireline_session";

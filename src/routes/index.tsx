@@ -1,8 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { getSession } from "@/lib/auth-actions";
-import { FirePage } from "@/components/fire-page";
+import { FireShell } from "@/components/fire-shell";
 
-// The FireLine dashboard. Signed-out visitors go to /login.
+// The FireLine dashboard (FireLine Indonesia; Earthline staff also the supply chain). Signed-out visitors go to /login.
 export const Route = createFileRoute("/")({
   loader: async () => {
     const s = await getSession();
@@ -11,6 +11,6 @@ export const Route = createFileRoute("/")({
   },
   component: () => {
     const s = Route.useLoaderData();
-    return <FirePage role={s.role} />;
+    return <FireShell role={s.role} />;
   },
 });

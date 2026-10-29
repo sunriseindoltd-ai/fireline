@@ -12,9 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FireIndexRouteImport } from './routes/fire/index'
+import { Route as FireContactsRouteImport } from './routes/fire/contacts'
+import { Route as FireDispatchRouteImport } from './routes/fire/dispatch'
 import { Route as FireImageryRouteImport } from './routes/fire/imagery'
+import { Route as FireLayerRouteImport } from './routes/fire/layer'
+import { Route as FireLinkRouteImport } from './routes/fire/link'
+import { Route as FireNationalRouteImport } from './routes/fire/national'
+import { Route as FireOfficeReportRouteImport } from './routes/fire/office-report'
 import { Route as FirePhotoRouteImport } from './routes/fire/photo'
 import { Route as FireReportsRouteImport } from './routes/fire/reports'
+import { Route as FireShapesRouteImport } from './routes/fire/shapes'
 import { Route as FireSubmitRouteImport } from './routes/fire/submit'
 import { Route as FireVerifyRouteImport } from './routes/fire/verify'
 
@@ -33,9 +40,39 @@ const FireIndexRoute = FireIndexRouteImport.update({
   path: '/fire/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FireContactsRoute = FireContactsRouteImport.update({
+  id: '/fire/contacts',
+  path: '/fire/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireDispatchRoute = FireDispatchRouteImport.update({
+  id: '/fire/dispatch',
+  path: '/fire/dispatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FireImageryRoute = FireImageryRouteImport.update({
   id: '/fire/imagery',
   path: '/fire/imagery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireLayerRoute = FireLayerRouteImport.update({
+  id: '/fire/layer',
+  path: '/fire/layer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireLinkRoute = FireLinkRouteImport.update({
+  id: '/fire/link',
+  path: '/fire/link',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireNationalRoute = FireNationalRouteImport.update({
+  id: '/fire/national',
+  path: '/fire/national',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireOfficeReportRoute = FireOfficeReportRouteImport.update({
+  id: '/fire/office-report',
+  path: '/fire/office-report',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FirePhotoRoute = FirePhotoRouteImport.update({
@@ -46,6 +83,11 @@ const FirePhotoRoute = FirePhotoRouteImport.update({
 const FireReportsRoute = FireReportsRouteImport.update({
   id: '/fire/reports',
   path: '/fire/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FireShapesRoute = FireShapesRouteImport.update({
+  id: '/fire/shapes',
+  path: '/fire/shapes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FireSubmitRoute = FireSubmitRouteImport.update({
@@ -62,9 +104,16 @@ const FireVerifyRoute = FireVerifyRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/fire/contacts': typeof FireContactsRoute
+  '/fire/dispatch': typeof FireDispatchRoute
   '/fire/imagery': typeof FireImageryRoute
+  '/fire/layer': typeof FireLayerRoute
+  '/fire/link': typeof FireLinkRoute
+  '/fire/national': typeof FireNationalRoute
+  '/fire/office-report': typeof FireOfficeReportRoute
   '/fire/photo': typeof FirePhotoRoute
   '/fire/reports': typeof FireReportsRoute
+  '/fire/shapes': typeof FireShapesRoute
   '/fire/submit': typeof FireSubmitRoute
   '/fire/verify': typeof FireVerifyRoute
   '/fire/': typeof FireIndexRoute
@@ -72,9 +121,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/fire/contacts': typeof FireContactsRoute
+  '/fire/dispatch': typeof FireDispatchRoute
   '/fire/imagery': typeof FireImageryRoute
+  '/fire/layer': typeof FireLayerRoute
+  '/fire/link': typeof FireLinkRoute
+  '/fire/national': typeof FireNationalRoute
+  '/fire/office-report': typeof FireOfficeReportRoute
   '/fire/photo': typeof FirePhotoRoute
   '/fire/reports': typeof FireReportsRoute
+  '/fire/shapes': typeof FireShapesRoute
   '/fire/submit': typeof FireSubmitRoute
   '/fire/verify': typeof FireVerifyRoute
   '/fire': typeof FireIndexRoute
@@ -83,9 +139,16 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/fire/contacts': typeof FireContactsRoute
+  '/fire/dispatch': typeof FireDispatchRoute
   '/fire/imagery': typeof FireImageryRoute
+  '/fire/layer': typeof FireLayerRoute
+  '/fire/link': typeof FireLinkRoute
+  '/fire/national': typeof FireNationalRoute
+  '/fire/office-report': typeof FireOfficeReportRoute
   '/fire/photo': typeof FirePhotoRoute
   '/fire/reports': typeof FireReportsRoute
+  '/fire/shapes': typeof FireShapesRoute
   '/fire/submit': typeof FireSubmitRoute
   '/fire/verify': typeof FireVerifyRoute
   '/fire/': typeof FireIndexRoute
@@ -95,9 +158,16 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/fire/contacts'
+    | '/fire/dispatch'
     | '/fire/imagery'
+    | '/fire/layer'
+    | '/fire/link'
+    | '/fire/national'
+    | '/fire/office-report'
     | '/fire/photo'
     | '/fire/reports'
+    | '/fire/shapes'
     | '/fire/submit'
     | '/fire/verify'
     | '/fire/'
@@ -105,9 +175,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/fire/contacts'
+    | '/fire/dispatch'
     | '/fire/imagery'
+    | '/fire/layer'
+    | '/fire/link'
+    | '/fire/national'
+    | '/fire/office-report'
     | '/fire/photo'
     | '/fire/reports'
+    | '/fire/shapes'
     | '/fire/submit'
     | '/fire/verify'
     | '/fire'
@@ -115,9 +192,16 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/login'
+    | '/fire/contacts'
+    | '/fire/dispatch'
     | '/fire/imagery'
+    | '/fire/layer'
+    | '/fire/link'
+    | '/fire/national'
+    | '/fire/office-report'
     | '/fire/photo'
     | '/fire/reports'
+    | '/fire/shapes'
     | '/fire/submit'
     | '/fire/verify'
     | '/fire/'
@@ -126,9 +210,16 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  FireContactsRoute: typeof FireContactsRoute
+  FireDispatchRoute: typeof FireDispatchRoute
   FireImageryRoute: typeof FireImageryRoute
+  FireLayerRoute: typeof FireLayerRoute
+  FireLinkRoute: typeof FireLinkRoute
+  FireNationalRoute: typeof FireNationalRoute
+  FireOfficeReportRoute: typeof FireOfficeReportRoute
   FirePhotoRoute: typeof FirePhotoRoute
   FireReportsRoute: typeof FireReportsRoute
+  FireShapesRoute: typeof FireShapesRoute
   FireSubmitRoute: typeof FireSubmitRoute
   FireVerifyRoute: typeof FireVerifyRoute
   FireIndexRoute: typeof FireIndexRoute
@@ -157,11 +248,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FireIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fire/contacts': {
+      id: '/fire/contacts'
+      path: '/fire/contacts'
+      fullPath: '/fire/contacts'
+      preLoaderRoute: typeof FireContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/dispatch': {
+      id: '/fire/dispatch'
+      path: '/fire/dispatch'
+      fullPath: '/fire/dispatch'
+      preLoaderRoute: typeof FireDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fire/imagery': {
       id: '/fire/imagery'
       path: '/fire/imagery'
       fullPath: '/fire/imagery'
       preLoaderRoute: typeof FireImageryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/layer': {
+      id: '/fire/layer'
+      path: '/fire/layer'
+      fullPath: '/fire/layer'
+      preLoaderRoute: typeof FireLayerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/link': {
+      id: '/fire/link'
+      path: '/fire/link'
+      fullPath: '/fire/link'
+      preLoaderRoute: typeof FireLinkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/national': {
+      id: '/fire/national'
+      path: '/fire/national'
+      fullPath: '/fire/national'
+      preLoaderRoute: typeof FireNationalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/office-report': {
+      id: '/fire/office-report'
+      path: '/fire/office-report'
+      fullPath: '/fire/office-report'
+      preLoaderRoute: typeof FireOfficeReportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fire/photo': {
@@ -176,6 +309,13 @@ declare module '@tanstack/react-router' {
       path: '/fire/reports'
       fullPath: '/fire/reports'
       preLoaderRoute: typeof FireReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/shapes': {
+      id: '/fire/shapes'
+      path: '/fire/shapes'
+      fullPath: '/fire/shapes'
+      preLoaderRoute: typeof FireShapesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fire/submit': {
@@ -198,9 +338,16 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  FireContactsRoute: FireContactsRoute,
+  FireDispatchRoute: FireDispatchRoute,
   FireImageryRoute: FireImageryRoute,
+  FireLayerRoute: FireLayerRoute,
+  FireLinkRoute: FireLinkRoute,
+  FireNationalRoute: FireNationalRoute,
+  FireOfficeReportRoute: FireOfficeReportRoute,
   FirePhotoRoute: FirePhotoRoute,
   FireReportsRoute: FireReportsRoute,
+  FireShapesRoute: FireShapesRoute,
   FireSubmitRoute: FireSubmitRoute,
   FireVerifyRoute: FireVerifyRoute,
   FireIndexRoute: FireIndexRoute,

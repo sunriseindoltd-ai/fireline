@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { BrandMark } from "@/components/brand-mark";
+import { BrandMark, FireWord } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
 import { getSession, login } from "@/lib/auth-actions";
 import { fireCopy } from "@/lib/fire-copy";
@@ -59,7 +59,9 @@ function LoginPage() {
         <div className="login-top">
           <span className="login-home">
             <BrandMark size={24} />
-            <span>FireLine</span>
+            <span>
+              <FireWord />
+            </span>
           </span>
           <LangToggle />
         </div>

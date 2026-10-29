@@ -1,9 +1,11 @@
 // Geometry helpers for hotspot ↔ plot attribution (pure, no deps).
 export type Ring = [number, number][];
+/** [outer, ...holes] */
+export type Polygon = Ring[];
 export type FirePlot = {
   id: string; mill: string; uml: string; group: string; company: string; type: string;
   village: string; district: string; province: string; ha: number;
-  bbox: [number, number, number, number]; g: Ring[];
+  bbox: [number, number, number, number]; g: Polygon[];
 };
 
 export function pointInRing(x: number, y: number, ring: Ring): boolean {
@@ -37,10 +39,13 @@ export function plotDistanceM(x: number, y: number, p: FirePlot, maxM: number): 
   const pad = maxM / 100000; // ~1° ≈ 100 km, generous
   if (x < p.bbox[0] - pad || x > p.bbox[2] + pad || y < p.bbox[1] - pad || y > p.bbox[3] + pad) return Infinity;
   let best = Infinity;
-  for (const r of p.g) {
-    if (pointInRing(x, y, r)) return 0;
-    const d = distToRingM(x, y, r);
-    if (d < best) best = d;
+  for (const poly of p.g) {
+    // Inside the outer ring and in none of its holes = inside the plot.
+    if (pointInRing(x, y, poly[0]) && !poly.slice(1).some((h) => pointInRing(x, y, h))) return 0;
+    for (const r of poly) {
+      const d = distToRingM(x, y, r);
+      if (d < best) best = d;
+    }
   }
   return best <= maxM ? best : Infinity;
 }

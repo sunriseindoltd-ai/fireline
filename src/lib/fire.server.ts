@@ -15,16 +15,37 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AwsClient } from "aws4fetch";
 import { CELL, cellsAround, plotDistanceM, type FirePlot } from "@/lib/fire-geo";
 
 export const ATTRIB_M = 500;
+/** Shortest operational case window (days), and the value stored in the cache. */
 export const DAYS = 7;
-const CLUSTER_DEG = 0.004;
+/** Days of data kept for History and fire events (4 weeks). */
+export const SPAN_DAYS = 28;
+/**
+ * Start of the operational case window (inbox, map, summary): the 2026 haze season, from 1 October
+ * (Singapore's haze ran from 5 Oct). FIRE_WINDOW_FROM overrides it; the window is never shorter than
+ * DAYS nor longer than SPAN_DAYS.
+ */
+const WINDOW_FROM = process.env.FIRE_WINDOW_FROM || "2026-10-01";
+export function caseWindow(generated: string): { from: string; days: number } {
+  const t = Date.parse(generated);
+  const back = (n: number) => isoDay(new Date(t - (n - 1) * 86400000)); // first day of an n-day window ending today (event dates are FIRMS dates)
+  let from = WINDOW_FROM < back(DAYS) ? WINDOW_FROM : back(DAYS);
+  if (from < back(SPAN_DAYS)) from = back(SPAN_DAYS);
+  return { from, days: Math.round((Date.parse(back(1)) - Date.parse(from)) / 86400000) + 1 };
+}
+/** A refresh with a full-span cache re-fetches only this many latest days; older events are carried over. */
+export const FETCH_RECENT_DAYS = 10;
+export const CLUSTER_DEG = 0.004;
 const BBOX = "95,-11,141,6"; // Indonesia (west,south,east,north)
 const SOURCES = ["VIIRS_NOAA21_NRT", "VIIRS_NOAA20_NRT", "VIIRS_SNPP_NRT"] as const;
+
+/** A plot's description without its geometry (shapes travel once, in FireData.shapes). */
+export type PlotMeta = Omit<FirePlot, "g" | "bbox">;
 
 export type FireEvent = {
   id: string;
@@ -45,7 +66,53 @@ export type FireEvent = {
   d: number;
   /** Distinct plots within ATTRIB_M. */
   near: number;
-  plot: Omit<FirePlot, "g" | "bbox"> & { g: FirePlot["g"] };
+  plot: PlotMeta;
+};
+
+/** One affected plot inside a case. */
+export type CasePlot = { id: string; d: number; n: number; last: string };
+
+/**
+ * What the dashboard works with: one *case* per company (or, for plots with no
+ * company name, per plot type and village) over the whole period — every
+ * hotspot and every plot of that company together, so one estate is one
+ * alert, one field visit and one report (user decision, 19 Oct 2026).
+ * Derived from FireData.events on read.
+ */
+export type FireIncident = {
+  /** `c_<company slug>`: stable across days, so reports stay with the company. */
+  id: string;
+  /** Company name, or "<type> · <village>" when the plots carry none. */
+  name: string;
+  kind: "company" | "area";
+  /** WIB day of the latest detection. */
+  day: string;
+  /** Hotspots per WIB day, oldest first. */
+  days: { day: string; n: number }[];
+  first: string;
+  last: string;
+  /** The strongest hotspot of the latest day: where to send people. */
+  lat: number;
+  lon: number;
+  /** Detections, and the events (≈450 m clusters) they formed. */
+  n: number;
+  events: number;
+  /** Every event point: [lon, lat, frp, index into days]. */
+  pts: [number, number, number, number][];
+  /** Event ids folded in (old alert links carry one of these). */
+  ev: string[];
+  sats: string[];
+  frp: number;
+  conf: "l" | "n" | "h";
+  /** Closest hotspot to a plot (m, 0 = inside). */
+  d: number;
+  near: number;
+  /** The plot of the strongest latest hotspot (mill, group, place). */
+  plot: PlotMeta;
+  /** Every affected plot, nearest/most detections first. */
+  plots: CasePlot[];
+  mills: string[];
+  groups: string[];
 };
 
 export type FireVerification = {
@@ -55,15 +122,23 @@ export type FireVerification = {
   by: string;
   lat?: number;
   lon?: number;
+  /** First photo (older reports have only this); `photos` lists all, up to 3. */
   photo?: string;
+  photos?: string[];
+  /** Recorded at the office (phoned in), not from the field link. */
+  office?: boolean;
 };
 
 export type FireData = {
   generated: string;
   days: number;
-  /** All detections in the bounding box (context only). */
+  /** Days of data held (SPAN_DAYS); absent in caches written before 19 Oct 2026. */
+  span?: number;
+  /** All detections in the bounding box (not shown: only plots ≤ ATTRIB_M count). */
   detections: number;
   events: FireEvent[];
+  /** Exact PalmTrace geometry of every plot an event is attributed to. */
+  shapes: Record<string, FirePlot["g"]>;
   /** cells-index.json `generated` the events were attributed against. */
   plots?: string;
   /** Set when FIRMS could not be reached and this is the last good result. */
@@ -87,10 +162,10 @@ function fireStore(): Store | null {
   return store;
 }
 const DEV_DIR = path.join(process.cwd(), ".dev-inbox", "fire");
-const LOCAL_DIR = path.join(process.cwd(), "private-data", "fire");
+export const LOCAL_DIR = path.join(process.cwd(), "private-data", "fire");
 let localIndex: boolean | undefined;
 function hasLocalIndex() {
-  localIndex ??= existsSync(path.join(LOCAL_DIR, "cells-index.json"));
+  localIndex ??= existsSync(path.join(LOCAL_DIR, "v2", "cells-index.json"));
   return localIndex;
 }
 
@@ -110,12 +185,50 @@ async function getObject(key: string, local = DEV_DIR): Promise<Buffer | null> {
   if (!res.ok) throw new Error(`fire store GET ${key}: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
-async function putObject(key: string, body: Buffer | string, contentType: string): Promise<void> {
+/**
+ * Read-modify-write of one key, one at a time on this instance, so two reports
+ * arriving together don't overwrite each other's index entry.
+ */
+const locks = new Map<string, Promise<unknown>>();
+async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = locks.get(key) ?? Promise.resolve();
+  const run = prev.catch(() => {}).then(fn);
+  locks.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (locks.get(key) === run) locks.delete(key);
+  }
+}
+
+/** POSTs that use the session cookie must come from this site. */
+export function sameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return true; // same-origin fetches from older browsers, curl
+  try {
+    return new URL(origin).host === new URL(request.url).host || new URL(origin).host === request.headers.get("x-forwarded-host");
+  } catch {
+    return false;
+  }
+}
+
+/** JPEG / PNG / WebP by their first bytes; anything else is refused. */
+export function photoType(b: Buffer): "jpg" | "png" | "webp" | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpg";
+  if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "png";
+  if (b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP") return "webp";
+  return null;
+}
+
+export async function putObject(key: string, body: Buffer | string, contentType: string): Promise<void> {
   const s = fireStore();
   if (!s) {
     const abs = path.join(DEV_DIR, key.replace(/^fire\//, ""));
     await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, body);
+    // Write then rename, so a reader never sees a half-written file.
+    const tmp = `${abs}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tmp, body);
+    await rename(tmp, abs);
     return;
   }
   const res = await s.client.fetch(`${s.base}/${key.split("/").map(encodeURIComponent).join("/")}`, {
@@ -125,7 +238,7 @@ async function putObject(key: string, body: Buffer | string, contentType: string
   });
   if (!res.ok) throw new Error(`fire store PUT ${key}: ${res.status}`);
 }
-const getJson = async <T>(key: string, local?: string): Promise<T | null> => {
+export const getJson = async <T>(key: string, local?: string): Promise<T | null> => {
   const b = await getObject(key, local);
   return b ? (JSON.parse(b.toString("utf8")) as T) : null;
 };
@@ -135,14 +248,14 @@ const getJson = async <T>(key: string, local?: string): Promise<T | null> => {
 type CellIndex = { cell: number; generated: string; plots: number; cells: Record<string, { n: number; bbox: number[] }> };
 let cellIndexP: Promise<CellIndex | null> | undefined;
 function cellIndex() {
-  cellIndexP ??= getJson<CellIndex>("fire/cells-index.json", LOCAL_DIR);
+  cellIndexP ??= getJson<CellIndex>("fire/v2/cells-index.json", LOCAL_DIR);
   return cellIndexP;
 }
 const cellCache = new Map<string, Promise<FirePlot[]>>();
 function cellPlots(id: string): Promise<FirePlot[]> {
   let p = cellCache.get(id);
   if (!p) {
-    p = getJson<FirePlot[]>(`fire/cells/${id}.json`, LOCAL_DIR).then((v) => v ?? []);
+    p = getJson<FirePlot[]>(`fire/v2/cells/${id}.json`, LOCAL_DIR).then((v) => v ?? []);
     cellCache.set(id, p);
     if (cellCache.size > 1500) cellCache.delete(cellCache.keys().next().value!);
   }
@@ -151,31 +264,35 @@ function cellPlots(id: string): Promise<FirePlot[]> {
 
 // ------------------------------------------------------------------ FIRMS
 
-type Detection = { lat: number; lon: number; date: string; time: string; sat: string; conf: string; frp: number };
+export type Detection = { lat: number; lon: number; date: string; time: string; sat: string; conf: string; frp: number };
 
-function isoDay(d: Date) {
+export function isoDay(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchFirms(): Promise<Detection[]> {
+async function fetchFirms(days: number): Promise<Detection[]> {
   const key = process.env.FIRMS_MAP_KEY;
   if (!key) throw new Error("FIRMS_MAP_KEY not configured");
   const today = new Date();
-  const earlier = new Date(today.getTime() - 6 * 86400000);
-  // The area API allows at most 5 days per call: today back 5 days, plus two
-  // days starting six days ago.
+  // The area API allows at most 5 days per call ("Expects [1..5]"): the latest
+  // block without a date, then 5-day blocks backwards with an explicit start.
   const calls: string[] = [];
   for (const src of SOURCES) {
-    calls.push(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${key}/${src}/${BBOX}/5`);
-    calls.push(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${key}/${src}/${BBOX}/2/${isoDay(earlier)}`);
+    let covered = 0;
+    while (covered < days) {
+      const n = Math.min(5, days - covered);
+      const start = new Date(today.getTime() - (covered + n - 1) * 86400000);
+      calls.push(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${key}/${src}/${BBOX}/${n}${covered ? `/${isoDay(start)}` : ""}`);
+      covered += n;
+    }
   }
   const seen = new Set<string>();
   const out: Detection[] = [];
-  // FIRMS is sometimes slow: at most 3 calls at once, 45 s each, one retry.
+  // FIRMS is sometimes slow: at most 4 calls at once, 60 s each, one retry.
   const one = async (u: string) => {
     for (let attempt = 1; ; attempt++) {
       try {
-        const res = await fetch(u, { signal: AbortSignal.timeout(45000) });
+        const res = await fetch(u, { signal: AbortSignal.timeout(60000) });
         const text = await res.text();
         if (!res.ok || !text.startsWith("latitude")) throw new Error(`FIRMS ${res.status}: ${text.slice(0, 120)}`);
         return text;
@@ -188,7 +305,7 @@ async function fetchFirms(): Promise<Detection[]> {
   const texts: string[] = new Array(calls.length);
   let next = 0;
   await Promise.all(
-    Array.from({ length: 3 }, async () => {
+    Array.from({ length: 4 }, async () => {
       while (next < calls.length) {
         const i = next++;
         texts[i] = await one(calls[i]);
@@ -212,7 +329,21 @@ async function fetchFirms(): Promise<Detection[]> {
   return out;
 }
 
-const CONF_RANK: Record<string, number> = { l: 0, n: 1, h: 2 };
+/**
+ * The national view and the supply-chain cases refresh together: the second asks for the same days within
+ * a minute and a half and gets the same fetch instead of calling FIRMS again.
+ */
+const firmsMemo = new Map<number, { at: number; p: Promise<Detection[]> }>();
+export function fetchFirmsShared(days: number): Promise<Detection[]> {
+  const hit = firmsMemo.get(days);
+  if (hit && Date.now() - hit.at < 90000) return hit.p;
+  const p = fetchFirms(days);
+  firmsMemo.set(days, { at: Date.now(), p });
+  p.catch(() => firmsMemo.delete(days));
+  return p;
+}
+
+export const CONF_RANK: Record<string, number> = { l: 0, n: 1, h: 2 };
 const r5 = (v: number) => Math.round(v * 1e5) / 1e5;
 
 /**
@@ -220,7 +351,7 @@ const r5 = (v: number) => Math.round(v * 1e5) / 1e5;
  * event whose detections did not change, so only new or grown events need
  * plot cells fetched from storage.
  */
-async function buildEvents(dets: Detection[], prev: FireEvent[] = []): Promise<FireEvent[]> {
+async function buildEvents(dets: Detection[], prev: FireEvent[] = [], prevShapes: FireData["shapes"] = {}): Promise<{ events: FireEvent[]; shapes: FireData["shapes"] }> {
   const idx = await cellIndex();
   if (!idx) throw new Error("fire plot index missing");
   const reuse = new Map(prev.map((e) => [e.id, e]));
@@ -254,6 +385,8 @@ async function buildEvents(dets: Detection[], prev: FireEvent[] = []): Promise<F
     while (wanted.length) await cellPlots(wanted.shift()!);
   }));
   const events: FireEvent[] = [];
+  const shapes: FireData["shapes"] = {};
+  for (const e of kept) if (prevShapes[e.plot.id]) shapes[e.plot.id] = prevShapes[e.plot.id];
   for (const { g, lat, lon, ids } of centred) {
     if (!ids.length) continue;
     let best: { d: number; p: FirePlot } | null = null;
@@ -270,6 +403,7 @@ async function buildEvents(dets: Detection[], prev: FireEvent[] = []): Promise<F
     const times = g.dets.map((d) => `${d.date}T${d.time.slice(0, 2)}:${d.time.slice(2)}:00Z`).sort();
     const { g: ring, bbox: _b, ...plot } = best.p;
     void _b;
+    shapes[plot.id] = ring;
     events.push({
       id: g.id,
       date: g.date,
@@ -283,17 +417,19 @@ async function buildEvents(dets: Detection[], prev: FireEvent[] = []): Promise<F
       conf: g.dets.reduce<"l" | "n" | "h">((a, d) => (CONF_RANK[d.conf] > CONF_RANK[a] ? (d.conf as "l" | "n" | "h") : a), "l"),
       d: Math.round(best.d),
       near: nearIds.size,
-      plot: { ...plot, g: ring },
+      plot,
     });
   }
   events.push(...kept);
   events.sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
-  return events;
+  return { events, shapes };
 }
 
 // ------------------------------------------------------------------ cache
 
 let memo: { at: number; data: Promise<FireData> } | null = null;
+/** v2 = exact plot geometry + shapes map (the old key belongs to the previous build). */
+const CACHE_KEY = "fire/v2/cache/latest.json";
 
 /** Events for the last DAYS days. */
 /** Minimum age before a manual refresh may hit FIRMS again. */
@@ -304,7 +440,8 @@ export const REFRESH_MIN_MS = 2 * 60 * 1000;
  * (the header shows its time); the Refresh button fetches FIRMS again once
  * the data is over REFRESH_MIN_MS old. Nothing refreshes on a timer.
  */
-const OPEN_MAX_MS = 3 * 3600 * 1000;
+// FIRE_OPEN_MAX_H (optional, dev): keep using the stored result longer, e.g. to recompute deck numbers from a fixed snapshot.
+export const OPEN_MAX_MS = (Number(process.env.FIRE_OPEN_MAX_H) || 3) * 3600 * 1000;
 
 export async function loadFireData(opts: { refresh?: boolean } = {}): Promise<FireData> {
   const maxAge = opts.refresh ? REFRESH_MIN_MS : OPEN_MAX_MS;
@@ -314,12 +451,15 @@ export async function loadFireData(opts: { refresh?: boolean } = {}): Promise<Fi
     if (d && Date.now() - Date.parse(d.generated) < maxAge) return d;
   }
   const p = (async () => {
-    const cached = await getJson<FireData>("fire/cache/latest.json").catch(() => null);
+    const cached = await getJson<FireData>(CACHE_KEY).catch(() => null);
     if (cached && Date.now() - Date.parse(cached.generated) < maxAge) return cached;
     let dets: Detection[];
-    let idx: CellIndex | null;
+    const idx = await cellIndex().catch(() => null);
+    const sameIndex = !!cached && !!idx && cached.plots === idx.generated;
+    // Same plots and a full-span cache: fetch only the latest days; the older events are carried over below.
+    const quick = sameIndex && cached!.span === SPAN_DAYS;
     try {
-      [dets, idx] = await Promise.all([fetchFirms(), cellIndex()]);
+      dets = await fetchFirmsShared(quick ? FETCH_RECENT_DAYS : SPAN_DAYS);
     } catch (e) {
       // FIRMS down or slow: keep showing the last good result, flagged.
       if (cached) {
@@ -328,10 +468,21 @@ export async function loadFireData(opts: { refresh?: boolean } = {}): Promise<Fi
       }
       throw e;
     }
-    const sameIndex = !!cached && !!idx && cached.plots === idx.generated;
-    const events = await buildEvents(dets, sameIndex ? cached!.events : []);
-    const data: FireData = { generated: new Date().toISOString(), days: DAYS, detections: dets.length, events, plots: idx?.generated };
-    await putObject("fire/cache/latest.json", JSON.stringify(data), "application/json").catch((e) => console.error("[fire] cache write failed", e));
+    const { events, shapes } = await buildEvents(dets, sameIndex ? cached!.events : [], sameIndex ? cached!.shapes : {});
+    let detections = dets.length;
+    if (quick) {
+      const t = Date.now();
+      const fetchedFrom = isoDay(new Date(t - (FETCH_RECENT_DAYS - 1) * 86400000));
+      const oldest = isoDay(new Date(t - (SPAN_DAYS - 1) * 86400000));
+      for (const e of cached!.events) {
+        if (e.date >= fetchedFrom || e.date < oldest) continue;
+        events.push(e);
+        detections += e.n;
+        if (!shapes[e.plot.id] && cached!.shapes[e.plot.id]) shapes[e.plot.id] = cached!.shapes[e.plot.id];
+      }
+    }
+    const data: FireData = { generated: new Date().toISOString(), days: DAYS, span: SPAN_DAYS, detections, events, shapes, plots: idx?.generated };
+    await putObject(CACHE_KEY, JSON.stringify(data), "application/json").catch((e) => console.error("[fire] cache write failed", e));
     return data;
   })();
   memo = { at: Date.now(), data: p };
@@ -346,7 +497,7 @@ export async function loadFireData(opts: { refresh?: boolean } = {}): Promise<Fi
   return p;
 }
 
-/** Only the groups a session may see (null = everything). */
+/** Only the groups a session may see (null = everything). (Unused by the single-account build.) */
 export function filterFireEvents(events: FireEvent[], allowed: { groups?: readonly string[]; umls?: readonly string[] } | null) {
   if (!allowed) return events;
   const groups = new Set(allowed.groups ?? []);
@@ -354,10 +505,121 @@ export function filterFireEvents(events: FireEvent[], allowed: { groups?: readon
   return events.filter((e) => groups.has(e.plot.group) || umls.has(e.plot.uml));
 }
 
+// -------------------------------------------------------------- incidents
+
+const WIB_MS = 7 * 3600000;
+export const wibDayOf = (iso: string) => new Date(Date.parse(iso) + WIB_MS).toISOString().slice(0, 10);
+
+/** Case key: the company, else plot type + village (smallholder plots often carry no company). */
+export function caseKey(p: PlotMeta): { key: string; name: string; kind: FireIncident["kind"] } {
+  const company = p.company.replace(/\s+/g, " ").trim();
+  if (company && company !== "-" && !/^\?+$/.test(company)) return { key: company.toUpperCase(), name: company, kind: "company" };
+  const place = p.village || p.district || p.mill || "—";
+  const name = `${p.type || "Plot"} · ${place}`;
+  return { key: name.toUpperCase(), name, kind: "area" };
+}
+const caseId = (key: string) => `c_${key.replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "")}`.slice(0, 60);
+
+export function toIncidents(events: FireEvent[]): FireIncident[] {
+  const by = new Map<string, { k: ReturnType<typeof caseKey>; list: FireEvent[] }>();
+  for (const e of events) {
+    const k = caseKey(e.plot);
+    const id = caseId(k.key);
+    const g = by.get(id);
+    if (g) g.list.push(e);
+    else by.set(id, { k, list: [e] });
+  }
+  const out: FireIncident[] = [];
+  for (const [id, { k, list }] of by) {
+    const dayOf = (e: FireEvent) => wibDayOf(e.first);
+    const dayN = new Map<string, number>();
+    for (const e of list) dayN.set(dayOf(e), (dayN.get(dayOf(e)) ?? 0) + e.n);
+    const days = [...dayN.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([day, n]) => ({ day, n }));
+    const lastDay = days[days.length - 1].day;
+    const latest = list.filter((e) => dayOf(e) === lastDay);
+    const top = latest.reduce((a, e) => (e.frp > a.frp ? e : a), latest[0]);
+    const plots = new Map<string, CasePlot>();
+    for (const e of list) {
+      const cp = plots.get(e.plot.id);
+      if (!cp) plots.set(e.plot.id, { id: e.plot.id, d: e.d, n: e.n, last: e.last });
+      else {
+        cp.d = Math.min(cp.d, e.d);
+        cp.n += e.n;
+        if (e.last > cp.last) cp.last = e.last;
+      }
+    }
+    const dayIdx = new Map(days.map((d, i) => [d.day, i]));
+    out.push({
+      id,
+      name: k.name,
+      kind: k.kind,
+      day: lastDay,
+      days,
+      first: list.reduce((a, e) => (e.first < a ? e.first : a), list[0].first),
+      last: list.reduce((a, e) => (e.last > a ? e.last : a), list[0].last),
+      lat: top.lat,
+      lon: top.lon,
+      n: list.reduce((a, e) => a + e.n, 0),
+      events: list.length,
+      pts: list.map((e) => [e.lon, e.lat, e.frp, dayIdx.get(dayOf(e)) ?? 0] as [number, number, number, number]),
+      ev: list.map((e) => e.id),
+      sats: [...new Set(list.flatMap((e) => e.sats))].sort(),
+      frp: Math.max(...list.map((e) => e.frp)),
+      conf: list.reduce<"l" | "n" | "h">((a, e) => (CONF_RANK[e.conf] > CONF_RANK[a] ? e.conf : a), "l"),
+      d: Math.min(...list.map((e) => e.d)),
+      near: Math.max(...list.map((e) => e.near)),
+      plot: top.plot,
+      plots: [...plots.values()].sort((a, b) => a.d - b.d || b.n - a.n),
+      mills: [...new Set(list.map((e) => e.plot.mill).filter(Boolean))].sort(),
+      groups: [...new Set(list.map((e) => e.plot.group).filter(Boolean))].sort(),
+    });
+  }
+  out.sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
+  return out;
+}
+
+let incMemo: { generated: string; list: FireIncident[]; history: FireIncident[]; meta: Record<string, PlotMeta> } | null = null;
+/**
+ * Cases of the current data (memoised per FIRMS fetch): `incidents` = the case
+ * window (caseWindow: since 1 Oct, inbox, map, summary), `history` = the same companies over the whole
+ * SPAN_DAYS (History tab, fire events). Same ids, so reports apply to both.
+ */
+export async function loadFireIncidents(opts: { refresh?: boolean } = {}): Promise<{ data: FireData; incidents: FireIncident[]; history: FireIncident[]; meta: Record<string, PlotMeta> }> {
+  const data = await loadFireData(opts);
+  if (!incMemo || incMemo.generated !== data.generated) {
+    const meta: Record<string, PlotMeta> = {};
+    for (const e of data.events) meta[e.plot.id] ??= e.plot;
+    const { from } = caseWindow(data.generated);
+    incMemo = { generated: data.generated, list: toIncidents(data.events.filter((e) => e.date >= from)), history: toIncidents(data.events), meta };
+  }
+  return { data, incidents: incMemo.list, history: incMemo.history, meta: incMemo.meta };
+}
+
 // ---------------------------------------------------------- verifications
 
 type VerificationFile = { eventId: string; entries: FireVerification[] };
-export type VerificationIndex = Record<string, { status: FireVerification["status"]; at: string; n: number; by: string }>;
+/** What the incident was, kept with its reports so they outlive the 7-day FIRMS window. */
+export type IncidentSnapshot = Pick<FireIncident, "name" | "kind" | "day" | "days" | "first" | "last" | "lat" | "lon" | "n" | "frp" | "d" | "mills" | "groups"> & {
+  plot: PlotMeta;
+  plots: number;
+};
+export type VerificationIndex = Record<string, { status: FireVerification["status"]; at: string; n: number; by: string; s?: IncidentSnapshot }>;
+export function snapshotOf(i: FireIncident): IncidentSnapshot {
+  return {
+    name: i.name, kind: i.kind, day: i.day, days: i.days, first: i.first, last: i.last, lat: i.lat, lon: i.lon,
+    n: i.n, frp: i.frp, d: i.d, mills: i.mills, groups: i.groups, plot: i.plot, plots: i.plots.length,
+  };
+}
+
+/** A context layer GeoJSON (fire/layers/<name>.geojson) as raw bytes, or null. */
+export async function loadFireLayer(name: string): Promise<Buffer | null> {
+  if (!/^[a-z0-9-]+$/.test(name)) return null;
+  return getObject(`fire/layers/${name}.geojson`, LOCAL_DIR);
+}
+/** Sales-team attribution file (fire/sales/contacts.json), or null. */
+export async function loadSalesContacts(): Promise<Buffer | null> {
+  return getObject("fire/sales/contacts.json", LOCAL_DIR);
+}
 
 export async function loadVerificationIndex(): Promise<VerificationIndex> {
   return (await getJson<VerificationIndex>("fire/verifications/_index.json")) ?? {};
@@ -365,33 +627,75 @@ export async function loadVerificationIndex(): Promise<VerificationIndex> {
 export async function loadVerifications(eventId: string): Promise<FireVerification[]> {
   return (await getJson<VerificationFile>(`fire/verifications/${safeId(eventId)}.json`))?.entries ?? [];
 }
-export async function addVerification(eventId: string, v: FireVerification): Promise<void> {
+export async function addVerification(eventId: string, v: FireVerification, snap?: IncidentSnapshot): Promise<void> {
   const id = safeId(eventId);
-  const file = (await getJson<VerificationFile>(`fire/verifications/${id}.json`)) ?? { eventId: id, entries: [] };
-  file.entries.push(v);
-  await putObject(`fire/verifications/${id}.json`, JSON.stringify(file), "application/json");
-  const index = await loadVerificationIndex();
-  index[id] = { status: v.status, at: v.at, n: file.entries.length, by: v.by };
-  await putObject("fire/verifications/_index.json", JSON.stringify(index), "application/json");
+  const n = await withLock(`v:${id}`, async () => {
+    const file = (await getJson<VerificationFile>(`fire/verifications/${id}.json`)) ?? { eventId: id, entries: [] };
+    file.entries.push(v);
+    await putObject(`fire/verifications/${id}.json`, JSON.stringify(file), "application/json");
+    return file.entries.length;
+  });
+  await withLock("v:_index", async () => {
+    const index = await loadVerificationIndex();
+    const s = snap ?? index[id]?.s;
+    index[id] = { status: v.status, at: v.at, n, by: v.by, ...(s ? { s } : {}) };
+    await putObject("fire/verifications/_index.json", JSON.stringify(index), "application/json");
+  });
 }
-export async function savePhoto(eventId: string, bytes: Buffer): Promise<string> {
-  const name = `${safeId(eventId)}/${Date.now()}.jpg`;
-  await putObject(`fire/photos/${name}`, bytes, "image/jpeg");
+const PHOTO_MIME = { jpg: "image/jpeg", png: "image/png", webp: "image/webp" } as const;
+export async function savePhoto(eventId: string, bytes: Buffer): Promise<string | null> {
+  const kind = photoType(bytes);
+  if (!kind) return null;
+  const name = `${safeId(eventId)}/${Date.now()}.${kind}`;
+  await putObject(`fire/photos/${name}`, bytes, PHOTO_MIME[kind]);
   return name;
 }
-export async function loadPhoto(name: string): Promise<Buffer | null> {
-  if (!/^[\w-]+\/\d+\.jpg$/.test(name)) return null;
-  return getObject(`fire/photos/${name}`);
+export async function loadPhoto(name: string): Promise<{ bytes: Buffer; type: string } | null> {
+  const m = /^[\w-]+\/\d+\.(jpg|png|webp)$/.exec(name);
+  if (!m) return null;
+  const bytes = await getObject(`fire/photos/${name}`);
+  return bytes ? { bytes, type: PHOTO_MIME[m[1] as keyof typeof PHOTO_MIME] } : null;
+}
+
+// ------------------------------------------------------------- dispatches
+
+/** Who sent an incident to the field, when, how, and how many times. */
+export type DispatchIndex = Record<string, { at: string; by: string; ch: "whatsapp" | "link"; n: number }>;
+export async function loadDispatchIndex(): Promise<DispatchIndex> {
+  return (await getJson<DispatchIndex>("fire/dispatch/_index.json")) ?? {};
+}
+/** Log one send covering one or more incidents (a mill message carries several). */
+export async function addDispatch(ids: string[], by: string, ch: "whatsapp" | "link"): Promise<DispatchIndex> {
+  const keys = [...new Set(ids.map(safeId).filter(Boolean))].slice(0, 50);
+  return withLock("d:_index", async () => {
+    const index = await loadDispatchIndex();
+    const at = new Date().toISOString();
+    const out: DispatchIndex = {};
+    for (const k of keys) out[k] = index[k] = { at, by, ch, n: (index[k]?.n ?? 0) + 1 };
+    await putObject("fire/dispatch/_index.json", JSON.stringify(index), "application/json");
+    return out;
+  });
 }
 
 export function safeId(id: string) {
   return id.replace(/[^\w-]/g, "").slice(0, 60);
 }
 
-/** Event summary for the verification page (no session: the link is signed). */
-export async function findFireEvent(eventId: string): Promise<FireEvent | null> {
-  const data = await loadFireData();
-  return data.events.find((e) => e.id === eventId) ?? null;
+/**
+ * The incident behind a signed link (no session). Links sent before incidents
+ * existed carry an event id: resolve it to the incident that holds the event.
+ */
+export async function findFireIncident(id: string): Promise<FireIncident | null> {
+  const loaded = await loadFireIncidents();
+  const incidents = [...loaded.incidents, ...loaded.history];
+  // Older links carry an event id, or a per-plot-per-day id (`yyyymmdd_<plot>`).
+  const plotId = /^\d{8}_(.+)$/.exec(id)?.[1];
+  return (
+    incidents.find((i) => i.id === id) ??
+    incidents.find((i) => i.ev.includes(id)) ??
+    (plotId ? incidents.find((i) => i.plots.some((p) => safeId(p.id) === plotId)) : undefined) ??
+    null
+  );
 }
 
 // ------------------------------------------------------------ signed links
