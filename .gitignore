@@ -13,3 +13,6 @@ Customer_Boundary_*
 
 # Boss deck 20 Oct (1.5 GB of recordings; slides carry sales contacts = personal data): local only
 docs/deck-oct20/
+
+# Plot layers pulled from gisdb (1+ GB, data only): local only
+Data Storage/

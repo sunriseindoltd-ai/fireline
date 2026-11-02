@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { GoogleMapsLogo, WazeLogo } from "@/components/brand-icons";
 import { createFileRoute } from "@tanstack/react-router";
 import { BrandMark } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
@@ -271,11 +272,11 @@ function VerifyPage() {
           <div className="fv-card fv-route">
             <b>{f.routeTitle}</b>
             <div className="fv-route-btns">
-              <a className="btn-primary" href={gmapsRoute(inc.lat, inc.lon)} target="_blank" rel="noopener noreferrer">
-                {f.gmaps}
+              <a className="btn-primary btn-ico" href={gmapsRoute(inc.lat, inc.lon)} target="_blank" rel="noopener noreferrer">
+                <GoogleMapsLogo /> {f.gmaps}
               </a>
-              <a className="btn-secondary" href={wazeRoute(inc.lat, inc.lon)} target="_blank" rel="noopener noreferrer">
-                {f.waze}
+              <a className="btn-secondary btn-ico" href={wazeRoute(inc.lat, inc.lon)} target="_blank" rel="noopener noreferrer">
+                <WazeLogo /> {f.waze}
               </a>
             </div>
             {live ? (

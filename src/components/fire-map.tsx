@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { basemapStyle } from "@/lib/basemap";
+import { addOutsideMask } from "@/lib/outside-mask";
 import { fill } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { fireCopy } from "@/lib/fire-copy";
 import { COLOR, PHONE_MQ, type Case } from "@/lib/fire-ui";
 import { MapTools } from "@/components/fire-map-tools";
-import { ContextLayers, onMill } from "@/components/fire-layers";
+import { ContextLayers, onMill, type LayerKey } from "@/components/fire-layers";
 import type { FireScene, FireScenes, FireSceneTiles } from "@/lib/fire.server";
 
 type ImgSrc = "base" | "s2" | "s1";
@@ -37,6 +38,19 @@ const DAY_COLORS = ["#ff3b1f", "#ff9f1c", "#ffd166"];
  * select, reports the visible bounds) and `focus` (one incident: its plot,
  * every detection, the mill, and the Sentinel imagery controls).
  */
+const zones = new Map<string, Promise<GeoJSON.Geometry | null>>();
+/** 500 m zone around a case's plots (GET /fire/buffer), once per case per page. */
+function zoneOf(id: string) {
+  let p = zones.get(id);
+  if (!p) {
+    p = fetch(`/fire/buffer?e=${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    zones.set(id, p);
+  }
+  return p;
+}
+
 export function FireMap({
   incidents,
   colorOf,
@@ -50,6 +64,7 @@ export function FireMap({
   tools = true,
   weeks = false,
   context,
+  ctxKeys,
 }: {
   incidents: Case[];
   colorOf: (i: Case) => string;
@@ -67,6 +82,8 @@ export function FireMap({
   weeks?: boolean;
   /** Context layers (plots coverage, RSPO, burned areas) with these cases for the RSPO popup counts. */
   context?: Case[];
+  /** Which context layers to offer (default: all; company accounts get no Earthline plot coverage). */
+  ctxKeys?: LayerKey[];
 }) {
   const { lang } = useI18n();
   const f = fireCopy[lang];
@@ -97,6 +114,7 @@ export function FireMap({
       // Keeps the focus map's pixels so the incident prints with its map.
       preserveDrawingBuffer: mode === "focus",
     });
+    addOutsideMask(map);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: "metric" }), "bottom-right");
     // Dev only: lets Playwright scripts (deck recordings) drive the camera; never set in production builds.
@@ -107,19 +125,21 @@ export function FireMap({
       setToolEl(slot.el);
     }
     map.on("load", () => {
-      for (const id of ["plots", "pts", "mill", "me"]) map.addSource(id, { type: "geojson", data: EMPTY });
+      for (const id of ["plots", "pts", "mill", "me", "zone"]) map.addSource(id, { type: "geojson", data: EMPTY });
       // Overview: cluster below zoom 9 so 1,000+ incidents stay readable.
       map.addSource("inc", {
         type: "geojson",
         data: EMPTY,
         ...(mode === "overview" ? { cluster: true, clusterMaxZoom: 8, clusterRadius: 38, clusterProperties: { hot: ["+", ["case", ["get", "hot"], 1, 0]] } } : {}),
       });
-      map.addLayer({ id: "plots-fill", type: "fill", source: "plots", paint: { "fill-color": "#ffffff", "fill-opacity": ["case", ["boolean", ["get", "sel"], false], 0.18, 0.06] } });
+      // the GAPKI flyer's style (user, 2 Nov 2026): yellow boundaries, a grey-white dashed 500 m zone around them
+      map.addLayer({ id: "zone", type: "line", source: "zone", paint: { "line-color": "#d9dee2", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.1, 12, 1.8], "line-dasharray": [3, 2.5], "line-opacity": 0.9 } });
+      map.addLayer({ id: "plots-fill", type: "fill", source: "plots", paint: { "fill-color": "#ffd60a", "fill-opacity": 0.07 } });
       map.addLayer({
         id: "plots-line",
         type: "line",
         source: "plots",
-        paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 1, 14, 2], "line-opacity": 0.95 },
+        paint: { "line-color": "#ffd60a", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.4, 12, 2.2, 15, 3] },
       });
       map.addLayer({
         id: "pts",
@@ -288,6 +308,23 @@ export function FireMap({
     }
   }, [incidents, selected, ready, mode, mill, colorOf]);
 
+  // The 500 m zone of the selected case (signed-in pages only; the field page has no session and draws none).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const src = map.getSource("zone") as maplibregl.GeoJSONSource | undefined;
+    src?.setData(EMPTY);
+    const id = selected?.id;
+    if (!id) return;
+    let alive = true;
+    zoneOf(id).then((z) => {
+      if (alive && z) src?.setData({ type: "Feature", properties: {}, geometry: z });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [selected?.id, ready]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -331,7 +368,7 @@ export function FireMap({
     <div ref={wrapRef} className={`fl-map ${mode} ${tooling ? "tooling" : ""}`} role="region" aria-label={f.navMap}>
       <div ref={ref} className="fl-map-canvas" />
       {tools && ready && toolEl && mapRef.current ? <MapTools map={mapRef.current} el={toolEl} wrap={wrapRef.current} onActive={onToolActive} /> : null}
-      {context && ready && mapRef.current && mode === "overview" ? <ContextLayers map={mapRef.current} cases={context} blocked={() => toolOn.current} /> : null}
+      {context && ready && mapRef.current && mode === "overview" ? <ContextLayers map={mapRef.current} cases={context} blocked={() => toolOn.current} keys={ctxKeys} /> : null}
       {imagery && selected ? <Imagery key={selected.id} incident={selected} map={ready ? mapRef.current : null} /> : null}
       {mode === "overview" ? (
         <div className="fl-legend map-card" aria-label={f.legend}>

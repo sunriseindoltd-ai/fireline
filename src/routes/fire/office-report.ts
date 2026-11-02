@@ -9,8 +9,8 @@ export const Route = createFileRoute("/fire/office-report")({
         const { readSession } = await import("@/lib/auth");
         const session = await readSession(request);
         if (!session) return new Response("Unauthorized", { status: 401 });
-        // Supply-chain cases, field reports and contacts: Earthline staff only (viewers see FireLine Indonesia).
-        if (session.role !== "admin") return new Response("Forbidden", { status: 403 });
+        // Cases and field reports: Earthline staff, and company accounts for their own company (viewers see FireLine Indonesia).
+        if (session.role === "viewer") return new Response("Forbidden", { status: 403 });
         const { addVerification, findFireIncident, safeId, sameOrigin, snapshotOf } = await import("@/lib/fire.server");
         if (!sameOrigin(request)) return new Response("Forbidden", { status: 403 });
         let body: { e?: unknown; status?: unknown; note?: unknown; by?: unknown } = {};
@@ -22,7 +22,8 @@ export const Route = createFileRoute("/fire/office-report")({
         const status = String(body.status ?? "");
         if (!["active", "extinguished", "false_alarm"].includes(status)) return new Response("Bad request", { status: 400 });
         const incident = await findFireIncident(safeId(String(body.e ?? "")));
-        if (!incident) return new Response("Incident not found", { status: 404 });
+        const { inScope } = await import("@/lib/auth");
+        if (!incident || !inScope(session, incident)) return new Response("Incident not found", { status: 404 });
         const who = String(body.by ?? "").trim().slice(0, 60);
         const entry = {
           at: new Date().toISOString(),

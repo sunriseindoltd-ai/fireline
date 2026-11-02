@@ -4,7 +4,7 @@ import { z } from "zod";
 export const getSession = createServerFn({ method: "GET" }).handler(async () => {
   const { readSession } = await import("@/lib/auth");
   const s = await readSession();
-  return s ? { ok: true as const, user: s.user, role: s.role } : { ok: false as const };
+  return s ? { ok: true as const, user: s.user, role: s.role, org: s.org ?? "" } : { ok: false as const };
 });
 
 // Simple per-instance throttle: 10 failed attempts per 10 minutes per user ID.

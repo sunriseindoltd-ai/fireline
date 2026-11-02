@@ -1,0 +1,986 @@
+/*
+ * FireLine "x" look (user, 29 Oct 2026): a dark console-launcher style, the Xbox PC app as the reference —
+ * charcoal grounds, a left navigation rail, big imagery, white selection pills, one warm accent.
+ * Light version (user, 2 Nov 2026: "versi putihnya untuk gantiin versi yang lama"): the same layout on white,
+ * html.flx-light swaps the token set below. The hero over satellite imagery stays dark in both.
+ * Every rule is scoped under html.flx (lib/skin.ts sets it), and only inside the dashboard (.fl-app): the login
+ * page and the field page (/fire/verify) keep the classic light look.
+ */
+
+.fl-tab-ic,
+.flx-only {
+  display: none;
+}
+
+html.flx .fl-app,
+html.flx .fl-app .flx-hero {
+  --flx-accent: #ff6a3d;
+  --flx-accent-ink: #160704;
+  --flx-ground: #0e1012;
+  --flx-rail: #15181b;
+  --flx-card: #1b1f23;
+  --flx-card-2: #23282d;
+  --flx-sel: #2a3036;
+  --color-bg: #1b1f23;
+  --color-bg-2: #0e1012;
+  --color-bg-3: #262c32;
+  --color-fg: #f2f4f5;
+  --color-fg-2: #d9dee2;
+  --color-muted: #a3abb2;
+  --color-faint: #8b939a;
+  --color-line: rgb(255 255 255 / 0.16);
+  --color-line-soft: rgb(255 255 255 / 0.08);
+  --color-surface: #1b1f23;
+  --color-elevated: #23282d;
+  --color-ink: #f2f4f5;
+  --color-link: #ffb39c;
+  --color-brand: #ff6a3d;
+  --color-link-soft: rgb(255 106 61 / 0.14);
+  --color-warn: #ffcf70;
+  --color-warn-bg: rgb(255 176 32 / 0.14);
+  --color-danger: #ff8f80;
+  --color-danger-bg: rgb(229 50 45 / 0.18);
+  --color-hover: rgb(255 255 255 / 0.06);
+  --glass: rgb(21 24 27 / 0.84);
+  --shadow-1: none;
+  --shadow-2: 0 18px 40px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --focus: 0 0 0 2px #ffffff;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Inter", system-ui, sans-serif;
+  --flx-ink: #ffffff;
+  --flx-ink-soft: #c4cbd1;
+  --flx-ink-2: #d9dee2;
+  --flx-hover-bg: #22272c;
+  --flx-bar: rgb(21 24 27 / 0.96);
+  --flx-soft: rgb(255 255 255 / 0.1);
+  --flx-soft-2: rgb(255 255 255 / 0.18);
+  --flx-pill: #f2f4f5;
+  --flx-pill-ink: #111316;
+  --flx-pill-shadow: none;
+  --flx-red-bg: rgb(229 50 45 / 0.2);
+  --flx-red-ink: #ffb4aa;
+  --flx-amber-bg: rgb(255 176 32 / 0.18);
+  --flx-amber-ink: #ffd27a;
+  --flx-edge: rgb(255 255 255 / 0.08);
+  --flx-icon-filter: invert(1);
+  --flx-chip-bg: rgb(21 24 27 / 0.8);
+  --flx-ring: #ffffff;
+  --flx-scroll: #3a4148;
+  --flx-word-grey: #c4cbd1;
+  --flx-word-red: #ff5a4a;
+}
+html.flx .fl-app {
+  background: var(--flx-ground);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  color-scheme: dark;
+}
+html.flx.flx-light .fl-app {
+  --flx-accent: #ef5a2a;
+  --flx-accent-ink: #1a0803;
+  --flx-ground: #f2f3f5;
+  --flx-rail: #ffffff;
+  --flx-card: #ffffff;
+  --flx-card-2: #eceef1;
+  --flx-sel: #e6e8ec;
+  --color-bg: #ffffff;
+  --color-bg-2: #f2f3f5;
+  --color-bg-3: #e6e8ec;
+  --color-fg: #15181b;
+  --color-fg-2: #2c3238;
+  --color-muted: #5f6870;
+  --color-faint: #7a838b;
+  --color-line: rgb(0 0 0 / 0.14);
+  --color-line-soft: rgb(0 0 0 / 0.07);
+  --color-surface: #ffffff;
+  --color-elevated: #ffffff;
+  --color-ink: #15181b;
+  --color-link: #c2410c;
+  --color-brand: #ef5a2a;
+  --color-link-soft: rgb(239 90 42 / 0.1);
+  --color-warn: #8a5a00;
+  --color-warn-bg: rgb(255 176 32 / 0.16);
+  --color-danger: #b3261e;
+  --color-danger-bg: rgb(229 50 45 / 0.1);
+  --color-hover: rgb(0 0 0 / 0.04);
+  --glass: rgb(255 255 255 / 0.9);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-2: 0 18px 40px rgb(0 0 0 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.06);
+  --focus: 0 0 0 2px #15181b;
+  --flx-ink: #0b0d0f;
+  --flx-ink-soft: #4a5259;
+  --flx-ink-2: #3a4148;
+  --flx-hover-bg: #eceef1;
+  --flx-bar: rgb(255 255 255 / 0.96);
+  --flx-soft: rgb(0 0 0 / 0.06);
+  --flx-soft-2: rgb(0 0 0 / 0.1);
+  --flx-pill: #ffffff;
+  --flx-pill-ink: #0b0d0f;
+  --flx-pill-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
+  --flx-red-bg: rgb(229 50 45 / 0.12);
+  --flx-red-ink: #b3261e;
+  --flx-amber-bg: rgb(255 176 32 / 0.2);
+  --flx-amber-ink: #7a4f00;
+  --flx-edge: rgb(0 0 0 / 0.08);
+  --flx-icon-filter: none;
+  --flx-chip-bg: rgb(255 255 255 / 0.85);
+  --flx-ring: #15181b;
+  --flx-scroll: #c4cbd1;
+  --flx-word-grey: #6e6e73;
+  --flx-word-red: #d12b20;
+  color-scheme: light;
+}
+/* paper is white: a case printed from the dark look takes the light tokens */
+@media print {
+  html.flx .fl-app {
+    --flx-accent: #ef5a2a;
+    --flx-accent-ink: #1a0803;
+    --flx-ground: #f2f3f5;
+    --flx-rail: #ffffff;
+    --flx-card: #ffffff;
+    --flx-card-2: #eceef1;
+    --flx-sel: #e6e8ec;
+    --color-bg: #ffffff;
+    --color-bg-2: #f2f3f5;
+    --color-bg-3: #e6e8ec;
+    --color-fg: #15181b;
+    --color-fg-2: #2c3238;
+    --color-muted: #5f6870;
+    --color-faint: #7a838b;
+    --color-line: rgb(0 0 0 / 0.14);
+    --color-line-soft: rgb(0 0 0 / 0.07);
+    --color-surface: #ffffff;
+    --color-elevated: #ffffff;
+    --color-ink: #15181b;
+    --color-link: #c2410c;
+    --color-brand: #ef5a2a;
+    --color-link-soft: rgb(239 90 42 / 0.1);
+    --color-warn: #8a5a00;
+    --color-warn-bg: rgb(255 176 32 / 0.16);
+    --color-danger: #b3261e;
+    --color-danger-bg: rgb(229 50 45 / 0.1);
+    --color-hover: rgb(0 0 0 / 0.04);
+    --glass: rgb(255 255 255 / 0.9);
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.05);
+    --shadow-2: 0 18px 40px rgb(0 0 0 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.06);
+    --focus: 0 0 0 2px #15181b;
+    --flx-ink: #0b0d0f;
+    --flx-ink-soft: #4a5259;
+    --flx-ink-2: #3a4148;
+    --flx-hover-bg: #eceef1;
+    --flx-bar: rgb(255 255 255 / 0.96);
+    --flx-soft: rgb(0 0 0 / 0.06);
+    --flx-soft-2: rgb(0 0 0 / 0.1);
+    --flx-pill: #ffffff;
+    --flx-pill-ink: #0b0d0f;
+    --flx-pill-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
+    --flx-red-bg: rgb(229 50 45 / 0.12);
+    --flx-red-ink: #b3261e;
+    --flx-amber-bg: rgb(255 176 32 / 0.2);
+    --flx-amber-ink: #7a4f00;
+    --flx-edge: rgb(0 0 0 / 0.08);
+    --flx-icon-filter: none;
+    --flx-chip-bg: rgb(255 255 255 / 0.85);
+    --flx-ring: #15181b;
+    --flx-scroll: #c4cbd1;
+    --flx-word-grey: #6e6e73;
+    --flx-word-red: #d12b20;
+    color-scheme: light;
+  }
+}
+html.flx .fl-app .flx-hero {
+  color: var(--color-fg);
+  color-scheme: dark;
+}
+html.flx .fl-app .fl-kgroup {
+  background: var(--flx-card);
+  box-shadow: var(--shadow-1);
+  border-radius: 8px;
+}
+html.flx:not(.flx-light) .fl-app .btn-secondary .brand-ico.gmaps {
+  color: #6ea8fe;
+}
+html.flx:not(.flx-light) .fl-app .btn-secondary .brand-ico.waze {
+  color: #33ccff;
+}
+/* wider canvas on big screens (user, 2 Nov: "diperluas di sisi kiri dan kanan") */
+html.flx .fl-app .page,
+html.flx .fl-app .nat-page {
+  max-width: 1680px;
+}
+/* status labels are squares with a small radius, not capsules (user, 2 Nov) */
+html.flx .fl-app .chip,
+html.flx .fl-app .fl-tag,
+html.flx .fl-app .fl-ev-tag,
+html.flx .fl-app .nat-att,
+html.flx .fl-app .nat-conf {
+  border-radius: 4px;
+}
+html.flx .fl-app .fl-card.on {
+  background: var(--flx-sel);
+}
+html.flx .fl-app .fl-card-meta .sent {
+  color: var(--color-link);
+}
+html.flx .fl-tab-ic,
+html.flx .flx-only {
+  display: inline-flex;
+}
+html.flx .flx-hide {
+  display: none !important;
+}
+html.flx .fl-app :focus-visible {
+  outline: 2px solid var(--flx-ring);
+  outline-offset: 2px;
+}
+html.flx .fl-app ::selection {
+  background: rgb(255 106 61 / 0.4);
+}
+html.flx .fl-app * {
+  scrollbar-color: var(--flx-scroll) transparent;
+}
+
+/* ---------- header (phone) / left rail (desktop) ---------- */
+html.flx .fl-app .app-header {
+  background: var(--flx-rail);
+  border-bottom: 1px solid var(--color-line-soft);
+  backdrop-filter: none;
+}
+html.flx .fl-app .app-brand .word {
+  font-family: var(--font-display);
+}
+html.flx .fl-app .fire-grey {
+  color: var(--flx-word-grey);
+}
+html.flx .fl-app .fire-red {
+  color: var(--flx-word-red);
+}
+html.flx .fl-app .app-tabs {
+  background: transparent;
+}
+html.flx .fl-app .app-tabs button {
+  color: var(--flx-ink-soft);
+}
+html.flx .fl-app .app-tabs button:hover {
+  background: var(--flx-hover-bg);
+  color: var(--flx-ink);
+}
+html.flx .fl-app .app-tabs button.on {
+  background: var(--flx-sel);
+  color: var(--flx-ink);
+  box-shadow: none;
+}
+html.flx .fl-app .app-tabs button.on .fl-tab-ic {
+  color: var(--flx-accent);
+}
+html.flx .fl-app .fl-space {
+  background: var(--flx-ground);
+}
+html.flx .fl-app .fl-space button.on {
+  background: var(--flx-sel);
+  color: var(--flx-ink);
+  box-shadow: none;
+}
+
+@media (min-width: 761px) and (min-height: 501px), (min-width: 761px) and (pointer: fine) {
+  html.flx .fl-app {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  html.flx .fl-app > .fl-header {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 18px 12px 14px;
+    border-bottom: 0;
+    border-right: 1px solid var(--color-line-soft);
+    overflow-y: auto;
+  }
+  html.flx .fl-app > :not(.fl-header) {
+    grid-column: 2;
+  }
+  html.flx .fl-app > .fl-banner {
+    grid-row: 1;
+  }
+  html.flx .fl-app > .fl-main {
+    grid-row: 2;
+  }
+  html.flx .fl-app .app-brand {
+    padding: 4px 12px 14px;
+  }
+  html.flx .fl-app .app-brand .word {
+    font-size: 19px;
+  }
+  html.flx .fl-app .fl-space {
+    display: flex;
+    margin: 0 2px 12px;
+    padding: 4px;
+    border-radius: 8px;
+  }
+  html.flx .fl-app .fl-space button {
+    flex: 1;
+    min-height: 34px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  /* a company account: its company over Indonesia, the name on up to two lines (user, 2 Nov 2026) */
+  html.flx .fl-app .fl-space.own {
+    flex-direction: column;
+    gap: 2px;
+  }
+  html.flx .fl-app .fl-space.own button {
+    white-space: normal;
+    text-overflow: clip;
+    text-align: left;
+    line-height: 1.3;
+    padding: 7px 12px;
+  }
+  /* a company account's tab carries its company name: cut with an ellipsis, full name on hover */
+  html.flx .fl-app .fl-space button {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  html.flx .fl-app .fl-space.own button {
+    white-space: normal;
+  }
+  html.flx .fl-app .app-tabs {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+  }
+  html.flx .fl-app .app-tabs button {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+    min-height: 46px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font: 500 14.5px var(--font-sans);
+    text-align: left;
+  }
+  html.flx .fl-app .app-tabs .fl-badge {
+    margin-left: auto;
+  }
+  html.flx .fl-app .app-actions {
+    margin: auto 0 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-line-soft);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  html.flx .fl-app .app-actions .fl-asof {
+    flex: 1 1 100%;
+    font-size: 12.5px;
+    color: var(--color-muted);
+    padding: 0 4px;
+  }
+  html.flx .fl-app .app-actions .fl-refresh {
+    flex: 1 1 100%;
+    min-height: 40px;
+    justify-content: center;
+  }
+  html.flx .fl-app .app-actions .fl-skin,
+  html.flx .fl-app .app-actions .fl-signout {
+    font-size: 13px;
+  }
+}
+
+/* ---------- surfaces ---------- */
+html.flx .fl-app .app-main,
+html.flx .fl-app .fl-main {
+  background: var(--flx-ground);
+}
+html.flx .fl-app .chart-card,
+html.flx .fl-app .kpi {
+  background: var(--flx-card);
+  border-radius: 8px;
+}
+html.flx .fl-app .kpi .kpi-value,
+html.flx .fl-app .kpi strong {
+  font-family: var(--font-display);
+}
+html.flx .fl-app .fl-pane-head {
+  background: var(--flx-bar);
+}
+html.flx .fl-app .fl-bottom {
+  background: var(--flx-bar);
+  border-top-color: var(--color-line-soft);
+}
+html.flx .fl-app .fl-bottom button.on {
+  color: var(--flx-ink);
+}
+html.flx .fl-app .fl-drawer-panel {
+  background: var(--flx-ground);
+}
+html.flx .fl-app .data-table th {
+  background: var(--flx-card);
+}
+html.flx .fl-app .data-table tbody tr:hover td {
+  background: var(--color-hover);
+}
+html.flx .fl-app .fl-banner {
+  background: var(--color-warn-bg);
+  color: var(--color-fg);
+}
+html.flx .fl-app .fl-banner.warn {
+  background: var(--color-danger-bg);
+}
+
+/* ---------- controls ---------- */
+html.flx .fl-app .btn-primary {
+  background: var(--flx-accent);
+  border-color: var(--flx-accent);
+  color: var(--flx-accent-ink);
+  font-weight: 600;
+  border-radius: 6px;
+}
+html.flx .fl-app .btn-primary:hover:not(:disabled) {
+  background: #ff825c;
+  border-color: #ff825c;
+  color: var(--flx-accent-ink);
+}
+html.flx .fl-app .btn-secondary {
+  background: var(--flx-soft);
+  border-color: transparent;
+  color: var(--flx-ink);
+  border-radius: 6px;
+}
+html.flx .fl-app .btn-secondary:hover:not(:disabled) {
+  background: var(--flx-soft-2);
+  color: var(--flx-ink);
+}
+html.flx .fl-app .seg {
+  background: var(--flx-ground);
+  border-radius: 8px;
+  padding: 3px;
+}
+html.flx .fl-app .seg button {
+  border-radius: 6px;
+  color: var(--flx-ink-soft);
+}
+html.flx .fl-app .seg button.on {
+  background: var(--flx-pill);
+  color: var(--flx-pill-ink);
+  box-shadow: var(--flx-pill-shadow);
+}
+html.flx .fl-app .fl-select,
+html.flx .fl-app .fl-search,
+html.flx .fl-app input[type="date"],
+html.flx .fl-app input[type="search"],
+html.flx .fl-app input[type="text"],
+html.flx .fl-app textarea,
+html.flx .fl-app select {
+  background: var(--flx-card);
+  border-color: var(--color-line);
+  color: var(--color-fg);
+}
+html.flx .fl-app .chip {
+  background: var(--flx-card-2);
+  color: var(--color-fg-2);
+}
+html.flx .fl-app .chip.fl-st.new,
+html.flx .fl-app .fl-ev-tag.live,
+html.flx .fl-app .nat-src-el,
+html.flx .fl-app .nat-att.high,
+html.flx .fl-app .nat-conf.c2 {
+  background: var(--flx-red-bg);
+  color: var(--flx-red-ink);
+}
+html.flx .fl-app .fl-tag.pri.medium,
+html.flx .fl-app .nat-att.medium {
+  background: var(--flx-amber-bg);
+  color: var(--flx-amber-ink);
+}
+html.flx .fl-app .fl-help-btn {
+  background: var(--flx-soft);
+  color: var(--flx-ink);
+  border-color: transparent;
+}
+
+/* ---------- maps ---------- */
+html.flx .fl-app .map-card {
+  border: 1px solid var(--flx-edge);
+  border-radius: 10px;
+  backdrop-filter: blur(18px);
+}
+html.flx .fl-app .maplibregl-ctrl-group {
+  background: var(--glass);
+  box-shadow: 0 0 0 1px var(--flx-edge);
+  border-radius: 8px;
+}
+html.flx .fl-app .maplibregl-ctrl-group button + button {
+  border-top-color: var(--flx-edge);
+}
+html.flx .fl-app .maplibregl-ctrl-group .maplibregl-ctrl-icon {
+  filter: var(--flx-icon-filter);
+}
+html.flx .fl-app .maplibregl-ctrl-scale {
+  background: var(--flx-chip-bg) !important;
+  color: var(--color-fg);
+  border-color: var(--color-fg);
+}
+html.flx .fl-app .maplibregl-ctrl-attrib {
+  background: var(--flx-chip-bg);
+  color: var(--flx-ink-soft);
+}
+html.flx .fl-app .maplibregl-ctrl-attrib a {
+  color: var(--flx-ink-2);
+}
+html.flx .fl-app .maplibregl-popup-content {
+  background: var(--flx-card);
+  color: var(--color-fg);
+  box-shadow: var(--shadow-2);
+}
+html.flx .fl-app .maplibregl-popup-close-button {
+  color: var(--flx-ink-2);
+}
+html.flx .fl-app .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+html.flx .fl-app .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+html.flx .fl-app .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--flx-card);
+}
+html.flx .fl-app .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+html.flx .fl-app .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+html.flx .fl-app .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--flx-card);
+}
+html.flx .fl-app .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--flx-card);
+}
+html.flx .fl-app .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--flx-card);
+}
+
+html.flx .fl-app .fl-mtools button {
+  color: var(--color-fg);
+}
+html.flx .fl-app .fl-mtools button.on,
+html.flx .fl-app .fl-mtools button.on:hover {
+  background: var(--flx-accent);
+  color: var(--flx-accent-ink);
+}
+
+/* ---------- big buttons, glass ---------- */
+html.flx .fl-app .flx-big {
+  min-height: 48px;
+  padding: 0 22px;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 6px;
+}
+html.flx .fl-app .flx-glass {
+  background: rgb(255 255 255 / 0.14);
+  backdrop-filter: blur(14px);
+}
+html.flx .fl-app .flx-glass:hover {
+  background: rgb(255 255 255 / 0.24);
+}
+
+/* ---------- Indonesia: hero ---------- */
+html.flx .fl-app .nat-page {
+  max-width: 1480px;
+}
+html.flx .fl-app .fl-page > * {
+  min-width: 0;
+}
+html.flx .fl-app .flx-hero {
+  position: relative;
+  min-height: 480px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  background: var(--flx-card);
+}
+.flx-hero-map {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.flx-hero-map .fl-map,
+.flx-hero-map .nat-map {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  border-radius: 0;
+}
+.flx-hero .maplibregl-ctrl-top-left,
+.flx-hero .maplibregl-ctrl-bottom-right {
+  display: none;
+}
+html.flx .fl-app .flx-hero .fl-legend {
+  left: auto;
+  right: 16px;
+  bottom: 44px;
+}
+.flx-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(14 16 18 / 0.94) 0%, rgb(14 16 18 / 0.7) 30%, rgb(14 16 18 / 0) 62%),
+    linear-gradient(0deg, rgb(14 16 18 / 0.75) 0%, rgb(14 16 18 / 0) 40%);
+  pointer-events: none;
+}
+.flx-hero-win {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+html.flx .fl-app .flx-hero-win .seg {
+  background: rgb(14 16 18 / 0.7);
+  backdrop-filter: blur(14px);
+}
+.flx-hero-text {
+  position: relative;
+  padding: 40px 44px;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.flx-eyebrow {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d9dee2;
+}
+.flx-hero-text h1 {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+}
+.flx-hero-n {
+  font: 800 88px/0.95 var(--font-display);
+  letter-spacing: -0.03em;
+}
+.flx-hero-unit {
+  font: 600 28px var(--font-display);
+}
+.flx-hero-text p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #d9dee2;
+}
+.flx-hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+.flx-hero-credit {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  font-size: 11.5px;
+  color: #c4cbd1;
+  background: rgb(14 16 18 / 0.6);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+/* ---------- Indonesia: "needs attention" row ---------- */
+.flx-row-sec {
+  margin: 10px 0 6px;
+}
+.flx-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 12px;
+}
+.flx-row-head h2 {
+  margin: 0;
+  font: 700 22px var(--font-display);
+}
+.flx-row-note {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+.flx-row-all {
+  margin-left: auto;
+  color: var(--color-fg) !important;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+}
+.flx-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 6px 4px 14px;
+  scroll-snap-type: x proximity;
+}
+.flx-tile {
+  flex: 0 0 272px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--flx-card, #1b1f23);
+  color: var(--color-fg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.flx-tile:hover,
+.flx-tile:focus-visible {
+  transform: translateY(-3px) scale(1.015);
+  box-shadow:
+    0 0 0 2px var(--flx-ring, #ffffff),
+    0 14px 30px rgb(0 0 0 / 0.25);
+  outline: none;
+}
+.flx-tile-img {
+  position: relative;
+  display: block;
+  height: 151px;
+  background: var(--flx-card-2, #23282d);
+  overflow: hidden;
+}
+.flx-tile-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.flx-tile-img i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55);
+}
+.flx-tile-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+}
+.flx-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 16px 16px;
+  min-width: 0;
+}
+.flx-tile-body b {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flx-tile-body small {
+  font-size: 12.5px;
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flx-tile-n {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.flx-tile-n strong {
+  font: 700 22px var(--font-display);
+  color: var(--color-fg);
+  margin-right: 4px;
+}
+.flx-tile-24 {
+  font-size: 12.5px;
+  color: var(--color-danger);
+}
+.flx-row-credit {
+  margin: 0;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  html.flx .fl-app .flx-hero {
+    min-height: 420px;
+    border-radius: 10px;
+  }
+  .flx-hero-text {
+    padding: 22px 20px;
+  }
+  .flx-hero-n {
+    font-size: 60px;
+  }
+  .flx-hero-unit {
+    font-size: 22px;
+  }
+  .flx-hero-win {
+    left: 12px;
+    right: 12px;
+    top: 12px;
+  }
+  .flx-hero-shade {
+    background: linear-gradient(0deg, rgb(14 16 18 / 0.95) 0%, rgb(14 16 18 / 0.55) 55%, rgb(14 16 18 / 0.2) 100%);
+  }
+  html.flx .fl-app .flx-hero .fl-legend,
+  .flx-hero-credit {
+    display: none;
+  }
+  .flx-tile {
+    flex-basis: 236px;
+  }
+}
+
+html.flx .fl-app .flx-tile-badge .nat-att.high {
+  background: #e5322d;
+  color: #ffffff;
+}
+html.flx .fl-app .flx-tile-badge .nat-att.medium {
+  background: #ffb020;
+  color: #1a1200;
+}
+html.flx .fl-app .flx-tile-badge .nat-att.low {
+  background: var(--flx-sel);
+  color: var(--color-fg);
+}
+
+/* ---------- company home (user, 2 Nov 2026): estates on satellite imagery, plots white, hotspots by age ---------- */
+.flx-shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* the GAPKI flyer's map style: yellow boundaries, grey-white dashed 500 m zone, hotspots with a yellow-orange core and red rim */
+.flx-shot-plot {
+  fill: rgb(255 214 10 / 0.06);
+  stroke: #ffd60a;
+  stroke-width: 1.6;
+}
+.flx-shot-zone {
+  fill: none;
+  stroke: #d9dee2;
+  stroke-width: 1.1;
+  stroke-dasharray: 4 3;
+  stroke-opacity: 0.9;
+}
+.flx-shot-pt {
+  fill: #ffd278;
+  stroke: #ff3c1e;
+  stroke-width: 1;
+}
+html.flx .fl-app .flx-home {
+  --flx-hot: #ff5a36;
+}
+.flx-home .flx-key {
+  display: grid;
+  gap: 5px;
+}
+.flx-home .flx-key span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+html.flx .fl-app .fl-legend i.flx-key-pt {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffd278;
+  border: 2px solid #ff3c1e;
+  box-shadow: 0 0 6px 3px rgb(255 70 20 / 0.55);
+  box-sizing: border-box;
+}
+html.flx .fl-app .fl-legend i.flx-key-bnd,
+html.flx .fl-app .fl-legend i.flx-key-zone {
+  width: 18px;
+  height: 0;
+  border-radius: 0;
+  background: none;
+  border-top: 3px solid #ffd60a;
+}
+html.flx .fl-app .fl-legend i.flx-key-zone {
+  border-top: 2px dashed #d9dee2;
+}
+.flx-plot-tile .flx-plot-id {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html.flx .fl-app .flx-home-days .fl-day-bar.zero {
+  background: var(--color-line);
+}
+html.flx .fl-app .flx-tile-ago {
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+html.flx .fl-app .flx-home-none {
+  font: 700 34px/1.15 var(--font-display);
+  max-width: 18ch;
+}
+/* "Indonesia" keeps its width; the company name takes the rest and is cut with an ellipsis */
+html.flx .fl-app .fl-space button[data-k="id"] {
+  flex: none;
+}
+/* company home cards: the follow-up status as a solid badge, readable on imagery (like the Indonesia attention badge) */
+html.flx .fl-app .flx-tile-badge .flx-st .chip {
+  border: 0;
+  font-weight: 600;
+  background: #e5322d;
+  color: #ffffff;
+}
+html.flx .fl-app .flx-tile-badge .flx-st.active .chip {
+  background: #8f1d1d;
+}
+html.flx .fl-app .flx-tile-badge .flx-st.extinguished .chip {
+  background: #2f8f5b;
+}
+html.flx .fl-app .flx-tile-badge .flx-st.false_alarm .chip {
+  background: #5f6870;
+}
+html.flx .fl-app .flx-home .flx-hero .fl-legend {
+  pointer-events: none;
+}
+/* company home on a phone: the map as a band above the text, not under it */
+@media (max-width: 600px) {
+  html.flx .fl-app .flx-home .flx-hero {
+    display: block;
+    min-height: 0;
+  }
+  html.flx .fl-app .flx-home .flx-hero-map {
+    position: relative;
+    height: 240px;
+  }
+  html.flx .fl-app .flx-home .flx-hero-shade {
+    display: none;
+  }
+  html.flx .fl-app .flx-home .flx-hero-text {
+    padding: 22px 20px 52px;
+  }
+  html.flx .fl-app .flx-home .flx-hero-win {
+    left: 12px;
+    right: 12px;
+    top: 12px;
+  }
+}

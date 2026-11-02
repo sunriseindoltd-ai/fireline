@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { BrandMark, FireWord } from "@/components/brand-mark";
+import { GoogleMapsLogo, WazeLogo, WhatsAppLogo } from "@/components/brand-icons";
 import { FireMap } from "@/components/fire-map";
 import { SalesCard } from "@/components/fire-sales";
 import { fill, formatCount } from "@/lib/format";
@@ -103,6 +105,7 @@ export function IncidentDetail({
   onClose,
   showMap = true,
   canAct = true,
+  sales = false,
 }: {
   incident: Case;
   status?: VerificationIndex[string];
@@ -117,6 +120,8 @@ export function IncidentDetail({
   onClose?: () => void;
   showMap?: boolean;
   canAct?: boolean;
+  /** Company profile with sales contacts: Earthline staff only. */
+  sales?: boolean;
 }) {
   const { lang } = useI18n();
   const f = fireCopy[lang];
@@ -260,8 +265,12 @@ export function IncidentDetail({
 
   return (
     <article className="fl-detail" aria-label={i.name}>
-      <p className="fl-print-only fl-print-head">
-        {f.product} · {f.printTitle} · <span className="mono">{i.id}</span> · {fill(f.printedAt, { time: fmtWhen(new Date().toISOString(), lang) })}
+      {/* printed page carries the FireLine logo only (user, 2 Nov) */}
+      <p className="fl-print-only fl-print-head app-brand" aria-hidden="true">
+        <BrandMark size={22} />
+        <span className="word">
+          <FireWord />
+        </span>
       </p>
       <header className="fl-detail-head">
         <div>
@@ -271,7 +280,8 @@ export function IncidentDetail({
           </p>
           <h2>{i.name}</h2>
           <p className="muted">
-            {f.dMills}: {i.mills.join(", ") || "—"} · {i.groups.join(", ")}
+            {f.dMills}: {i.mills.join(", ") || "—"}
+            {i.groups.length ? ` · ${i.groups.join(", ")}` : ""}
             {i.groups.some((g) => ESTIMATED_GROUPS.has(g)) ? ` · ${f.estimated}` : ""}
           </p>
         </div>
@@ -309,15 +319,15 @@ export function IncidentDetail({
           </ul>
           <div className="fl-quick">
             {canAct ? (
-              <a className={`btn-primary fl-wa ${verifyUrl ? "" : "is-wait"}`} href={`https://wa.me/?text=${encodeURIComponent(waMessage(i, verifyUrl, lang))}`} target="_blank" rel="noopener noreferrer" onClick={() => logDispatch("whatsapp")}>
-                WhatsApp
+              <a className={`btn-primary btn-ico fl-wa ${verifyUrl ? "" : "is-wait"}`} href={`https://wa.me/?text=${encodeURIComponent(waMessage(i, verifyUrl, lang))}`} target="_blank" rel="noopener noreferrer" onClick={() => logDispatch("whatsapp")}>
+                <WhatsAppLogo /> WhatsApp
               </a>
             ) : null}
-            <a className="btn-secondary" href={gmapsRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
-              {f.gmaps}
+            <a className="btn-secondary btn-ico" href={gmapsRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
+              <GoogleMapsLogo /> {f.gmaps}
             </a>
-            <a className="btn-secondary" href={wazeRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
-              {f.waze}
+            <a className="btn-secondary btn-ico" href={wazeRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
+              <WazeLogo /> {f.waze}
             </a>
           </div>
           <dl className="fl-facts">
@@ -341,13 +351,18 @@ export function IncidentDetail({
             {i.days.length ? (
               <>
                 <dt>{f.perDayHs}</dt>
-                <dd className="fl-other-days">
-                  {i.days.map((d, k) => (
-                    <span key={d.day} className="fl-daypill">
-                      <i className="fl-dot" style={{ background: DAY_COLORS[Math.min(DAY_COLORS.length - 1, i.days.length - 1 - k)] }} aria-hidden="true" />
-                      {fmtDay(d.day, lang)} · {n(d.n)}
-                    </span>
-                  ))}
+                <dd>
+                  <details className="fl-days-dd">
+                    <summary>{fill(f.perDaySum, { d: n(i.days.length), last: fmtDay(i.days[i.days.length - 1].day, lang), n: n(i.days[i.days.length - 1].n) })}</summary>
+                    <div className="fl-other-days">
+                      {i.days.map((d, k) => (
+                        <span key={d.day} className="fl-daypill">
+                          <i className="fl-dot" style={{ background: DAY_COLORS[Math.min(DAY_COLORS.length - 1, i.days.length - 1 - k)] }} aria-hidden="true" />
+                          {fmtDay(d.day, lang)} · {n(d.n)}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
                 </dd>
               </>
             ) : null}
@@ -419,8 +434,8 @@ export function IncidentDetail({
                   })}
                 </p>
               ) : null}
-              <a className={`btn-primary block fl-wa ${verifyUrl ? "" : "is-wait"}`} href={`https://wa.me/?text=${encodeURIComponent(waMessage(i, verifyUrl, lang))}`} target="_blank" rel="noopener noreferrer" onClick={() => logDispatch("whatsapp")}>
-                {f.whatsapp}
+              <a className={`btn-primary block btn-ico fl-wa ${verifyUrl ? "" : "is-wait"}`} href={`https://wa.me/?text=${encodeURIComponent(waMessage(i, verifyUrl, lang))}`} target="_blank" rel="noopener noreferrer" onClick={() => logDispatch("whatsapp")}>
+                <WhatsAppLogo /> {f.whatsapp}
               </a>
               <div className="fl-row">
                 <button type="button" className="btn-secondary small" onClick={() => {
@@ -448,11 +463,11 @@ export function IncidentDetail({
               </button>
             </div>
             <div className="fl-route-btns">
-              <a className="btn-secondary" href={gmapsRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
-                {f.gmaps} ↗
+              <a className="btn-secondary btn-ico" href={gmapsRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
+                <GoogleMapsLogo /> {f.gmaps} ↗
               </a>
-              <a className="btn-secondary" href={wazeRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
-                {f.waze} ↗
+              <a className="btn-secondary btn-ico" href={wazeRoute(i.lat, i.lon)} target="_blank" rel="noopener noreferrer">
+                <WazeLogo /> {f.waze} ↗
               </a>
             </div>
             <dl className="fl-route">
@@ -495,7 +510,7 @@ export function IncidentDetail({
             <p className="fl-note">{f.routeNote}</p>
             <p className="fl-print-only mono">{gmapsRoute(i.lat, i.lon)}</p>
           </section>
-          {canAct ? <SalesCard name={i.name} /> : null}
+          {canAct && sales ? <SalesCard name={i.name} /> : null}
           {canAct && !archived && millOpen.length ? (
             <section className="fl-box fl-mill">
               <h3>{fill(millOpen.length === 1 ? f.millOther1 : f.millOther, { n: millOpen.length })}</h3>

@@ -8144,31 +8144,75 @@ body:has(.fv-page) {
 .fl-cards {
   list-style: none;
   margin: 0;
-  padding: 8px;
+  padding: 6px 8px 8px;
   display: grid;
-  gap: 6px;
+  gap: 2px;
 }
 .fl-card {
   position: relative;
   width: 100%;
   display: grid;
-  gap: 4px;
+  gap: 3px;
   text-align: left;
-  border: 1px solid var(--color-line-soft);
-  background: var(--color-surface);
-  border-radius: 12px;
-  padding: 11px 12px 11px 18px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 10px 12px;
   color: var(--color-fg);
   font: 400 13px var(--font-sans);
   overflow: hidden;
 }
 .fl-card:hover {
-  border-color: var(--color-line);
-  background: var(--color-bg-2);
+  background: var(--color-hover);
 }
 .fl-card.on {
-  border-color: var(--color-ink);
-  box-shadow: 0 0 0 1px var(--color-ink);
+  background: var(--color-bg-3);
+}
+.fl-pri {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 8px 1px 0;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.fl-pri.high {
+  background: #e5322d;
+}
+.fl-pri.medium {
+  background: #f5a524;
+}
+.fl-pri.low {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--color-line);
+}
+.fl-card-sub,
+.fl-card-meta {
+  padding-left: 16px;
+}
+.fl-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+.fl-card-meta > span:not(.chip) + span::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--color-faint);
+}
+.fl-card-meta > .chip {
+  margin-right: 8px;
+}
+.fl-card-meta .in {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+.fl-card-meta .sent {
+  color: #2f5790;
 }
 .fl-card:focus-visible {
   outline: none;
@@ -8445,6 +8489,25 @@ body:has(.fv-page) {
 .fl-wa {
   background: #1f7a4c !important;
   border-color: #1f7a4c !important;
+  color: #fff !important;
+}
+.btn-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-ico.block {
+  display: flex;
+}
+.brand-ico {
+  flex: none;
+}
+.btn-secondary .brand-ico.gmaps {
+  color: #1a73e8;
+}
+.btn-secondary .brand-ico.waze {
+  color: #0a9fd0;
 }
 .fl-wa:hover {
   background: #18633d !important;
@@ -8758,6 +8821,8 @@ body:has(.fv-page) {
 }
 
 /* map tools: ruler, area, coordinates, radius, full screen */
+/* MapLibre's own .maplibregl-ctrl-group button { display: block } would put the icon on the left edge */
+.maplibregl-ctrl-group.fl-mtools button,
 .fl-mtools button {
   display: flex;
   align-items: center;
@@ -8927,6 +8992,154 @@ body:has(.fv-page) {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 16px;
+}
+.fl-lead {
+  margin: 4px 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--color-fg-2);
+  max-width: 72ch;
+}
+.fl-kgroups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.fl-kgroup {
+  background: var(--color-surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow-1), 0 0 0 1px var(--color-line-soft);
+  padding: 16px 8px 10px;
+  min-width: 0;
+}
+.fl-kgroup h2 {
+  margin: 0 12px 8px;
+  font: 600 13px var(--font-sans);
+  color: var(--color-muted);
+}
+.fl-kcells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.fl-kcell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 12px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  text-align: left;
+}
+.fl-kcell + .fl-kcell {
+  box-shadow: -1px 0 0 var(--color-line-soft);
+}
+button.fl-kcell {
+  cursor: pointer;
+}
+button.fl-kcell:hover {
+  background: var(--color-hover);
+}
+.fl-kl {
+  font-size: 13px;
+  color: var(--color-muted);
+  line-height: 1.3;
+  min-height: 2.6em;
+}
+.fl-kv {
+  font: 600 26px/1.1 var(--font-display);
+  letter-spacing: -0.01em;
+}
+.fl-ksub {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+.nat-kstrip {
+  padding: 12px 8px;
+}
+.nat-attd {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.nat-attd i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8a8f98;
+}
+.nat-attd.high i {
+  background: #e5322d;
+}
+.nat-attd.medium i {
+  background: #f5a524;
+}
+.fl-kv.danger {
+  color: var(--color-danger);
+}
+.fl-kbar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-line-soft);
+  overflow: hidden;
+}
+.fl-kbar i {
+  display: block;
+  height: 100%;
+  background: var(--color-fg-2);
+}
+.fl-flow .fl-kcell + .fl-kcell::before {
+  content: "›";
+  position: absolute;
+  left: -5px;
+  top: 28px;
+  color: var(--color-faint);
+  font-size: 16px;
+}
+/* the daily chart fills its row (the list beside it sets the height) instead of leaving a blank band */
+.fl-perday {
+  display: flex;
+  flex-direction: column;
+}
+.fl-perday .fl-days {
+  flex: 1;
+  min-height: 190px;
+  height: auto;
+  gap: 3px;
+}
+/* date labels must not widen their day column (that gave alternating wide and narrow bars) */
+.fl-perday .fl-day-n,
+.fl-perday .fl-day-d {
+  width: 0;
+  display: flex;
+  justify-content: center;
+}
+.fl-card-meta-r {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+@media (max-width: 900px) {
+  .fl-kgroups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 520px) {
+  .fl-kcells {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fl-kcell:nth-child(3) {
+    box-shadow: none;
+  }
+  .fl-flow .fl-kcell:nth-child(3)::before {
+    content: none;
+  }
 }
 .fl-h2 {
   margin: 0 0 12px;
@@ -9751,6 +9964,20 @@ body:has(.fv-page) {
     margin: 0 0 6px;
     overflow-wrap: anywhere;
   }
+  .fl-print-only.fl-print-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    font: 600 18px var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  .fl-print-head .fire-red {
+    color: #d12b20 !important;
+  }
+  .fl-print-head .fire-grey {
+    color: #6e6e73 !important;
+  }
   .fl-detail-grid {
     display: block !important;
   }
@@ -9848,6 +10075,34 @@ body:has(.fv-page) {
 }
 .fl-daypill .fl-dot {
   margin-right: 6px;
+}
+.fl-days-dd summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid var(--color-line-soft);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12.5px;
+}
+.fl-days-dd summary::-webkit-details-marker {
+  display: none;
+}
+.fl-days-dd summary::after {
+  content: "›";
+  color: var(--color-muted);
+  transform: rotate(90deg);
+}
+.fl-days-dd[open] summary::after {
+  transform: rotate(-90deg);
+}
+.fl-days-dd summary:hover {
+  border-color: var(--color-fg);
+}
+.fl-days-dd .fl-other-days {
+  margin-top: 8px;
 }
 .fl-plots h3 {
   margin-bottom: 2px;
@@ -10249,4 +10504,18 @@ body:has(.fv-page) {
   .nat-head-tools {
     width: 100%;
   }
+}
+
+/* Indonesia: latest detections and provinces in one panel, a switch in its head (user, 2 Nov 2026) */
+.nat-switch-head {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: flex-start;
+}
+.nat-switch-head .fl-note {
+  margin: 0;
+}
+.nat-switch .table-scroll {
+  margin-top: 8px;
 }

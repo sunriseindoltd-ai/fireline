@@ -2,8 +2,10 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { useNavigate } from "@tanstack/react-router";
 import { BrandMark, FireWord } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
-import { KpiTile } from "@/components/kpi-tile";
+import { SkinToggle } from "@/components/skin-toggle";
 import { FireMap, type Bounds } from "@/components/fire-map";
+import { KCell } from "@/components/fire-kcell";
+import { CompanyHome } from "@/components/fire-home";
 import { IncidentDetail, StatusChip, distLabel } from "@/components/fire-incident";
 import { logout } from "@/lib/auth-actions";
 import { fill, formatCount } from "@/lib/format";
@@ -14,23 +16,25 @@ import type { Polygon } from "@/lib/fire-geo";
 import { ago, COLOR, colorOf, ESTIMATED_GROUPS, fmtDay, fmtWhen, windowFrom, isOpen, isRecent, levelOf, priorityOf, statusOf, wibDay, type FireResponse, type StatusKey } from "@/lib/fire-ui";
 import { dayMinus, fireEvents } from "@/lib/fire-events";
 
-type View = "inbox" | "map" | "history" | "events" | "summary";
+type View = "home" | "inbox" | "map" | "history" | "events" | "summary";
 const VIEWS: View[] = ["inbox", "map", "history", "events", "summary"];
+/** Company accounts open on their own home page (user, 2 Nov 2026). */
+const HOME_VIEWS: View[] = ["home", ...VIEWS];
 
 const PAGE = 50;
 const STEP = 40;
 
 /** `#map/20261014_PLOT-1` ↔ { view, sel }: the browser Back button closes a detail. */
-function readHash(): { view: View; sel: string | null } {
-  if (typeof window === "undefined") return { view: "inbox", sel: null };
+function readHash(views: View[] = VIEWS): { view: View; sel: string | null } {
+  if (typeof window === "undefined") return { view: views[0], sel: null };
   const [v, sel] = window.location.hash.replace(/^#/, "").split("/");
   return {
-    view: (VIEWS as string[]).includes(v) ? (v as View) : "inbox",
+    view: (views as string[]).includes(v) ? (v as View) : views[0],
     sel: sel ? decodeURIComponent(sel) : null,
   };
 }
 
-export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: React.ReactNode }) {
+export function FirePage({ role, org, spaceSwitch }: { role: string; org?: string; spaceSwitch?: React.ReactNode }) {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
   const f = fireCopy[lang];
@@ -41,8 +45,9 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
   const [nonce, setNonce] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  const views = org ? HOME_VIEWS : VIEWS;
   const [{ view, sel }, setNav] = useState<{ view: View; sel: string | null }>({
-    view: "inbox",
+    view: views[0],
     sel: null,
   });
   const [help, setHelp] = useState(false);
@@ -71,10 +76,12 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const canAct = role !== "viewer";
+  // sales contacts and the Earthline plot coverage: staff only
+  const staff = role === "admin";
 
   useEffect(() => {
-    setNav(readHash());
-    const onPop = () => setNav(readHash());
+    setNav(readHash(views));
+    const onPop = () => setNav(readHash(views));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -322,6 +329,7 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
       onClose={opts.onClose}
       showMap={opts.showMap ?? true}
       canAct={canAct}
+      sales={staff}
     />
   );
 
@@ -332,9 +340,12 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
     return (
       <li key={i.id}>
         <button type="button" className={`fl-card ${active ? "on" : ""}`} aria-current={active || undefined} onClick={onClick}>
-          <i className="fl-card-bar" style={{ background: colorOf(s, i.last, now) }} aria-hidden="true" />
           <span className="fl-card-top">
-            <b>{i.name}</b>
+            <b>
+              <i className={`fl-pri ${isOpen(s) ? lv : "low"}`} title={lv === "high" ? f.priHigh : lv === "medium" ? f.priMed : undefined} aria-hidden="true" />
+              {isOpen(s) && lv !== "low" ? <span className="sr-only">{lv === "high" ? f.priHigh : f.priMed}: </span> : null}
+              {i.name}
+            </b>
             <span className="tabular-nums muted">{ago(i.last, now, lang)}</span>
           </span>
           <span className="fl-card-sub">
@@ -342,27 +353,20 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
             {i.mills.length > 2 ? ` +${i.mills.length - 2}` : ""} · {villages.slice(0, 2).join(", ") || i.plot.province}
             {villages.length > 2 ? ` +${villages.length - 2}` : ""}
           </span>
-          <span className="fl-card-tags">
-            {lv !== "low" && isOpen(s) ? <span className={`fl-tag pri ${lv}`}>{lv === "high" ? f.priHigh : f.priMed}</span> : null}
+          <span className="fl-card-meta">
             {s !== "new" ? <StatusChip s={s} /> : null}
-            {s === "new" && data?.dispatch[i.id] ? (
-              <span className="fl-tag sent">
-                {fill(f.sent, {
-                  ago: ago(data.dispatch[i.id].at, Date.now(), lang),
-                })}
-              </span>
-            ) : null}
-            {i.plots.length > 1 ? <span className="fl-tag">{fill(f.plotsN, { n: n(i.plots.length) })}</span> : null}
-            <span className={i.d === 0 ? "fl-tag in" : "fl-tag"}>{distLabel(i.d, lang)}</span>
-            <span className="fl-tag">{fill(f.dets, { n: n(i.n) })}</span>
-            <span className="fl-tag">{fill(f.frp, { frp: Math.round(i.frp) })}</span>
-            {i.days.length > 1 ? <span className="fl-tag rep">{fill(f.daysN, { n: i.days.length })}</span> : null}
+            {s === "new" && data?.dispatch[i.id] ? <span className="sent">{fill(f.sent, { ago: ago(data.dispatch[i.id].at, Date.now(), lang) })}</span> : null}
+            <span className={i.d === 0 ? "in" : undefined}>{distLabel(i.d, lang)}</span>
+            {i.plots.length > 1 ? <span>{fill(f.plotsN, { n: n(i.plots.length) })}</span> : null}
+            <span>{fill(f.dets, { n: n(i.n) })}</span>
+            {i.days.length > 1 ? <span>{fill(f.daysN, { n: i.days.length })}</span> : null}
+            <span>{fill(f.frp, { frp: Math.round(i.frp) })}</span>
           </span>
         </button>
       </li>
     );
   };
-  const groupSelect = (
+  const groupSelect = !groups.length ? null : (
     <select
       className="fl-select"
       value={group}
@@ -411,6 +415,7 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
   );
   const countLabel = (v: number) => (v === 1 ? f.count1 : fill(f.count, { n: n(v) }));
   const navLabel: Record<View, string> = {
+    home: f.navHome,
     inbox: f.navInbox,
     map: f.navMap,
     history: f.navHistory,
@@ -467,8 +472,11 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
       </span>
       {spaceSwitch}
       <nav className="app-tabs fl-tabs" aria-label={f.product}>
-        {VIEWS.map((k) => (
-          <button key={k} type="button" className={view === k ? "on" : ""} aria-current={view === k ? "page" : undefined} onClick={() => go(k)}>
+        {views.map((k) => (
+          <button key={k} type="button" data-k={k} className={view === k ? "on" : ""} aria-current={view === k ? "page" : undefined} onClick={() => go(k)}>
+            <span className="fl-tab-ic">
+              <NavIcon v={k} />
+            </span>
             {navLabel[k]}
             {k === "inbox" && data ? <span className="fl-badge">{n(openList.length)}</span> : null}
           </button>
@@ -492,6 +500,7 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
           ?
         </button>
         <LangToggle />
+        <SkinToggle />
         <button
           type="button"
           className="btn-text fl-signout"
@@ -534,7 +543,9 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
             <h1>
               {f.inboxTitle} <span className="muted tabular-nums">{n(inboxRows.length)}</span>
             </h1>
-            <p className="fl-note">{fill(f.inboxSub, { from: fromLabel })}</p>
+            <p className="fl-note" title={fill(f.inboxSub, { from: fromLabel })}>
+              {fill(f.inboxShort, { from: fromLabel, h: n(inboxRows.filter((i) => isOpen(st(i)) && levelOf(prio.get(i.id) ?? 0) === "high").length) })}
+            </p>
             <div className="seg fl-seg" role="group" aria-label={f.inboxTitle}>
               {(
                 [
@@ -606,7 +617,7 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
     body = (
       <div className={`fl-mapview ${selected ? "has-sel" : ""}`}>
         <div className="fl-mapview-map">
-          <FireMap mode="overview" incidents={mapRows} colorOf={color} selected={selected} onSelect={(id) => go("map", id)} onView={setBounds} imagery weeks={weeks || data.days > 7} context={history} />
+          <FireMap mode="overview" incidents={mapRows} colorOf={color} selected={selected} onSelect={(id) => go("map", id)} onView={setBounds} imagery weeks={weeks || data.days > 7} context={history} ctxKeys={staff ? undefined : ["rspo", "burned", "roads", "rivers", "mills"]} />
           <div className="fl-map-tools map-card">
             <label className="fl-check">
               <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} />
@@ -971,6 +982,8 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
         ) : null}
       </div>
     );
+  } else if (view === "home" && org) {
+    body = <CompanyHome data={data} org={org} now={now} st={st} onOpen={(id) => go("inbox", id)} onGo={(v) => go(v)} />;
   } else {
     body = (
       <Summary
@@ -1009,7 +1022,7 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
         {body}
       </main>
       <nav className="fl-bottom" aria-label={f.product}>
-        {VIEWS.map((k) => (
+        {views.map((k) => (
           <button key={k} type="button" className={view === k ? "on" : ""} aria-current={view === k ? "page" : undefined} onClick={() => go(k)}>
             <NavIcon v={k} />
             <span>{navLabel[k]}</span>
@@ -1024,6 +1037,7 @@ export function FirePage({ role, spaceSwitch }: { role: string; spaceSwitch?: Re
 
 function NavIcon({ v }: { v: View }) {
   const p = {
+    home: "M4 11 12 4l8 7M6 9.5V20h12V9.5M10 20v-5h4v5",
     inbox: "M4 13h4l2 3h4l2-3h4M5 5h14l1 8v6H4v-6z",
     map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14",
     history: "M4 6h16M4 12h16M4 18h10",
@@ -1178,6 +1192,10 @@ function Summary({
     return [...m.entries()];
   }, [inc, now, st, data.days]);
   const max = Math.max(1, ...days.map(([, r]) => r.new + r.active + r.extinguished + r.false_alarm));
+  const peak = days.reduce((a, [d, r]) => {
+    const tot = r.new + r.active + r.extinguished + r.false_alarm;
+    return tot > a.tot ? { day: d, tot } : a;
+  }, { day: days[0]?.[0] ?? "", tot: 0 });
   const byGroup = useMemo(() => {
     const m = new Map<
       string,
@@ -1241,23 +1259,93 @@ function Summary({
     <div className="page fl-page">
       <header className="fl-page-head">
         <h1>{f.sumTitle}</h1>
-        <p className="fl-note">{fill(f.sumSub, { days: data.days, from: fromLabel })}</p>
+        <p className="fl-lead" title={fill(f.sumSub, { days: data.days, from: fromLabel })}>
+          {fill(f.sumLead, { n: n(inc.length), from: fromLabel, h24: n(k.h24), open: n(k.fresh) })}
+        </p>
       </header>
-      <div className="kpi-row fl-kpis">
-        <KpiTile value={n(inc.length)} label={f.kpiInc} hint={f.kpiIncHint} onClick={() => toHistory({})} />
-        <KpiTile value={n(k.h24)} label={f.kpi24} hint={f.kpi24Hint} tone={k.h24 ? "danger" : undefined} />
-        <KpiTile value={n(k.fresh)} label={f.kpiOpen} hint={f.kpiOpenHint} onClick={openCount ? () => onGo("inbox") : undefined} action={openCount ? f.navInbox : undefined} />
-        <KpiTile
-          value={n(k.active)}
-          label={f.kpiActive}
-          hint={f.kpiActiveHint}
-          tone={k.active ? "danger" : undefined}
-          onClick={k.active ? () => toHistory({ status: "active" }) : undefined}
-        />
-        <KpiTile value={n(k.companies)} label={f.kpiCompanies} hint={f.kpiCompaniesHint} />
-        <KpiTile value={n(k.mills)} label={f.kpiMills} hint={f.kpiMillsHint} />
-        <KpiTile value={n(k.sent)} label={f.kpiSent} hint={f.kpiSentHint} />
-        <KpiTile value={n(k.reported)} label={f.kpiReported} hint={f.kpiReportedHint} tone={k.reported ? "comply" : undefined} onClick={k.reported ? () => onGo("history") : undefined} />
+      <div className="fl-kgroups">
+        <section className="fl-kgroup" aria-label={f.kgFire}>
+          <h2>{f.kgFire}</h2>
+          <div className="fl-kcells">
+            <KCell value={inc.length} label={f.kpiInc} hint={f.kpiIncHint} onClick={() => toHistory({})} />
+            <KCell value={k.h24} label={f.kpi24} hint={f.kpi24Hint} tone={k.h24 ? "danger" : undefined} />
+            <KCell value={k.companies} label={f.kpiCompanies} hint={f.kpiCompaniesHint} />
+            <KCell value={k.mills} label={f.kpiMills} hint={f.kpiMillsHint} />
+          </div>
+        </section>
+        <section className="fl-kgroup" aria-label={f.kgFollow}>
+          <h2>{f.kgFollow}</h2>
+          <div className="fl-kcells fl-flow">
+            <KCell value={k.fresh} of={inc.length} label={f.kpiOpen} hint={f.kpiOpenHint} onClick={openCount ? () => onGo("inbox") : undefined} />
+            <KCell value={k.sent} of={inc.length} label={f.kpiSent} hint={f.kpiSentHint} />
+            <KCell value={k.reported} of={inc.length} label={f.kpiReported} hint={f.kpiReportedHint} onClick={k.reported ? () => onGo("history") : undefined} />
+            <KCell value={k.active} of={inc.length} label={f.kpiActive} hint={f.kpiActiveHint} tone={k.active ? "danger" : undefined} onClick={k.active ? () => toHistory({ status: "active" }) : undefined} />
+          </div>
+        </section>
+      </div>
+
+      <div className="fl-grid2">
+        <section className="chart-card fl-perday">
+          <div className="fl-card-head">
+            <h2 className="fl-h2">{f.perDay}</h2>
+            <span className="fl-card-meta-r tabular-nums">{fill(f.perDayPeak, { n: n(peak.tot), day: fmtDay(peak.day, lang) })}</span>
+          </div>
+          <div className="fl-days" role="img" aria-label={f.perDay}>
+            {days.map(([d, r], k) => {
+              const tot = r.new + r.active + r.extinguished + r.false_alarm;
+              return (
+                <div key={d} className="fl-day" title={`${fmtDay(d, lang)}: ${n(tot)}`}>
+                  <span className="fl-day-n tabular-nums">{d === peak.day && tot ? n(tot) : ""}</span>
+                  <span className="fl-day-bar" style={{ height: `${Math.max(2, (tot / max) * 100)}%` }}>
+                    {(["false_alarm", "extinguished", "active", "new"] as const).map((s) =>
+                      r[s] ? <i key={s} style={{ flexGrow: r[s], background: segColor[s] }} title={`${r[s]}`} /> : null,
+                    )}
+                  </span>
+                  <span className="fl-day-d">{(days.length - 1 - k) % (days.length <= 10 ? 1 : days.length <= 16 ? 2 : 4) === 0 ? fmtDay(d, lang) : " "}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="fl-legend-inline">
+            {(["new", "active", "extinguished", "false_alarm"] as const).filter((s) => days.some(([, r]) => r[s] > 0)).map((s) => (
+              <span key={s}>
+                <i style={{ background: segColor[s] }} aria-hidden="true" />
+                {
+                  {
+                    new: f.stNew,
+                    active: f.stActive,
+                    extinguished: f.stOut,
+                    false_alarm: f.stFalse,
+                  }[s]
+                }
+              </span>
+            ))}
+          </p>
+          <p className="fl-note">{f.perDayNote}</p>
+        </section>
+        <section className="chart-card">
+          <h2 className="fl-h2">{f.repeatCos}</h2>
+          <p className="fl-note">{f.repeatNote}</p>
+          {repeat.length === 0 ? (
+            <p className="muted">{f.repeatNone}</p>
+          ) : (
+            <ul className="fl-rank">
+              {repeat.slice(0, 6).map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => onGo("history", c.id)}>
+                    <span>
+                      <b>{c.name}</b>
+                      <small>
+                        {c.mills.slice(0, 2).join(", ")} · {fill(f.plotsN, { n: n(c.plots.length) })}
+                      </small>
+                    </span>
+                    <span className="fl-rank-n tabular-nums">{fill(f.daysN, { n: c.days.length })}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
 
       <section className="chart-card">
@@ -1301,67 +1389,7 @@ function Summary({
         </div>
       </section>
 
-      <div className="fl-grid2">
-        <section className="chart-card">
-          <h2 className="fl-h2">{f.perDay}</h2>
-          <div className="fl-days" role="img" aria-label={f.perDay}>
-            {days.map(([d, r], k) => {
-              const tot = r.new + r.active + r.extinguished + r.false_alarm;
-              return (
-                <div key={d} className="fl-day">
-                  <span className="fl-day-n tabular-nums">{n(tot)}</span>
-                  <span className="fl-day-bar" style={{ height: `${Math.max(2, (tot / max) * 100)}%` }}>
-                    {(["false_alarm", "extinguished", "active", "new"] as const).map((s) =>
-                      r[s] ? <i key={s} style={{ flexGrow: r[s], background: segColor[s] }} title={`${r[s]}`} /> : null,
-                    )}
-                  </span>
-                  <span className="fl-day-d">{days.length <= 10 || (days.length - 1 - k) % 2 === 0 ? fmtDay(d, lang) : " "}</span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="fl-legend-inline">
-            {(["new", "active", "extinguished", "false_alarm"] as const).map((s) => (
-              <span key={s}>
-                <i style={{ background: segColor[s] }} aria-hidden="true" />
-                {
-                  {
-                    new: f.stNew,
-                    active: f.stActive,
-                    extinguished: f.stOut,
-                    false_alarm: f.stFalse,
-                  }[s]
-                }
-              </span>
-            ))}
-          </p>
-          <p className="fl-note">{f.perDayNote}</p>
-        </section>
-        <section className="chart-card">
-          <h2 className="fl-h2">{f.repeatCos}</h2>
-          <p className="fl-note">{f.repeatNote}</p>
-          {repeat.length === 0 ? (
-            <p className="muted">{f.repeatNone}</p>
-          ) : (
-            <ul className="fl-rank">
-              {repeat.map((c) => (
-                <li key={c.id}>
-                  <button type="button" onClick={() => onGo("history", c.id)}>
-                    <span>
-                      <b>{c.name}</b>
-                      <small>
-                        {c.mills.slice(0, 2).join(", ")} · {fill(f.plotsN, { n: n(c.plots.length) })}
-                      </small>
-                    </span>
-                    <span className="fl-rank-n tabular-nums">{fill(f.daysN, { n: c.days.length })}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
+      {byGroup.some((r) => r.g) ? (
       <section className="chart-card">
         <h2 className="fl-h2">{f.byGroup}</h2>
         <div className="table-scroll">
@@ -1394,6 +1422,7 @@ function Summary({
           </table>
         </div>
       </section>
+      ) : null}
 
       <section className="chart-card">
         <div className="fl-card-head">

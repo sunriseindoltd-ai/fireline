@@ -1,6 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { LanguageProvider } from "@/lib/i18n";
 import appCss from "../styles.css?url";
+import flxCss from "../styles-flx.css?url";
+import { SKIN_BOOT } from "@/lib/skin";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -14,6 +16,7 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
+      { rel: "stylesheet", href: flxCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" },
@@ -30,6 +33,7 @@ export const Route = createRootRoute({
   component: () => (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: SKIN_BOOT }} />
         <HeadContent />
       </head>
       <body className="antialiased">

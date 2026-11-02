@@ -1,8 +1,10 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { WhatsAppLogo } from "@/components/brand-icons";
 import { useNavigate } from "@tanstack/react-router";
 import { BrandMark, FireWord } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
-import { KpiTile } from "@/components/kpi-tile";
+import { SkinToggle } from "@/components/skin-toggle";
+import { KCell } from "@/components/fire-kcell";
 import { NationalMap } from "@/components/fire-national-map";
 import type { Bounds } from "@/components/fire-map";
 import { logout } from "@/lib/auth-actions";
@@ -14,6 +16,7 @@ import { ago, fmtDay, fmtWhen } from "@/lib/fire-ui";
 import {
   PT,
   SRC_KEYS,
+  ageClass,
   attentionOf,
   change,
   daysIn,
@@ -53,6 +56,20 @@ export function NationalPage({ spaceSwitch }: { spaceSwitch?: React.ReactNode })
   const f = nationalCopy[lang];
   const fc = fireCopy[lang];
   const n = useCallback((v: number) => formatCount(v, lang), [lang]);
+  const [allProv, setAllProv] = useState(false);
+  const [panel, setPanel] = useState<"latest" | "prov">(() => {
+    try {
+      return localStorage.getItem("fireline.natPanel") === "prov" ? "prov" : "latest";
+    } catch {
+      return "latest";
+    }
+  });
+  const pickPanel = (v: "latest" | "prov") => {
+    setPanel(v);
+    try {
+      localStorage.setItem("fireline.natPanel", v);
+    } catch {}
+  };
   const [data, setData] = useState<NatData | null>(null);
   const [error, setError] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -231,7 +248,12 @@ export function NationalPage({ spaceSwitch }: { spaceSwitch?: React.ReactNode })
       {spaceSwitch}
       <nav className="app-tabs fl-tabs" aria-label={f.spaceId}>
         {(["overview", "map"] as const).map((k) => (
-          <button key={k} type="button" className={view === k ? "on" : ""} aria-current={view === k ? "page" : undefined} onClick={() => go(k)}>
+          <button key={k} type="button" data-k={k} className={view === k ? "on" : ""} aria-current={view === k ? "page" : undefined} onClick={() => go(k)}>
+            <span className="fl-tab-ic">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={k === "overview" ? "M3 11l9-8 9 8M5 10v10h14V10" : "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"} />
+              </svg>
+            </span>
             {k === "overview" ? f.navOverview : f.navMap}
           </button>
         ))}
@@ -254,6 +276,7 @@ export function NationalPage({ spaceSwitch }: { spaceSwitch?: React.ReactNode })
           ?
         </button>
         <LangToggle />
+        <SkinToggle />
         <button
           type="button"
           className="btn-text fl-signout"
@@ -308,46 +331,86 @@ export function NationalPage({ spaceSwitch }: { spaceSwitch?: React.ReactNode })
     const h24 = data.total.h24;
     const winTot = win === "24" ? inWin({ d: fig.series, h24: 0, p24: 0 }, "7") : fig.tot;
     const winLabel = win === "24" ? f.winName7 : winName;
+    const heroN = win === "24" ? h24 : winTot.n;
+    const heroPrev = win === "24" ? data.total.p24 : winTot.prev;
     body = (
       <div className="page fl-page nat-page">
-        <header className="fl-page-head nat-head">
+        <section className="flx-hero" aria-label={f.title}>
+          <div className="flx-hero-map" aria-hidden="true">
+            <NationalMap data={data} win={effWin} selOwner={null} compact fit={null} padLeft={0.36} />
+          </div>
+          <div className="flx-hero-shade" aria-hidden="true" />
+          <div className="flx-hero-win">{winSeg}</div>
+          <div className="flx-hero-text">
+            <span className="flx-eyebrow">{fill(f.heroEyebrow, { win: winName })}</span>
+            <h1>
+              <span className="flx-hero-n tabular-nums">{n(heroN)}</span>
+              <span className="flx-hero-unit">{f.heroUnit}</span>
+            </h1>
+            <p>
+              {heroPrev !== null
+                ? win === "24"
+                  ? fill(f.kpiPrev24, { n: n(heroPrev), pct: changeTxt(heroN, heroPrev) })
+                  : fill(f.kpiPrevWin, { days: win === "28" ? 28 : 7, n: n(heroPrev), pct: changeTxt(heroN, heroPrev) })
+                : null}
+              {topProv ? (
+                <>
+                  <br />
+                  {fill(f.mapTitle, { prov: provLabel(topProv.i), n: n(topProv.n), m: n(fig.tot.n) })}
+                </>
+              ) : null}
+            </p>
+            <div className="flx-hero-cta">
+              <button type="button" className="btn-primary flx-big" onClick={() => go("map")}>
+                {f.mapOpen}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
+              <a className="btn-secondary flx-big flx-glass" href={waLink(digestAlert(data, lang))} target="_blank" rel="noopener noreferrer" title={f.waNote}>
+                <WhatsAppLogo /> {f.waDigest}
+              </a>
+            </div>
+          </div>
+          <span className="flx-hero-credit">{fill(f.heroAsOf, { time: fmtWhen(data.generated, lang) })}</span>
+        </section>
+        <header className="fl-page-head nat-head flx-hide">
           <div>
             <h1>{f.title}</h1>
             <p className="fl-note">{fill(f.sub, { days: data.days.length, time: fmtWhen(data.generated, lang) })}</p>
           </div>
           <div className="nat-head-tools">
             <a className="btn-primary small nat-wa" href={waLink(digestAlert(data, lang))} target="_blank" rel="noopener noreferrer" title={f.waNote}>
-              <WaIcon /> {f.waDigest}
+              <WhatsAppLogo /> {f.waDigest}
             </a>
             {winSeg}
           </div>
         </header>
-        <div className="kpi-row fl-kpis nat-kpis">
-          <KpiTile
-            value={n(h24)}
-            label={f.kpi24}
-            hint={f.kpi24Hint}
-            tone={h24 ? "danger" : undefined}
-            sub={
-              <>
-                {fill(f.kpiPrev24, { n: n(data.total.p24), pct: changeTxt(h24, data.total.p24) })}
-                <br />
-                {fill(f.kpiHigh, { n: n(data.total.c24[2]) })}
-              </>
-            }
-          />
-          <KpiTile
-            value={n(winTot.n)}
-            label={fill(f.kpiWin, { win: winLabel })}
-            hint={f.kpiWinHint}
-            sub={winTot.prev !== null ? fill(f.kpiPrevWin, { days: win === "28" ? 28 : 7, n: n(winTot.prev), pct: changeTxt(winTot.n, winTot.prev) }) : fill(f.kpiHigh, { n: n(fig.high) })}
-          />
-          <KpiTile value={n(fig.owners.length)} label={f.kpiCos} hint={f.kpiCosHint} sub={fill(f.kpiCosSub, { n: n(fig.elOwners) })} />
-          <KpiTile value={pct(fig.inside, fig.tot.n)} label={f.kpiIn} hint={f.kpiInHint} sub={fill(f.kpiInSub, { n: n(fig.inside), m: n(fig.tot.n) })} />
-          <KpiTile value={areaReady ? formatHa(fig.hit.ha, lang) : "…"} label={f.kpiArea} hint={f.kpiAreaHint} sub={areaReady ? fill(f.kpiAreaSub, { n: n(fig.hit.units.size) }) : f.loading28} />
-        </div>
+        {/* the window total is the hero's figure; the strip carries what the hero does not */}
+        <section className="fl-kgroup nat-kstrip" aria-label={f.title}>
+          <div className="fl-kcells">
+            <KCell
+              value={h24}
+              label={f.kpi24}
+              hint={f.kpi24Hint}
+              tone={h24 ? "danger" : undefined}
+              sub={
+                <>
+                  {fill(f.kpiPrev24, { n: n(data.total.p24), pct: changeTxt(h24, data.total.p24) })}
+                  <br />
+                  {fill(f.kpiHigh, { n: n(data.total.c24[2]) })}
+                </>
+              }
+            />
+            <KCell value={fig.owners.length} label={f.kpiCos} hint={f.kpiCosHint} sub={fill(f.kpiCosSub, { n: n(fig.elOwners) })} />
+            <KCell value={pct(fig.inside, fig.tot.n)} label={f.kpiIn} hint={f.kpiInHint} sub={fill(f.kpiInSub, { n: n(fig.inside), m: n(fig.tot.n) })} />
+            <KCell value={areaReady ? formatHa(fig.hit.ha, lang) : "…"} label={f.kpiArea} hint={f.kpiAreaHint} sub={areaReady ? fill(f.kpiAreaSub, { n: n(fig.hit.units.size) }) : f.loading28} />
+          </div>
+        </section>
 
-        <div className="nat-grid">
+        <FlxTiles data={data} rows={fig.owners} win={effWin} winName={winName} onPick={(o) => pickOwner(o)} />
+
+        <div className="nat-grid flx-hide">
           <section className="chart-card nat-map-card">
             <div className="fl-card-head">
               <h2 className="fl-h2">{topProv ? fill(f.mapTitle, { prov: provLabel(topProv.i), n: n(topProv.n), m: n(fig.tot.n) }) : f.mapTitleNone}</h2>
@@ -388,44 +451,67 @@ export function NationalPage({ spaceSwitch }: { spaceSwitch?: React.ReactNode })
           </section>
         </div>
 
-        <Latest data={data} win={effWin} winName={winName} onPick={(o) => pickOwner(o)} />
-
-        <div className="fl-grid2">
-          <Trend data={data} series={fig.series} />
-          <section className="chart-card">
-            <h2 className="fl-h2">{f.provTitle}</h2>
-            <div className="table-scroll">
-              <table className="data-table fl-group-table nat-prov">
-                <thead>
-                  <tr>
-                    <th>{f.colProv}</th>
-                    <th className="num">{f.colHot}</th>
-                    <th className="num">{f.colShare}</th>
-                    <th className="num">{f.col24}</th>
-                    <th className="num">{f.colIn}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fig.provs.slice(0, 12).map((r) => (
-                    <tr key={r.i} tabIndex={0} onClick={() => pickProv(r.i)} onKeyDown={(e) => e.key === "Enter" && pickProv(r.i)}>
-                      <td>
-                        <b>{provLabel(r.i)}</b>
-                      </td>
-                      <td className="num tabular-nums">{n(r.n)}</td>
-                      <td className="num tabular-nums">{pct(r.n, fig.tot.n)}</td>
-                      <td className="num tabular-nums">
-                        {r.p.h24 ? <span className="fl-hot">{n(r.p.h24)}</span> : "0"}
-                        {r.p.h24 || r.p.p24 ? <small>{changeTxt(r.p.h24, r.p.p24)}</small> : null}
-                      </td>
-                      <td className="num tabular-nums">{pct(r.inside, r.n)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* the trend gets the full width; latest detections and provinces share one panel with a switch (user, 2 Nov 2026) */}
+        <Trend data={data} series={fig.series} />
+        <section className="chart-card nat-switch">
+          <div className="fl-card-head nat-switch-head">
+            <div className="seg fl-seg" role="tablist" aria-label={f.panelLabel}>
+              {(
+                [
+                  ["latest", f.latestTitle],
+                  ["prov", f.provTitle],
+                ] as const
+              ).map(([key, label]) => (
+                <button key={key} type="button" role="tab" aria-selected={panel === key} className={panel === key ? "on" : ""} onClick={() => pickPanel(key)}>
+                  {label}
+                </button>
+              ))}
             </div>
-          </section>
-        </div>
+            <p className="fl-note">{panel === "latest" ? fill(f.latestNote, { win: winName }) : fill(f.provNote, { win: winName })}</p>
+          </div>
+          {panel === "latest" ? (
+            <Latest data={data} win={effWin} winName={winName} onPick={(o) => pickOwner(o)} bare />
+          ) : (
+            <>
+              <div className="table-scroll">
+                <table className="data-table fl-group-table nat-prov">
+                  <thead>
+                    <tr>
+                      <th>{f.colProv}</th>
+                      <th className="num">{f.colHot}</th>
+                      <th className="num">{f.colShare}</th>
+                      <th className="num">{f.col24}</th>
+                      <th className="num">{f.colIn}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fig.provs.slice(0, allProv ? fig.provs.length : 8).map((r) => (
+                      <tr key={r.i} tabIndex={0} onClick={() => pickProv(r.i)} onKeyDown={(e) => e.key === "Enter" && pickProv(r.i)}>
+                        <td>
+                          <b>{provLabel(r.i)}</b>
+                        </td>
+                        <td className="num tabular-nums">{n(r.n)}</td>
+                        <td className="num tabular-nums">{pct(r.n, fig.tot.n)}</td>
+                        <td className="num tabular-nums">
+                          {r.p.h24 ? <span className="fl-hot">{n(r.p.h24)}</span> : "0"}
+                          {r.p.h24 || r.p.p24 ? <small>{changeTxt(r.p.h24, r.p.p24)}</small> : null}
+                        </td>
+                        <td className="num tabular-nums">{pct(r.inside, r.n)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {fig.provs.length > 8 ? (
+                <button type="button" className="btn-text small fl-office-open" onClick={() => setAllProv((v) => !v)}>
+                  {allProv ? f.provLess : fill(f.provAll, { n: n(fig.provs.length) })}
+                </button>
+              ) : null}
+            </>
+          )}
+        </section>
 
+        <span id="nat-companies" />
         <Companies data={data} rows={fig.owners} win={win} winName={winName} ownerHa={areaReady ? fig.ownerHa : null} onPick={(o) => pickOwner(o)} />
         <p className="fl-note nat-foot">
           {fill(f.outsideNote, { n: n(data.outside) })}{" "}
@@ -505,7 +591,7 @@ function Trend({ data, series }: { data: NatData; series: number[] }) {
   const legend = by === "conf" ? segs(0).map(([c, , l]) => [c, l]) : segs(0).map(([c, , l]) => [c, l]);
   const last = series.length - 1;
   return (
-    <section className="chart-card">
+    <section className="chart-card fl-perday">
       <div className="fl-card-head">
         <h2 className="fl-h2">{fill(f.trendTitle, { day: fmtDay(data.days[peak], lang), n: n(series[peak]) })}</h2>
         <div className="seg fl-seg" role="group" aria-label={f.trendBy}>
@@ -544,7 +630,7 @@ function Trend({ data, series }: { data: NatData; series: number[] }) {
 }
 
 /** Dates under a 28-bar chart: first day, every week, and today. */
-function DayAxis({ days }: { days: string[] }) {
+export function DayAxis({ days }: { days: string[] }) {
   const { lang } = useI18n();
   const f = nationalCopy[lang];
   const last = days.length - 1;
@@ -596,6 +682,10 @@ function Companies({ data, rows, win, winName, ownerHa, onPick }: { data: NatDat
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
   const pg = Math.min(page, pages - 1);
   const daysOf = (o: NatOwner) => daysIn(o.d, win).filter((v) => v > 0).length;
+  const srcText = (src: number) =>
+    SRC_KEYS.filter(([, b]) => src & b)
+      .map(([k]) => f.src[k])
+      .join(", ");
   const frpOf = (o: NatOwner) => Math.max(0, ...daysIn(o.frp, win));
   const csv = () => {
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -672,7 +762,6 @@ function Companies({ data, rows, win, winName, ownerHa, onPick }: { data: NatDat
                   {win === "24" ? null : <th className="num">{f.colFrp}</th>}
                   <th className="num">{f.colArea}</th>
                   <th title={f.attHint}>{f.colAtt}</th>
-                  <th>{f.colSrc}</th>
                 </tr>
               </thead>
               <tbody>
@@ -680,7 +769,7 @@ function Companies({ data, rows, win, winName, ownerHa, onPick }: { data: NatDat
                   <tr key={r.i} tabIndex={0} onClick={() => onPick(r.i)} onKeyDown={(e) => e.key === "Enter" && onPick(r.i)}>
                     <td>
                       <b>{r.o.name}</b>
-                      {r.o.group ? <small>{r.o.group}</small> : null}
+                      <small>{[r.o.group, srcText(r.o.src)].filter(Boolean).join(" · ")}</small>
                     </td>
                     <td>
                       {r.o.kab >= 0 ? data.kab[r.o.kab].n : "—"}
@@ -692,10 +781,7 @@ function Companies({ data, rows, win, winName, ownerHa, onPick }: { data: NatDat
                     {win === "24" ? null : <td className="num tabular-nums">{n(frpOf(r.o))}</td>}
                     <td className="num tabular-nums">{ownerHa ? n(ownerHa.get(r.i) ?? 0) : "…"}</td>
                     <td>
-                      <AttChip a={attentionOf(r.o)} />
-                    </td>
-                    <td>
-                      <SrcChips src={r.o.src} />
+                      <AttDot a={attentionOf(r.o)} />
                     </td>
                   </tr>
                 ))}
@@ -869,7 +955,7 @@ function OwnerDetail({ data, o, win, winName }: { data: NatData; o: number; win:
         </span>
       </header>
       <a className="btn-primary block nat-wa" href={waLink(ownerAlert(data, o, lang))} target="_blank" rel="noopener noreferrer">
-        <WaIcon /> {f.wa}
+        <WhatsAppLogo /> {f.wa}
       </a>
       <p className="fl-note nat-wa-note">{f.waNote}</p>
       <dl className="nat-owner-kpis">
@@ -928,11 +1014,91 @@ function OwnerDetail({ data, o, win, winName }: { data: NatData; o: number; win:
   );
 }
 
-function WaIcon() {
+/** "Needs attention" row of the x look: one card per company, a satellite snapshot of its newest hotspots. */
+function FlxTiles({ data, rows, win, winName, onPick }: { data: NatData; rows: { o: NatData["owners"][number]; i: number; n: number }[]; win: Win; winName: string; onPick: (o: number) => void }) {
+  const { lang } = useI18n();
+  const f = nationalCopy[lang];
+  const n = (v: number) => formatCount(v, lang);
+  const top = rows.slice(0, 12);
+  // Each company's points of the period: the newest one frames the snapshot, all of them are drawn on it.
+  const shots = useMemo(() => {
+    const want = new Map(top.map((r) => [r.i, r]));
+    const pts = new Map<number, { x: number; y: number; a: number }[]>();
+    const p = data.pts;
+    const nDays = data.days.length;
+    for (let i = 0; i < p.length; i += PT) {
+      const u = p[i + 6];
+      if (u < 0 || !ptIn(p, i, win, nDays)) continue;
+      const o = data.units[u].o;
+      if (!want.has(o)) continue;
+      const l = pts.get(o) ?? [];
+      l.push({ x: p[i] / 1e4, y: p[i + 1] / 1e4, a: p[i + 8] });
+      pts.set(o, l);
+    }
+    const out = new Map<number, { src: string; dots: { left: string; top: string; c: string }[] }>();
+    const W = 0.09, H = 0.05;
+    for (const [o, l] of pts) {
+      const c = l.reduce((b, q) => (q.a < b.a ? q : b));
+      const [w, s, e, nn] = [c.x - W, c.y - H, c.x + W, c.y + H];
+      const src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${w.toFixed(4)},${s.toFixed(4)},${e.toFixed(4)},${nn.toFixed(4)}&bboxSR=4326&imageSR=4326&size=544,302&format=jpg&f=image`;
+      const dots = l
+        .filter((q) => q.x > w && q.x < e && q.y > s && q.y < nn)
+        .slice(0, 400)
+        .map((q) => ({ left: `${((q.x - w) / (e - w)) * 100}%`, top: `${((nn - q.y) / (nn - s)) * 100}%`, c: AGE_DOT[ageClass(q.a)] }));
+      out.set(o, { src, dots });
+    }
+    return out;
+  }, [data, win, top.map((r) => r.i).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!top.length) return null;
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="nat-wa-ico">
-      <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.3-.4.7-1.3a.5.5 0 0 0 0-.5l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7a2.8 2.8 0 0 0 1.8-1.3 2.3 2.3 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z" />
-    </svg>
+    <section className="flx-row-sec" aria-labelledby="flx-att">
+      <div className="flx-row-head">
+        <h2 id="flx-att">{f.tilesTitle}</h2>
+        <span className="flx-row-note">{fill(f.tilesNote, { win: winName })}</span>
+        <a className="flx-row-all" href="#nat-companies">
+          {f.tilesAll} ›
+        </a>
+      </div>
+      <div className="flx-row">
+        {top.map((r) => {
+          const shot = shots.get(r.i);
+          return (
+            <button key={r.i} type="button" className="flx-tile" onClick={() => onPick(r.i)} title={f.showOnMap}>
+              <span className="flx-tile-img">
+                {shot ? <img src={shot.src} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}
+                {shot?.dots.map((d, k) => <i key={k} style={{ left: d.left, top: d.top, background: d.c }} />)}
+                <span className="flx-tile-badge">
+                  <AttChip a={attentionOf(r.o)} />
+                </span>
+              </span>
+              <span className="flx-tile-body">
+                <b>{r.o.name}</b>
+                <small>{[r.o.group, r.o.prov >= 0 ? (lang === "en" ? data.prov[r.o.prov].en : data.prov[r.o.prov].id) : ""].filter(Boolean).join(" · ")}</small>
+                <span className="flx-tile-n">
+                  <strong className="tabular-nums">{n(r.n)}</strong> {f.heroUnit}
+                </span>
+                {r.o.h24 ? <span className="flx-tile-24">{fill(f.tile24, { n: n(r.o.h24) })}</span> : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="fl-note flx-row-credit">{f.tilesCredit}</p>
+    </section>
+  );
+}
+const AGE_DOT = ["#e5322d", "#f97316", "#f5b301", "#7c5cd6"];
+
+
+/** Attention in a table row: a dot and a word, so a long list is not a column of red pills. */
+function AttDot({ a }: { a: Attention }) {
+  const { lang } = useI18n();
+  const f = nationalCopy[lang];
+  return (
+    <span className={`nat-attd ${a}`} title={f.attHint}>
+      <i aria-hidden="true" />
+      {f.att[a]}
+    </span>
   );
 }
 
@@ -947,7 +1113,7 @@ function AttChip({ a }: { a: Attention }) {
 }
 
 /** Newest hotspots inside a plantation boundary (the mockup's "recent detections"). */
-function Latest({ data, win, winName, onPick }: { data: NatData; win: Win; winName: string; onPick: (o: number) => void }) {
+function Latest({ data, win, winName, onPick, bare = false }: { data: NatData; win: Win; winName: string; onPick: (o: number) => void; bare?: boolean }) {
   const { lang } = useI18n();
   const f = nationalCopy[lang];
   const n = (v: number) => formatCount(v, lang);
@@ -955,11 +1121,8 @@ function Latest({ data, win, winName, onPick }: { data: NatData; win: Win; winNa
   const rows = useMemo(() => latestPts(data, win, 400).filter((i) => p[i + 6] >= 0 && data.units[p[i + 6]].o >= 0).slice(0, 10), [data, win, p]);
   const fmt = (min: number) =>
     new Intl.DateTimeFormat(lang === "id" ? "id-ID" : "en-GB", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(Date.parse(data.generated) - min * 60000));
-  if (!rows.length) return null;
-  return (
-    <section className="chart-card">
-      <h2 className="fl-h2">{f.latestTitle}</h2>
-      <p className="fl-note">{fill(f.latestNote, { win: winName })}</p>
+  if (!rows.length) return bare ? <p className="muted">{f.latestNone}</p> : null;
+  const table = (
       <div className="table-scroll">
         <table className="data-table fl-table nat-latest">
           <thead>
@@ -995,7 +1158,7 @@ function Latest({ data, win, winName, onPick }: { data: NatData; win: Win; winNa
                   </td>
                   <td className="num tabular-nums">{n(p[i + 4])} MW</td>
                   <td>
-                    <AttChip a={attentionOf(o)} />
+                    <AttDot a={attentionOf(o)} />
                   </td>
                 </tr>
               );
@@ -1003,6 +1166,13 @@ function Latest({ data, win, winName, onPick }: { data: NatData; win: Win; winNa
           </tbody>
         </table>
       </div>
+  );
+  if (bare) return table;
+  return (
+    <section className="chart-card">
+      <h2 className="fl-h2">{f.latestTitle}</h2>
+      <p className="fl-note">{fill(f.latestNote, { win: winName })}</p>
+      {table}
     </section>
   );
 }

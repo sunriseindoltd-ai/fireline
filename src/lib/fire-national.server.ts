@@ -337,13 +337,38 @@ export type NationalWire = {
   kab: { n: string; p: number; d: number[] }[];
   total: { l: number[]; n: number[]; h: number[]; inO: number[]; h24: number; p24: number; c24: [number, number, number]; in24: number };
   owners: { name: string; group: string; src: number; prov: number; kab: number; d: number[]; frp: number[]; h24: number; p24: number }[];
-  /** o owner, u estate / unit name, s source bit, ha area of the boundary. */
-  units: { o: number; u: string; s: number; ha: number }[];
+  /** o owner, u estate / unit name, s source bit, ha area of the boundary, ci its boundary (index.json conc; /fire/national-shape). */
+  units: { o: number; u: string; s: number; ha: number; ci: number }[];
   pts: number[];
   ptsFrom: string;
   outside: number;
   refreshFailed: boolean;
 };
+
+const zoneCache = new Map<string, unknown>();
+/**
+ * Boundaries of some units (index.json conc) and the 500 m zone around them, merged into one outline (user, 2 Nov 2026:
+ * yellow boundary and a dashed 500 m zone as on the GAPKI flyer, Indonesia map too).
+ */
+export async function concShapes(cis: number[]): Promise<{ g: number[][][][][]; zone: unknown } | null> {
+  const lk = await lookup();
+  if (!lk) return null;
+  const ok = [...new Set(cis)].filter((i) => Number.isInteger(i) && i >= 0 && i < lk.file.conc.length).sort((a, b) => a - b).slice(0, 300);
+  const g = ok.map((i) => lk.file.conc[i].g);
+  const key = ok.join(",");
+  let zone = zoneCache.get(key);
+  if (zone === undefined) {
+    const { buffer } = await import("@turf/buffer");
+    const { union } = await import("@turf/union");
+    const { featureCollection, multiPolygon } = await import("@turf/helpers");
+    const parts = g.map((x) => buffer(multiPolygon(x), 0.5, { units: "kilometers", steps: 6 })).filter((x) => !!x);
+    const merged = parts.length > 1 ? union(featureCollection(parts)) : (parts[0] ?? null);
+    zone = merged ? merged.geometry : null;
+    if (zoneCache.size > 500) zoneCache.clear();
+    zoneCache.set(key, zone);
+  }
+  return { g, zone };
+}
 
 export async function nationalWire(data: NationalCache, ptsDays: number): Promise<NationalWire> {
   const lk = await lookup();
@@ -421,7 +446,7 @@ export async function nationalWire(data: NationalCache, ptsDays: number): Promis
     let u = unitIdx.get(ci);
     if (u === undefined) {
       const c = lk.file.conc[ci];
-      u = units.push({ o: wireIdx.get(ciOwner(ci)) ?? -1, u: c.u, s: SRC[c.s], ha: c.ha ?? 0 }) - 1;
+      u = units.push({ o: wireIdx.get(ciOwner(ci)) ?? -1, u: c.u, s: SRC[c.s], ha: c.ha ?? 0, ci }) - 1;
       unitIdx.set(ci, u);
     }
     raw[i] = u;

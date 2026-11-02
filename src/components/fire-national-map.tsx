@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { basemapStyle } from "@/lib/basemap";
+import { addOutsideMask } from "@/lib/outside-mask";
 import { fill, formatCount } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { nationalCopy } from "@/lib/fire-national-copy";
@@ -30,6 +31,7 @@ export function NationalMap({
   onView,
   fit,
   compact = false,
+  padLeft = 0,
   imageryFor = null,
   labels = 5,
 }: {
@@ -42,6 +44,8 @@ export function NationalMap({
   fit?: { bbox: Bounds; key: string } | null;
   /** Small map on the overview: no tools, no layer card. */
   compact?: boolean;
+  /** Share of the width kept clear on the left when framing Indonesia (text laid over the map). */
+  padLeft?: number;
   /** Sentinel-1/2 imagery card for this point and day (the selected company's newest hotspot). */
   imageryFor?: { id: string; lat: number; lon: number; day: string } | null;
   /** Label the companies with the most hotspots in the period (0 = none). */
@@ -84,9 +88,10 @@ export function NationalMap({
       container: ref.current,
       style: basemapStyle("esri"),
       bounds: ID_BBOX,
-      fitBoundsOptions: { padding: 24 },
+      fitBoundsOptions: { padding: padLeft ? { left: Math.round(ref.current.clientWidth * padLeft), right: 16, top: 56, bottom: 16 } : 24 },
       attributionControl: { compact: true },
     });
+    addOutsideMask(map);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: "metric" }), "bottom-right");
     if (import.meta.env.DEV) (window as unknown as { __natmap?: maplibregl.Map }).__natmap = map;
@@ -96,6 +101,12 @@ export function NationalMap({
       setToolEl(slot.el);
     }
     map.on("load", () => {
+      // the selected company's boundaries in yellow and its 500 m zone dashed, under the points (GAPKI flyer style)
+      map.addSource("nzone", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "nzone", type: "line", source: "nzone", paint: { "line-color": "#d9dee2", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.1, 12, 1.8], "line-dasharray": [3, 2.5], "line-opacity": 0.9 } });
+      map.addSource("nbnd", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "nbnd-fill", type: "fill", source: "nbnd", paint: { "fill-color": "#ffd60a", "fill-opacity": 0.07 } });
+      map.addLayer({ id: "nbnd", type: "line", source: "nbnd", paint: { "line-color": "#ffd60a", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 10, 1.8, 14, 2.8] } });
       map.addSource("npts", { type: "geojson", data: EMPTY });
       map.addLayer({
         id: "npts",
@@ -231,6 +242,31 @@ export function NationalMap({
     (map.getSource("npts") as maplibregl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: feats });
     map.once("idle", () => setDrawing(false));
   }, [data, win, ready]);
+  // The selected company's boundaries and 500 m zone, fetched once per company.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const bnd = map.getSource("nbnd") as maplibregl.GeoJSONSource | undefined;
+    const zone = map.getSource("nzone") as maplibregl.GeoJSONSource | undefined;
+    bnd?.setData(EMPTY);
+    zone?.setData(EMPTY);
+    if (selOwner === null) return;
+    const cis = [...new Set(data.units.filter((u) => u.o === selOwner && u.ci >= 0).map((u) => u.ci))];
+    if (!cis.length) return;
+    let alive = true;
+    fetch(`/fire/national-shape?ci=${cis.join(",")}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s: { g: number[][][][][]; zone: GeoJSON.Geometry | null } | null) => {
+        if (!alive || !s) return;
+        bnd?.setData({ type: "FeatureCollection", features: s.g.map((g) => ({ type: "Feature", properties: {}, geometry: { type: "MultiPolygon", coordinates: g } })) });
+        if (s.zone) zone?.setData({ type: "Feature", properties: {}, geometry: s.zone });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [selOwner, data, ready]);
+
   // The selected company: ringed on top, the rest dimmed (paint only, instant).
   useEffect(() => {
     const map = mapRef.current;
@@ -314,6 +350,18 @@ export function NationalMap({
             <i className="nat-ring" aria-hidden="true" />
             {f.lgSel}
           </span>
+        ) : null}
+        {selOwner !== null ? (
+          <>
+            <span>
+              <i className="flx-key-bnd" aria-hidden="true" />
+              {f.lgBnd}
+            </span>
+            <span>
+              <i className="flx-key-zone" aria-hidden="true" />
+              {f.lgZone}
+            </span>
+          </>
         ) : null}
       </div>
     </div>

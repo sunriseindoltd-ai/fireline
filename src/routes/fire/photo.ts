@@ -8,9 +8,11 @@ export const Route = createFileRoute("/fire/photo")({
         const { readSession } = await import("@/lib/auth");
         const session = await readSession(request);
         if (!session) return new Response("Unauthorized", { status: 401 });
-        // Supply-chain cases, field reports and contacts: Earthline staff only (viewers see FireLine Indonesia).
-        if (session.role !== "admin") return new Response("Forbidden", { status: 403 });
+        // Cases and field reports: Earthline staff, and company accounts for their own company (viewers see FireLine Indonesia).
+        if (session.role === "viewer") return new Response("Forbidden", { status: 403 });
         const name = new URL(request.url).searchParams.get("f") ?? "";
+        const { caseAllowed } = await import("@/lib/fire-access.server");
+        if (!(await caseAllowed(session, name.split("/")[0] ?? ""))) return new Response("Not found", { status: 404 });
         const { loadPhoto } = await import("@/lib/fire.server");
         const photo = await loadPhoto(name);
         if (!photo) return new Response("Not found", { status: 404 });

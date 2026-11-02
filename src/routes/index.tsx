@@ -11,6 +11,6 @@ export const Route = createFileRoute("/")({
   },
   component: () => {
     const s = Route.useLoaderData();
-    return <FireShell role={s.role} />;
+    return <FireShell role={s.role} org={s.org} />;
   },
 });

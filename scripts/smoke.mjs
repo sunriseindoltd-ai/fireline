@@ -55,7 +55,7 @@ if (PW) {
   const cookie = (await ctx.cookies()).find((c) => c.name === "fireline_session");
   check("session cookie httpOnly + secure", !!cookie?.httpOnly && !!cookie?.secure);
 }
-for (const [i, sel, name] of [[1, ".fl-mapview canvas", "map"], [2, ".fl-table, .fl-empty", "history"], [3, ".fl-hist .fl-table, .fl-hist .fl-empty", "fire events"], [4, ".fl-kpis .kpi", "summary"]]) {
+for (const [i, sel, name] of [[1, ".fl-mapview canvas", "map"], [2, ".fl-table, .fl-empty", "history"], [3, ".fl-hist .fl-table, .fl-hist .fl-empty", "fire events"], [4, ".fl-kgroups .fl-kcell", "summary"]]) {
   await page.locator(".fl-tabs button").nth(i).click();
   check(`${name} view`, !!(await page.waitForSelector(sel, { timeout: 30000 }).catch(() => null)));
   if (name === "map") {
