@@ -91,7 +91,7 @@ Login FireLine TERPISAH dari Earthline Trace (`kanopi_gate`); login sekali untuk
     dashboard Cloudflare). Vercel Hobby hanya boleh cron 1×/hari.
   - Env (lokal `.env.local`, production project Vercel `fireline`): `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
     (`https://fireline.earthline-trace.info`), `FIRE_CRON_SECRET`. Mengganti kunci VAPID = semua langganan lama mati (pengguna harus menyalakan lagi).
-  - Uji lokal (port 8098; 8097 sering dipakai sesi FireLine lain): `..\PalmTrace\scratchpad	mp-scripts\_tmp-qa-fl-push.mjs` (16/16, Chrome
+  - Uji lokal (port 8098; 8097 sering dipakai sesi FireLine lain): `..\PalmTrace\scratchpad\tmp-scripts\_tmp-qa-fl-push.mjs` (16/16, Chrome
     sungguhan `channel: "chrome"` supaya langganan lewat FCM; notifikasi tes + "2 kasus baru" benar-benar tampil) dan `_tmp-qa-fl-push-company.mjs`
     (akun perusahaan hanya kasusnya sendiri). Smoke lokal 25/25. Dependensi baru: `web-push` 3.6.7 (4.0.0 terlalu baru saat itu).
 
