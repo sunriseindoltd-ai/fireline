@@ -19,7 +19,14 @@ bertanda tangan. Aplikasi sendiri (TanStack Start kecil), repo sendiri, deployme
 | DNS | Cloudflare akun kantor, zona `earthline-trace.info`: CNAME `fireline` → `34e53e42bf17db4c.vercel-dns-017.com` (DNS only) + TXT `_vercel` (verifikasi, karena domain induk dipegang akun Vercel lain) |
 | GitHub | `sunriseindoltd-ai/fireline`; lokal `main` melacak **`origin/standalone`** (sudah sampai `d25047e`). `origin/main` masih berisi commit platform lama `637fe5e` (ikut kode PalmTrace/SoyTrace) — menimpanya = force push, keputusan user |
 
-- **Deploy** (selalu tanya user dulu): CLI Vercel di mesin ini biasanya login sebagai `generalhostings` (akun PalmTrace) →
+- **Deploy tanpa ganti login** (sejak 10 Nov): login FireLine disimpan di folder konfigurasi terpisah
+  `C:\Users\VICTUS\AppData\Roaming\vercel-fireline` → `npx vercel <perintah> -Q "C:/Users/VICTUS/AppData/Roaming/vercel-fireline"`
+  (whoami = sunriseindoltd-ai), sementara CLI biasa tetap generalhostings untuk PalmTrace. Login ulang kalau kedaluwarsa:
+  `npx vercel login -Q "<folder itu>"` → buka tautan perangkat yang dicetak, setujui sebagai sunriseindoltd-ai.
+- **Deploy terakhir: 10 Nov 2026 `fireline-lrus4hdst` = commit `fe0c037`** (PWA + notifikasi + karmauzco); env VAPID_* + FIRE_CRON_SECRET
+  dipasang di project; cek singkat live: manifest/sw/ikon 200, `/fire/push/run` & `/fire/push/key` tanpa izin 401, run dengan rahasia
+  `ok` (`first: true`, 540 kasus dicatat sebagai titik awal). Worker cron Cloudflare: lihat bagian notifikasi.
+- **Cara lama** (selalu tanya user dulu sebelum deploy): CLI Vercel di mesin ini biasanya login sebagai `generalhostings` (akun PalmTrace) →
   untuk FireLine user harus `npx vercel login` sebagai sunriseindoltd-ai, lalu `npx vite build` dan
   `npx vercel deploy --prebuilt --prod --yes` dari folder ini. Sesudahnya login balik ke generalhostings untuk PalmTrace.
 - Kode FireLine tidak perlu tahu domainnya: tautan verifikasi dibuat dari `window.location.origin`, cek Origin di POST berbasis host.
