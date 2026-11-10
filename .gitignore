@@ -16,3 +16,6 @@ docs/deck-oct20/
 
 # Plot layers pulled from gisdb (1+ GB, data only): local only
 Data Storage/
+
+# Per-company sales deck (stills of real estates, names only blurred): local only
+docs/deck-company/

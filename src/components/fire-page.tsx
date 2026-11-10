@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { BrandMark, FireWord } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
 import { SkinToggle } from "@/components/skin-toggle";
+import { InstallApp } from "@/components/install-app";
+import { PushToggle } from "@/components/push-toggle";
 import { FireMap, type Bounds } from "@/components/fire-map";
 import { KCell } from "@/components/fire-kcell";
 import { CompanyHome } from "@/components/fire-home";
@@ -357,7 +359,7 @@ export function FirePage({ role, org, spaceSwitch }: { role: string; org?: strin
             {s !== "new" ? <StatusChip s={s} /> : null}
             {s === "new" && data?.dispatch[i.id] ? <span className="sent">{fill(f.sent, { ago: ago(data.dispatch[i.id].at, Date.now(), lang) })}</span> : null}
             <span className={i.d === 0 ? "in" : undefined}>{distLabel(i.d, lang)}</span>
-            {i.plots.length > 1 ? <span>{fill(f.plotsN, { n: n(i.plots.length) })}</span> : null}
+            {i.plots.length > 1 ? <span>{fill(i.plots.length === 1 ? f.plot1 : f.plotsN, { n: n(i.plots.length) })}</span> : null}
             <span>{fill(f.dets, { n: n(i.n) })}</span>
             {i.days.length > 1 ? <span>{fill(f.daysN, { n: i.days.length })}</span> : null}
             <span>{fill(f.frp, { frp: Math.round(i.frp) })}</span>
@@ -501,6 +503,8 @@ export function FirePage({ role, org, spaceSwitch }: { role: string; org?: strin
         </button>
         <LangToggle />
         <SkinToggle />
+        <InstallApp />
+        <PushToggle />
         <button
           type="button"
           className="btn-text fl-signout"
@@ -814,7 +818,7 @@ export function FirePage({ role, org, spaceSwitch }: { role: string; org?: strin
                             </td>
                             <td>
                               {i.plot.village || "—"}
-                              <small>{i.plots.length > 1 ? fill(f.plotsN, { n: n(i.plots.length) }) : [i.plot.district, i.plot.province].filter(Boolean).join(", ")}</small>
+                              <small>{i.plots.length > 1 ? fill(i.plots.length === 1 ? f.plot1 : f.plotsN, { n: n(i.plots.length) }) : [i.plot.district, i.plot.province].filter(Boolean).join(", ")}</small>
                             </td>
                             <td className="num tabular-nums">{i.d === 0 ? f.inside : `${n(i.d)} m`}</td>
                             <td>
@@ -1336,7 +1340,7 @@ function Summary({
                     <span>
                       <b>{c.name}</b>
                       <small>
-                        {c.mills.slice(0, 2).join(", ")} · {fill(f.plotsN, { n: n(c.plots.length) })}
+                        {c.mills.slice(0, 2).join(", ")} · {fill(c.plots.length === 1 ? f.plot1 : f.plotsN, { n: n(c.plots.length) })}
                       </small>
                     </span>
                     <span className="fl-rank-n tabular-nums">{fill(f.daysN, { n: c.days.length })}</span>

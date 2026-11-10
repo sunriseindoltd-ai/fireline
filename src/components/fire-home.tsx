@@ -133,6 +133,7 @@ function HeroMap({ rows, all, shapes, zones, padLeft, winName }: { rows: Seen[];
     if (!ref.current) return;
     const map = new maplibregl.Map({ container: ref.current, style: basemapStyle("esri"), bounds: [95, -11, 141, 6], interactive: false, attributionControl: { compact: true } });
     addOutsideMask(map);
+    if (import.meta.env.DEV) (window as unknown as { __homemap?: maplibregl.Map }).__homemap = map;
     map.on("load", () => {
       map.addSource("hzone", { type: "geojson", data: EMPTY });
       map.addLayer({ id: "hzone", type: "line", source: "hzone", paint: { "line-color": STYLE.zone, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.1, 12, 1.8], "line-dasharray": [3, 2.5], "line-opacity": 0.9 } });
@@ -471,7 +472,7 @@ export function CompanyHome({
                     <b>{s.c.name}</b>
                     <small>{[s.c.mills.slice(0, 2).join(", "), s.c.plot.village || s.c.plot.district].filter(Boolean).join(" · ")}</small>
                     <span className="flx-tile-n">
-                      <strong className="tabular-nums">{n(s.n)}</strong> {g.heroUnit} · {fill(s.c.aff.length === 1 ? f.homePlot1 : f.homePlotN, { n: n(s.c.aff.length) })}
+                      <strong className="tabular-nums">{n(s.n)}</strong> {s.n === 1 ? f.homeHotspot1 : g.heroUnit} · {fill(s.c.aff.length === 1 ? f.homePlot1 : f.homePlotN, { n: n(s.c.aff.length) })}
                     </span>
                     <span className={now - Date.parse(s.c.last) <= DAY ? "flx-tile-24" : "flx-tile-ago"}>{fill(f.homeTileLast, { ago: ago(s.c.last, now, lang) })}</span>
                   </span>
@@ -506,7 +507,7 @@ export function CompanyHome({
                     <b className="flx-plot-id">{fill(f.homePlotLabel, { n: plotNo.get(p.id) ?? "" })}</b>
                     <small>{[p.plot.village, p.plot.district].filter(Boolean).join(", ") || s.c.name}</small>
                     <span className="flx-tile-n">
-                      <strong className="tabular-nums">{n(p.n)}</strong> {g.heroUnit} · {distLabel(p.d, lang)}
+                      <strong className="tabular-nums">{n(p.n)}</strong> {p.n === 1 ? f.homeHotspot1 : g.heroUnit} · {distLabel(p.d, lang)}
                     </span>
                     <span className={now - Date.parse(p.last) <= DAY ? "flx-tile-24" : "flx-tile-ago"}>
                       {[p.plot.ha ? `${n(Math.round(p.plot.ha))} ha` : "", fill(f.homeTileLast, { ago: ago(p.last, now, lang) })].filter(Boolean).join(" · ")}

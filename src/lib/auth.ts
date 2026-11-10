@@ -15,6 +15,8 @@ export type Role = "admin" | "viewer" | "company";
 type Account = { user: string; salt: string; hash: string; role: Role; org?: string; match?: string[] };
 const ACCOUNTS: Account[] = [
   { user: "earthlineadmin", salt: "5f34d7f6b8368f9c050c1aaf4186ec2a", hash: "95eff4b331d73b6e63ce3d15427b6696a58ab752f942d0b91f4c9fa17617264c", role: "admin" },
+  // Earthline master login of PalmTrace/SoyTrace, same password there: FireLine admin too (user, 9 Nov 2026).
+  { user: "karmauzco", salt: "9f34120ecb7b15262a2ef5b7bc19e571", hash: "2abf35d2fda1ec3dfa89c0d753bbc15c49c431063a6797b483aadbda55fc3262", role: "admin" },
   { user: "demo-indonesia", salt: "23c14e755ee32e359e332caf38c523ca", hash: "41ce28380113e160f4eea4d82084566caa7841f3b895d95b0e67e019102ef1ef", role: "viewer" },
   // match: words of the company name as written in the plot data, any spelling ("PT. PP London Sumatra Indonesia Tbk.",
   // "PT. London sumatra Indonesia", "(Sei Rumbiya Estate)"…), plasma / KUD carrying the company name included.
@@ -90,6 +92,12 @@ function cookieValue(header: string | undefined, name: string) {
     if (k === name) return decodeURIComponent(v.join("="));
   }
   return undefined;
+}
+
+/** The account behind a stored user name (push subscriptions keep only the name; access is read fresh). */
+export function sessionForUser(user: string): Session | null {
+  const a = ACCOUNTS.find((x) => x.user === user);
+  return a ? toSession(a) : null;
 }
 
 export async function readSession(request?: Request): Promise<Session | null> {

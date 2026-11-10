@@ -26,6 +26,11 @@ import { Route as FireReportsRouteImport } from './routes/fire/reports'
 import { Route as FireShapesRouteImport } from './routes/fire/shapes'
 import { Route as FireSubmitRouteImport } from './routes/fire/submit'
 import { Route as FireVerifyRouteImport } from './routes/fire/verify'
+import { Route as FirePushKeyRouteImport } from './routes/fire/push/key'
+import { Route as FirePushRunRouteImport } from './routes/fire/push/run'
+import { Route as FirePushSubscribeRouteImport } from './routes/fire/push/subscribe'
+import { Route as FirePushTestRouteImport } from './routes/fire/push/test'
+import { Route as FirePushUnsubscribeRouteImport } from './routes/fire/push/unsubscribe'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -112,6 +117,31 @@ const FireVerifyRoute = FireVerifyRouteImport.update({
   path: '/fire/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FirePushKeyRoute = FirePushKeyRouteImport.update({
+  id: '/fire/push/key',
+  path: '/fire/push/key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FirePushRunRoute = FirePushRunRouteImport.update({
+  id: '/fire/push/run',
+  path: '/fire/push/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FirePushSubscribeRoute = FirePushSubscribeRouteImport.update({
+  id: '/fire/push/subscribe',
+  path: '/fire/push/subscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FirePushTestRoute = FirePushTestRouteImport.update({
+  id: '/fire/push/test',
+  path: '/fire/push/test',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FirePushUnsubscribeRoute = FirePushUnsubscribeRouteImport.update({
+  id: '/fire/push/unsubscribe',
+  path: '/fire/push/unsubscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,6 +161,11 @@ export interface FileRoutesByFullPath {
   '/fire/submit': typeof FireSubmitRoute
   '/fire/verify': typeof FireVerifyRoute
   '/fire/': typeof FireIndexRoute
+  '/fire/push/key': typeof FirePushKeyRoute
+  '/fire/push/run': typeof FirePushRunRoute
+  '/fire/push/subscribe': typeof FirePushSubscribeRoute
+  '/fire/push/test': typeof FirePushTestRoute
+  '/fire/push/unsubscribe': typeof FirePushUnsubscribeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -150,6 +185,11 @@ export interface FileRoutesByTo {
   '/fire/submit': typeof FireSubmitRoute
   '/fire/verify': typeof FireVerifyRoute
   '/fire': typeof FireIndexRoute
+  '/fire/push/key': typeof FirePushKeyRoute
+  '/fire/push/run': typeof FirePushRunRoute
+  '/fire/push/subscribe': typeof FirePushSubscribeRoute
+  '/fire/push/test': typeof FirePushTestRoute
+  '/fire/push/unsubscribe': typeof FirePushUnsubscribeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -170,6 +210,11 @@ export interface FileRoutesById {
   '/fire/submit': typeof FireSubmitRoute
   '/fire/verify': typeof FireVerifyRoute
   '/fire/': typeof FireIndexRoute
+  '/fire/push/key': typeof FirePushKeyRoute
+  '/fire/push/run': typeof FirePushRunRoute
+  '/fire/push/subscribe': typeof FirePushSubscribeRoute
+  '/fire/push/test': typeof FirePushTestRoute
+  '/fire/push/unsubscribe': typeof FirePushUnsubscribeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -191,6 +236,11 @@ export interface FileRouteTypes {
     | '/fire/submit'
     | '/fire/verify'
     | '/fire/'
+    | '/fire/push/key'
+    | '/fire/push/run'
+    | '/fire/push/subscribe'
+    | '/fire/push/test'
+    | '/fire/push/unsubscribe'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -210,6 +260,11 @@ export interface FileRouteTypes {
     | '/fire/submit'
     | '/fire/verify'
     | '/fire'
+    | '/fire/push/key'
+    | '/fire/push/run'
+    | '/fire/push/subscribe'
+    | '/fire/push/test'
+    | '/fire/push/unsubscribe'
   id:
     | '__root__'
     | '/'
@@ -229,6 +284,11 @@ export interface FileRouteTypes {
     | '/fire/submit'
     | '/fire/verify'
     | '/fire/'
+    | '/fire/push/key'
+    | '/fire/push/run'
+    | '/fire/push/subscribe'
+    | '/fire/push/test'
+    | '/fire/push/unsubscribe'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -249,6 +309,11 @@ export interface RootRouteChildren {
   FireSubmitRoute: typeof FireSubmitRoute
   FireVerifyRoute: typeof FireVerifyRoute
   FireIndexRoute: typeof FireIndexRoute
+  FirePushKeyRoute: typeof FirePushKeyRoute
+  FirePushRunRoute: typeof FirePushRunRoute
+  FirePushSubscribeRoute: typeof FirePushSubscribeRoute
+  FirePushTestRoute: typeof FirePushTestRoute
+  FirePushUnsubscribeRoute: typeof FirePushUnsubscribeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -372,6 +437,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FireVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fire/push/key': {
+      id: '/fire/push/key'
+      path: '/fire/push/key'
+      fullPath: '/fire/push/key'
+      preLoaderRoute: typeof FirePushKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/push/run': {
+      id: '/fire/push/run'
+      path: '/fire/push/run'
+      fullPath: '/fire/push/run'
+      preLoaderRoute: typeof FirePushRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/push/subscribe': {
+      id: '/fire/push/subscribe'
+      path: '/fire/push/subscribe'
+      fullPath: '/fire/push/subscribe'
+      preLoaderRoute: typeof FirePushSubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/push/test': {
+      id: '/fire/push/test'
+      path: '/fire/push/test'
+      fullPath: '/fire/push/test'
+      preLoaderRoute: typeof FirePushTestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fire/push/unsubscribe': {
+      id: '/fire/push/unsubscribe'
+      path: '/fire/push/unsubscribe'
+      fullPath: '/fire/push/unsubscribe'
+      preLoaderRoute: typeof FirePushUnsubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -393,6 +493,11 @@ const rootRouteChildren: RootRouteChildren = {
   FireSubmitRoute: FireSubmitRoute,
   FireVerifyRoute: FireVerifyRoute,
   FireIndexRoute: FireIndexRoute,
+  FirePushKeyRoute: FirePushKeyRoute,
+  FirePushRunRoute: FirePushRunRoute,
+  FirePushSubscribeRoute: FirePushSubscribeRoute,
+  FirePushTestRoute: FirePushTestRoute,
+  FirePushUnsubscribeRoute: FirePushUnsubscribeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -3,6 +3,7 @@ import { LanguageProvider } from "@/lib/i18n";
 import appCss from "../styles.css?url";
 import flxCss from "../styles-flx.css?url";
 import { SKIN_BOOT } from "@/lib/skin";
+import { PwaBoot } from "@/components/install-app";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -12,9 +13,15 @@ export const Route = createRootRoute({
       { title: "FireLine · Earthline" },
       { name: "robots", content: "noindex" },
       { name: "theme-color", content: "#FFFFFF" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "FireLine" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
       { rel: "stylesheet", href: appCss },
       { rel: "stylesheet", href: flxCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -39,6 +46,7 @@ export const Route = createRootRoute({
       <body className="antialiased">
         <LanguageProvider>
           <Outlet />
+          <PwaBoot />
         </LanguageProvider>
         <Scripts />
       </body>

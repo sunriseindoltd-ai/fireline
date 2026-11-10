@@ -4,6 +4,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { BrandMark, FireWord } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
 import { SkinToggle } from "@/components/skin-toggle";
+import { InstallApp } from "@/components/install-app";
+import { PushToggle } from "@/components/push-toggle";
 import { KCell } from "@/components/fire-kcell";
 import { NationalMap } from "@/components/fire-national-map";
 import type { Bounds } from "@/components/fire-map";
@@ -277,6 +279,8 @@ export function NationalPage({ spaceSwitch }: { spaceSwitch?: React.ReactNode })
         </button>
         <LangToggle />
         <SkinToggle />
+        <InstallApp />
+        <PushToggle />
         <button
           type="button"
           className="btn-text fl-signout"

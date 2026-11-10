@@ -34,6 +34,7 @@ const en = {
   homeKeyPts: "Hotspots, {win}",
   homeKeyBnd: "Plantation boundary",
   homeKeyZone: "500 m zone",
+  homeHotspot1: "hotspot",
   homePlot1: "{n} plot",
   homePlotN: "{n} plots",
   homePlotsTitle: "Per plot",
@@ -67,6 +68,7 @@ const en = {
   error: "Fire data couldn't be loaded. FIRMS may be slow; try again in a minute.",
 
   plotsN: "{n} plots",
+  plot1: "{n} plot",
   moreN: "+{n} more",
   colCompany: "Company / area",
   repeatCos: "Companies with hotspots on several days",
@@ -445,6 +447,7 @@ const id: FireCopy = {
   homeKeyPts: "Titik panas, {win}",
   homeKeyBnd: "Batas kebun",
   homeKeyZone: "Zona 500 m",
+  homeHotspot1: "titik panas",
   homePlot1: "{n} plot",
   homePlotN: "{n} plot",
   homePlotsTitle: "Per plot",
@@ -478,6 +481,7 @@ const id: FireCopy = {
   error: "Data kebakaran tidak bisa dimuat. FIRMS mungkin lambat; coba lagi semenit lagi.",
 
   plotsN: "{n} plot",
+  plot1: "{n} plot",
   moreN: "+{n} lagi",
   colCompany: "Perusahaan / area",
   repeatCos: "Perusahaan dengan hotspot di beberapa hari",

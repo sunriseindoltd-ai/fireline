@@ -94,7 +94,11 @@ export function NationalMap({
     addOutsideMask(map);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: "metric" }), "bottom-right");
-    if (import.meta.env.DEV) (window as unknown as { __natmap?: maplibregl.Map }).__natmap = map;
+    if (import.meta.env.DEV) {
+      const w = window as unknown as { __natmap?: maplibregl.Map; __natmaps?: maplibregl.Map[] };
+      w.__natmap = map;
+      w.__natmaps = [...(w.__natmaps ?? []), map];
+    }
     if (!compact) {
       const slot = new SlotControl("maplibregl-ctrl maplibregl-ctrl-group fl-mtools");
       map.addControl(slot, "top-left");

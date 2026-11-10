@@ -58,7 +58,7 @@ export function waMessage(i: Case, link: string, lang: "en" | "id") {
     time: fmtTime(i.last, lang),
     mill: i.mills.join(", ") || "—",
     company: i.name,
-    plots: fill(f.plotsN, { n: i.plots.length }),
+    plots: fill(i.plots.length === 1 ? f.plot1 : f.plotsN, { n: i.plots.length }),
     villages: vs.slice(0, 3).join(", ") + (vs.length > 3 ? ` ${fill(f.moreN, { n: vs.length - 3 })}` : ""),
     days: fill(f.daysN, { n: i.days.length }),
     lat: i.lat,
@@ -79,7 +79,7 @@ export function waMillMessage(mill: string, list: Case[], links: string[], lang:
     fill(f.waMillItem, {
       k: k + 1,
       company: x.name,
-      plots: fill(f.plotsN, { n: x.plots.length }),
+      plots: fill(x.plots.length === 1 ? f.plot1 : f.plotsN, { n: x.plots.length }),
       village: villagesOf(x).slice(0, 2).join(", ") || "—",
       time: fmtTime(x.last, lang),
       lat: x.lat,
@@ -312,7 +312,7 @@ export function IncidentDetail({
             </div>
           ) : null}
           <ul className="fl-facts-chips">
-            {i.plots.length ? <li>{fill(f.plotsN, { n: n(i.plots.length) })}</li> : null}
+            {i.plots.length ? <li>{fill(i.plots.length === 1 ? f.plot1 : f.plotsN, { n: n(i.plots.length) })}</li> : null}
             <li>{distLabel(i.d, lang)}</li>
             <li>{fill(f.dets, { n: n(i.n) })}</li>
             <li>{fill(f.frp, { frp: i.frp.toLocaleString(lang === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 1 }) })}</li>
@@ -520,7 +520,7 @@ export function IncidentDetail({
                     <button type="button" onClick={() => onOpen(o.id)}>
                       <span>{o.name}</span>
                       <small>
-                        {fill(f.plotsN, { n: o.plots.length })} · {distLabel(o.d, lang)} · {ago(o.last, now, lang)}
+                        {fill(o.plots.length === 1 ? f.plot1 : f.plotsN, { n: o.plots.length })} · {distLabel(o.d, lang)} · {ago(o.last, now, lang)}
                       </small>
                     </button>
                   </li>

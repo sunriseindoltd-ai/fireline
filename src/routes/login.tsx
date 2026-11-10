@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { BrandMark, FireWord } from "@/components/brand-mark";
 import { LangToggle } from "@/components/lang-toggle";
+import { InstallApp } from "@/components/install-app";
 import { getSession, login } from "@/lib/auth-actions";
 import { fireCopy } from "@/lib/fire-copy";
 import { useI18n } from "@/lib/i18n";
@@ -63,7 +64,10 @@ function LoginPage() {
               <FireWord />
             </span>
           </span>
-          <LangToggle />
+          <span className="login-top-actions">
+            <InstallApp />
+            <LangToggle />
+          </span>
         </div>
         <form onSubmit={onSubmit} className="login-card">
           <h1>{f.loginHeading}</h1>

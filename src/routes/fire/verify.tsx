@@ -235,7 +235,7 @@ function VerifyPage() {
               <dd>{inc.mills.join(", ") || "—"}</dd>
               <dt>{t.fireEventPlot}</dt>
               <dd>
-                {fill(f.plotsN, { n: inc.plots.length })}
+                {fill(inc.plots.length === 1 ? f.plot1 : f.plotsN, { n: inc.plots.length })}
                 {villages.length ? (
                   <>
                     <br />
