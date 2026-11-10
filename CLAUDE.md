@@ -108,8 +108,13 @@ Tak terlacak dan sengaja tidak di-commit: `FireLine-draft flyer.pptx`, `SHP COMP
 
 ## Terbuka
 
-1. Deploy commit 10 Nov (PWA + notifikasi + `karmauzco`): butuh login Vercel sunriseindoltd-ai, env VAPID_* + FIRE_CRON_SECRET di project
-   `fireline`, lalu Worker cron di Cloudflare.
+1. **Worker cron notifikasi BELUM terpasang** (ditunda user 10 Nov) → tanpa itu notifikasi kebakaran baru TIDAK keluar (tes manual jalan).
+   Keputusan user: pasang di akun Cloudflare FireLine (`20510afb…`, Rahmadhitya.diaz), bukan akun kantor. `CLOUDFLARE_API_TOKEN` yang ada
+   hanya bisa melihat Workers (PUT script/secret/schedule = "No access"). Langkah: user buat token template "Edit Cloudflare Workers"
+   (My Profile → API Tokens, akun itu) → tempel `CF_WORKERS_TOKEN=` di `.env.local` → Claude: PUT
+   `/accounts/<acc>/workers/scripts/fireline-push-cron` (multipart, `scripts/push-cron-worker.js`, main_module), PUT `.../secrets`
+   (`FIRE_CRON_SECRET`), PUT `.../schedules` `[{"cron":"*/30 * * * *"}]`, lalu cek `fire/push/state.json` `ran` berubah setelah :00/:30.
+   Juga: user sempat membuat token R2 "Fireline 2" (salah jenis, nilainya terlihat di chat) → minta dihapus di R2 → Manage API Tokens.
 2. Ganti password `earthlineadmin` (lemah; sejak 9 Nov juga membuka seluruh Earthline Trace) → perbarui hash di sini DAN di
    `..\PalmTrace\src\lib\gate.ts` (`ADMIN_HASHED_ACCOUNTS`).
 3. Nama perusahaan klien Earthline tampil ke semua pemegang akun di ruang Indonesia — perlu izin user.
